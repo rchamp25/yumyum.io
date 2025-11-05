@@ -71,22 +71,23 @@ export class Player extends Character {
         this.lastCombatTime = Date.now();
     }
 
-    update(pressedKeys: Set<string>, mousePosition: Vector2D, worldWidth: number, worldHeight: number) {
+    update() {
+        // Player movement is now handled by the server.
+        // This method can be used for client-side only logic like animations in the future.
         this.processStatusEffects();
         if (this.isDead) return;
 
-        // Combat timeout check
+        // Combat timeout check (will be server-authoritative later)
         if (this.isInCombat && Date.now() - this.lastCombatTime > this.COMBAT_TIMEOUT) {
             this.isInCombat = false;
         }
 
-        // HP Regeneration
+        // HP Regeneration (will be server-authoritative later)
         if (this.health < this.maxHealth) {
             const now = Date.now();
             const interval = this.isInCombat ? this.REGEN_INTERVAL_COMBAT : this.REGEN_INTERVAL_OOC;
             const amount = this.isInCombat ? this.REGEN_AMOUNT_COMBAT : this.REGEN_AMOUNT_OOC;
 
-            // Initialize lastRegenTime on first update if needed
             if (this.lastRegenTime === 0) this.lastRegenTime = now;
 
             if (now - this.lastRegenTime >= interval) {
@@ -94,24 +95,6 @@ export class Player extends Character {
                 this.lastRegenTime = now;
             }
         }
-
-        let moveX = 0;
-        let moveY = 0;
-        if (pressedKeys.has('w')) moveY -= 1;
-        if (pressedKeys.has('s')) moveY += 1;
-        if (pressedKeys.has('a')) moveX -= 1;
-        if (pressedKeys.has('d')) moveX += 1;
-
-        if (moveX !== 0 || moveY !== 0) {
-            const length = Math.sqrt(moveX * moveX + moveY * moveY);
-            const currentSpeed = this.speed * (this.hasStatus('slow') ? 0.5 : 1);
-            this.position.x += (moveX / length) * currentSpeed;
-            this.position.y += (moveY / length) * currentSpeed;
-        }
-
-        // Clamp position to world bounds
-        this.position.x = Math.max(this.radius, Math.min(worldWidth - this.radius, this.position.x));
-        this.position.y = Math.max(this.radius, Math.min(worldHeight - this.radius, this.position.y));
     }
 
     logEvent(message: string) {

@@ -15,6 +15,8 @@ export class Enemy extends Character {
   xpValue: number;
   attackRange: number;
   attackCooldown: number;
+  initialPosition: Vector2D;
+  isReturning: boolean = false;
 
   constructor(position: Vector2D, type: EnemyType = EnemyType.Grunt) {
     let radius = 14, health = 30, color = '#a855f7', damage = 5, speed = GAME_CONFIG.ENEMY_SPEED, xp = 10;
@@ -43,20 +45,56 @@ export class Enemy extends Character {
     this.xpValue = xp;
     this.attackRange = attackRange;
     this.attackCooldown = attackCooldown;
+    this.initialPosition = { ...position };
   }
 
   update(player: Player, game: GameContext, worldWidth: number, worldHeight: number) {
     this.processStatusEffects();
     if (this.isDead || this.hasStatus('stun')) return;
-    
-    const distanceToPlayer = getDistance(this.position, player.position);
 
-    if (distanceToPlayer < GAME_CONFIG.ENEMY_AGGRO_RANGE) {
-        this.target = player;
-    } else {
-        this.target = null;
+    const worldCenter = { x: worldWidth / 2, y: worldHeight / 2 };
+    const isPlayerInSafeZone = getDistance(player.position, worldCenter) < GAME_CONFIG.SAFE_ZONE_RADIUS;
+
+    // --- Return Logic ---
+    if (this.isReturning) {
+        const distanceToSpawn = getDistance(this.position, this.initialPosition);
+        if (distanceToSpawn < this.speed) {
+            // Arrived at spawn
+            this.position = { ...this.initialPosition };
+            this.isReturning = false;
+            this.health = this.maxHealth; // Reset health
+        } else {
+            // Move back to spawn
+            const direction = normalizeVector({
+                x: this.initialPosition.x - this.position.x,
+                y: this.initialPosition.y - this.position.y,
+            });
+            const currentSpeed = this.speed * (this.hasStatus('slow') ? 0.5 : 1);
+            this.position.x += direction.x * currentSpeed;
+            this.position.y += direction.y * currentSpeed;
+        }
+        return; // Don't do anything else while returning
     }
 
+    // --- Target Management ---
+    const distanceToPlayer = getDistance(this.position, player.position);
+    
+    // Check for de-aggro conditions
+    if (this.target) {
+        const distanceToSpawn = getDistance(this.position, this.initialPosition);
+        if (isPlayerInSafeZone || distanceToSpawn > GAME_CONFIG.ENEMY_LEASH_RANGE) {
+            this.target = null;
+            this.isReturning = true;
+            return; // Start returning immediately
+        }
+    }
+
+    // Check for aggro condition
+    if (!this.target && !isPlayerInSafeZone && distanceToPlayer < GAME_CONFIG.ENEMY_AGGRO_RANGE) {
+        this.target = player;
+    }
+
+    // --- Action Logic ---
     if (this.target) {
         const direction = normalizeVector({
             x: this.target.position.x - this.position.x,
@@ -64,19 +102,19 @@ export class Enemy extends Character {
         });
 
         if (distanceToPlayer > this.attackRange) {
+            // Move towards target
             const currentSpeed = this.speed * (this.hasStatus('slow') ? 0.5 : 1);
             const nextX = this.position.x + direction.x * currentSpeed;
             const nextY = this.position.y + direction.y * currentSpeed;
 
-            const nextDistanceToCenter = getDistance({ x: nextX, y: nextY }, { x: worldWidth / 2, y: worldHeight / 2 });
-            
             // Prevent entering safe zone
+            const nextDistanceToCenter = getDistance({ x: nextX, y: nextY }, worldCenter);
             if (nextDistanceToCenter > GAME_CONFIG.SAFE_ZONE_RADIUS - this.radius) {
                 this.position.x = nextX;
                 this.position.y = nextY;
             }
-            
         } else {
+            // Attack target
             const now = Date.now();
             if (now - this.lastAttackTime > this.attackCooldown) {
                 this.lastAttackTime = now;

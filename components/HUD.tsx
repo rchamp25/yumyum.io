@@ -10,7 +10,7 @@ import { HammerIcon, CoinIcon } from './icons';
 import { ITEMS_DB } from '../game/items';
 
 interface HUDProps {
-    player: Player;
+    player: Player | null; // Can be null during connection
     gameStats: GameStats;
     enemies: Enemy[];
     npcs: NPC[];
