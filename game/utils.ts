@@ -1,5 +1,5 @@
-
 import { Vector2D } from "./types";
+import { Enemy } from "./entities/Enemy";
 
 export function getDistance(p1: Vector2D, p2: Vector2D): number {
   const dx = p1.x - p2.x;
@@ -16,4 +16,22 @@ export function normalizeVector(vec: Vector2D): Vector2D {
     x: vec.x / length,
     y: vec.y / length,
   };
+}
+
+export function findNearestEnemy(position: Vector2D, enemies: Enemy[], maxRange?: number): Enemy | null {
+    let nearestEnemy: Enemy | null = null;
+    let minDistance = maxRange !== undefined ? maxRange : Infinity;
+
+    for (const enemy of enemies) {
+        if (enemy.isDead) continue;
+        
+        const distance = getDistance(position, enemy.position);
+        
+        if (distance < minDistance) {
+            minDistance = distance;
+            nearestEnemy = enemy;
+        }
+    }
+
+    return nearestEnemy;
 }

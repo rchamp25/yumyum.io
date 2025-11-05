@@ -1,8 +1,9 @@
+
 import { Vector2D } from "../types";
 // FIX: Imported the missing 'getDistance' utility function.
 import { getDistance } from "../utils";
 
-type EffectType = 'dash_trail' | 'stomp_wave' | 'whirlwind' | 'slash_arc' | 'buff_aura' | 'teleport_in' | 'teleport_out' | 'explosion' | 'fire_explosion' | 'frost_nova' | 'rain_of_arrows';
+type EffectType = 'dash_trail' | 'stomp_wave' | 'whirlwind' | 'slash_arc' | 'buff_aura' | 'teleport_in' | 'teleport_out' | 'explosion' | 'fire_explosion' | 'frost_nova' | 'rain_of_arrows' | 'loot_sparkle';
 
 interface EffectOptions {
     radius?: number;
@@ -21,8 +22,8 @@ export class VisualEffect {
     life: number;
     maxLife: number;
 
-    // For particle effects like fire_explosion
-    particles: {pos: Vector2D, vel: Vector2D, size: number, color: string}[] = [];
+    // For particle effects
+    particles: {pos: Vector2D, vel: Vector2D, size: number, color: string, life: number, maxLife: number}[] = [];
 
     constructor(position: Vector2D, type: EffectType, duration: number, options: EffectOptions = {}) {
         this.position = { ...position };
@@ -42,7 +43,21 @@ export class VisualEffect {
                     pos: { ...this.position },
                     vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
                     size: Math.random() * 8 + 4,
-                    color: ['#f97316', '#f59e0b', '#dc2626'][Math.floor(Math.random() * 3)]
+                    color: ['#f97316', '#f59e0b', '#dc2626'][Math.floor(Math.random() * 3)],
+                    life: 50, maxLife: 50,
+                });
+            }
+        }
+        if (this.type === 'loot_sparkle') {
+             for (let i = 0; i < 15; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 2 + 0.5;
+                this.particles.push({
+                    pos: { x: this.position.x, y: this.position.y },
+                    vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+                    size: Math.random() * 3 + 1,
+                    color: this.options.color || 'white',
+                    life: 40, maxLife: 40,
                 });
             }
         }
@@ -50,14 +65,16 @@ export class VisualEffect {
 
     update() {
         this.life = this.maxLife - (Date.now() - this.startTime);
-        if (this.type === 'fire_explosion') {
+        if (this.type === 'fire_explosion' || this.type === 'loot_sparkle') {
             this.particles.forEach(p => {
                 p.pos.x += p.vel.x;
                 p.pos.y += p.vel.y;
                 p.vel.x *= 0.95; // friction
                 p.vel.y *= 0.95;
-                p.size *= 0.96;
+                p.life--;
+                if(this.type === 'fire_explosion') p.size *= 0.96;
             });
+            this.particles = this.particles.filter(p => p.life > 0);
         }
     }
 
@@ -68,9 +85,10 @@ export class VisualEffect {
         ctx.save();
         
         switch (this.type) {
-            case 'fire_explosion': {
-                ctx.globalAlpha = 1 - progress;
+             case 'loot_sparkle':
+             case 'fire_explosion': {
                 this.particles.forEach(p => {
+                    ctx.globalAlpha = p.life / p.maxLife;
                     ctx.beginPath();
                     ctx.arc(p.pos.x, p.pos.y, p.size, 0, Math.PI * 2);
                     ctx.fillStyle = p.color;

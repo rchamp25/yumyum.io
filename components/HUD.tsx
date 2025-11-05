@@ -1,65 +1,137 @@
-
 import React from 'react';
 import { Player } from '../game/entities/Player';
-import SkillBar from './SkillBar';
-import { CharacterClass } from '../game/types';
+import { Enemy } from '../game/entities/Enemy';
+import { NPC, NPCType } from '../game/entities/NPC';
+import { InventoryIcon, HammerIcon } from './icons';
 
 interface HUDProps {
   player: Player | null;
-  gameStats: { kills: number; gold: number; };
+  enemies: Enemy[];
+  npcs: NPC[];
+  worldDimensions: { width: number; height: number };
+  onLeave: () => void;
   onToggleInventory: () => void;
-  onReturnToSelect: () => void;
 }
 
-const Bar: React.FC<{ value: number; maxValue: number; color: string; label: string }> = ({ value, maxValue, color, label }) => {
-  const percentage = Math.max(0, (value / maxValue) * 100);
+const StatBar: React.FC<{
+  current: number;
+  max: number;
+  color: string;
+  label: string;
+}> = ({ current, max, color, label }) => {
+  const percentage = max > 0 ? (current / max) * 100 : 0;
   return (
-    <div className="w-full bg-gray-900/80 rounded-full h-6 border-2 border-gray-600 relative overflow-hidden">
-      <div className={`${color} h-full rounded-full transition-all duration-300 ease-in-out`} style={{ width: `${percentage}%` }}></div>
-      <span className="absolute inset-0 w-full h-full text-center text-white font-bold text-sm flex items-center justify-center drop-shadow-md">
-        {label}: {Math.round(value)} / {Math.round(maxValue)}
+    <div className="w-full bg-gray-700 rounded-full h-5 relative overflow-hidden border-2 border-gray-900">
+      <div
+        className={`h-full rounded-full transition-all duration-300 ease-in-out ${color}`}
+        style={{ width: `${percentage}%` }}
+      />
+      <span className="absolute inset-0 w-full text-center text-white text-xs font-bold flex items-center justify-center drop-shadow-md">
+        {label}: {Math.round(current)} / {max}
       </span>
     </div>
   );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, gameStats, onToggleInventory, onReturnToSelect }) => {
+const Minimap: React.FC<{
+    player: Player;
+    enemies: Enemy[];
+    npcs: NPC[];
+    worldDimensions: { width: number; height: number };
+}> = ({ player, enemies, npcs, worldDimensions }) => {
+    const mapSize = 160; // size of minimap in pixels
+    const scaleX = mapSize / worldDimensions.width;
+    const scaleY = mapSize / worldDimensions.height;
+    
+    return (
+        <div className="absolute top-4 right-4 w-40 h-40 bg-gray-900/70 backdrop-blur-sm border-2 border-gray-600 rounded-full overflow-hidden pointer-events-auto">
+            <div className="absolute inset-0">
+                {/* Player Dot */}
+                <div 
+                    className="absolute w-2 h-2 bg-blue-400 rounded-full border border-white"
+                    style={{ 
+                        left: `${player.position.x * scaleX - 4}px`, 
+                        top: `${player.position.y * scaleY - 4}px` 
+                    }}
+                />
+                {/* Enemy Dots */}
+                {enemies.map(enemy => (
+                    <div
+                        key={enemy.id}
+                        className="absolute w-1.5 h-1.5 bg-red-500 rounded-full"
+                        style={{
+                            left: `${enemy.position.x * scaleX - 3}px`,
+                            top: `${enemy.position.y * scaleY - 3}px`,
+                        }}
+                    />
+                ))}
+                {/* NPC Icons */}
+                {npcs.map(npc => (
+                    <div
+                        key={npc.id}
+                        className="absolute"
+                        style={{
+                            left: `${npc.position.x * scaleX - 8}px`,
+                            top: `${npc.position.y * scaleY - 8}px`,
+                        }}
+                    >
+                        {npc.npcType === NPCType.Crafter && <HammerIcon className="w-4 h-4 text-yellow-400" />}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, worldDimensions, onLeave, onToggleInventory }) => {
   if (!player) return null;
 
+  const xpPercentage = player.xpToNextLevel > 0 ? (player.characterData.xp / player.xpToNextLevel) * 100 : 0;
+
   return (
-    <div className="absolute inset-0 pointer-events-none p-4 flex flex-col justify-between">
-      {/* Top Left: Player Info */}
-      <div className="w-full md:w-1/3 lg:w-1/4 pointer-events-auto">
-          <div className="bg-gray-800/80 backdrop-blur-sm p-4 rounded-lg shadow-2xl border border-gray-700">
-              <div className="flex items-center mb-3">
-                  <div className="w-12 h-12 bg-teal-500 rounded-full mr-4 flex items-center justify-center font-bold text-xl">{player.level}</div>
-                  <div>
-                      <h2 className="text-xl font-bold text-white">{player.characterData.name}</h2>
-                      <p className="text-gray-400">{CharacterClass[player.characterData.characterClass]}</p>
-                  </div>
-              </div>
-              <Bar value={player.health} maxValue={player.maxHealth} color="bg-red-500" label="HP" />
-              <div className="mt-2">
-                <Bar value={player.xp} maxValue={player.xpToNextLevel} color="bg-purple-500" label="XP" />
-              </div>
-          </div>
-      </div>
-      
-      {/* Top Right: Game Stats & Menu */}
-      <div className="absolute top-4 right-4 flex flex-col items-end pointer-events-auto space-y-2">
-        <div className="bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-2xl border border-gray-700 text-right">
-          <p className="text-white">Kills: <span className="font-bold">{gameStats.kills}</span></p>
-          <p className="text-yellow-400">Gold: <span className="font-bold">{gameStats.gold}</span></p>
+    <div className="absolute inset-0 pointer-events-none">
+        {/* Top Left - Player Info */}
+        <div className="absolute top-4 left-4 w-1/4 max-w-sm p-4 bg-gray-800/80 backdrop-blur-sm rounded-lg shadow-lg border border-gray-700 pointer-events-auto flex flex-col space-y-3">
+            <div className="flex items-center">
+                <div className="bg-gray-900 rounded-full w-12 h-12 flex items-center justify-center text-teal-400 text-2xl font-bold border-2 border-gray-600 mr-4">
+                {player.characterData.level}
+                </div>
+                <div>
+                <h2 className="text-xl font-bold text-white">{player.characterData.name}</h2>
+                <p className="text-gray-400">{player.getClassName()}</p>
+                </div>
+            </div>
+            <div className="space-y-2">
+                <StatBar
+                current={player.health}
+                max={player.maxHealth}
+                color="bg-red-500"
+                label="HP"
+                />
+                <div className="w-full bg-purple-900 rounded-full h-3 relative overflow-hidden border border-gray-900">
+                    <div
+                        className="bg-purple-500 h-full rounded-full"
+                        style={{ width: `${xpPercentage}%` }}
+                    />
+                    <span className="absolute inset-0 w-full text-center text-white text-xs font-bold flex items-center justify-center drop-shadow-md text-[10px]">
+                        XP
+                    </span>
+                </div>
+            </div>
+            <div className="flex space-x-2 pt-2">
+                 <button onClick={onLeave} className="flex-1 bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition-colors text-sm">
+                    Leave World
+                </button>
+                <button onClick={onToggleInventory} className="bg-yellow-600 text-white p-2 rounded hover:bg-yellow-700 transition-colors">
+                    <InventoryIcon className="w-5 h-5"/>
+                </button>
+            </div>
         </div>
-        <div className="flex space-x-2">
-            <button onClick={onToggleInventory} className="bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition-colors">Inventory (i)</button>
-            <button onClick={onReturnToSelect} className="bg-red-700 text-white font-bold py-2 px-4 rounded hover:bg-red-600 transition-colors">Exit Game</button>
-        </div>
-      </div>
+        
+        {/* Top Right - Minimap */}
+        <Minimap player={player} enemies={enemies} npcs={npcs} worldDimensions={worldDimensions} />
 
-
-      {/* Bottom Center: Skill Bar */}
-      <SkillBar skills={player.skills} />
     </div>
   );
 };

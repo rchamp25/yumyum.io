@@ -32,13 +32,62 @@ export class DroppedItem {
     }
 
     draw(ctx: CanvasRenderingContext2D) {
-        // Simple square for now, could be an icon later
+        const color = this.getRarityColor();
+
+        ctx.save();
+
+        // Glowing effect for higher rarities
+        if (this.item.rarity !== ItemRarity.Common) {
+            const glowIntensity = {
+                [ItemRarity.Uncommon]: 8,
+                [ItemRarity.Rare]: 15,
+                [ItemRarity.Epic]: 22,
+                [ItemRarity.Legendary]: 30,
+            }[this.item.rarity] || 0;
+            
+            let pulse = 1;
+            if (this.item.rarity === ItemRarity.Epic) {
+                pulse = 0.8 + Math.sin(Date.now() / 200) * 0.2;
+            }
+            if (this.item.rarity === ItemRarity.Legendary) {
+                pulse = 0.7 + Math.sin(Date.now() / 150) * 0.3;
+            }
+
+            ctx.shadowColor = color;
+            ctx.shadowBlur = glowIntensity * pulse;
+        }
+
+        // --- Define Shape Path ---
         ctx.beginPath();
-        ctx.rect(this.position.x - 8, this.position.y - 8, 16, 16);
-        ctx.fillStyle = this.getRarityColor();
+        if (this.item.rarity === ItemRarity.Common) {
+            ctx.arc(this.position.x, this.position.y, 8, 0, Math.PI * 2);
+        } else {
+            ctx.moveTo(this.position.x - 8, this.position.y + 8);
+            ctx.quadraticCurveTo(this.position.x, this.position.y + 12, this.position.x + 8, this.position.y + 8);
+            ctx.lineTo(this.position.x + 6, this.position.y - 6);
+            ctx.quadraticCurveTo(this.position.x, this.position.y - 10, this.position.x - 6, this.position.y - 6);
+            ctx.closePath();
+        }
+
+        // --- Fill Shape ---
+        if (this.item.rarity === ItemRarity.Common) {
+            const gradient = ctx.createRadialGradient(
+                this.position.x - 2, this.position.y - 2, 1, 
+                this.position.x, this.position.y, 8
+            );
+            gradient.addColorStop(0, '#e5e7eb'); // gray-200
+            gradient.addColorStop(1, '#6b7280'); // gray-500
+            ctx.fillStyle = gradient;
+        } else {
+            ctx.fillStyle = color;
+        }
         ctx.fill();
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 2;
+        
+        ctx.restore(); // Restore to remove shadow for border
+
+        // --- Stroke Shape ---
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,0,0.5)"; // Dark border for contrast
         ctx.stroke();
     }
     

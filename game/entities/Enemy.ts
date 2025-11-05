@@ -1,4 +1,3 @@
-
 import { Character } from './Character';
 import { Player } from './Player';
 import { Vector2D, EnemyType, GameContext } from '../types';
@@ -86,5 +85,9 @@ export class Enemy extends Character {
 // FIX: Use the addFloatingText method from the game context as `floatingTexts` is not a property of the context.
           if (ft) game.addFloatingText(ft);
       }
+  }
+  
+  draw(ctx: CanvasRenderingContext2D) {
+    super.draw(ctx, true); // Always show health bar
   }
 }

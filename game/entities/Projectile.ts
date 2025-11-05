@@ -1,32 +1,54 @@
+import { Vector2D, StatusEffect } from "../types";
+import { normalizeVector } from "../utils";
 
-import { Vector2D } from "../types";
-import { Character } from "./Character";
-import { getDistance } from "../utils";
+let nextId = 0;
 
 export class Projectile {
+  id: number;
   position: Vector2D;
   velocity: Vector2D;
+  radius: number = 5;
   damage: number;
   speed: number;
-  radius: number;
   ownerId: string | number;
   color: string;
-  life: number = 200; // frames
+  piercing: boolean = false;
+  bounces: number = 0;
+  hitIds: (string | number)[] = [];
+  onHitEffects?: { 
+    type: 'explosion' | 'status', 
+    radius?: number, 
+    effect?: Omit<StatusEffect, 'startTime'> 
+  };
+  range: number = 1000;
+  distanceTraveled: number = 0;
 
-  constructor(startPos: Vector2D, direction: Vector2D, damage: number, speed: number, ownerId: string | number, color: string = 'white', radius: number = 5) {
-    this.position = { ...startPos };
-    this.velocity = { x: direction.x * speed, y: direction.y * speed };
+
+  constructor(
+    startPosition: Vector2D,
+    direction: Vector2D,
+    damage: number,
+    speed: number,
+    ownerId: string | number,
+    color: string = 'white'
+  ) {
+    this.id = nextId++;
+    this.position = { ...startPosition };
+    const normalizedDir = normalizeVector(direction);
+    this.velocity = {
+      x: normalizedDir.x * speed,
+      y: normalizedDir.y * speed,
+    };
     this.damage = damage;
     this.speed = speed;
     this.ownerId = ownerId;
     this.color = color;
-    this.radius = radius;
   }
 
   update() {
     this.position.x += this.velocity.x;
     this.position.y += this.velocity.y;
-    this.life--;
+    this.distanceTraveled += this.speed;
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -37,13 +59,6 @@ export class Projectile {
   }
 
   isExpired(): boolean {
-    return this.life <= 0;
-  }
-  
-  hasCollided(character: Character): boolean {
-      if (character.id === this.ownerId || character.isDead) {
-          return false;
-      }
-      return getDistance(this.position, character.position) < this.radius + character.radius;
+      return this.distanceTraveled >= this.range;
   }
 }

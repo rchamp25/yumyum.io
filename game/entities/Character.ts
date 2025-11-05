@@ -28,7 +28,7 @@ export abstract class Character {
 
   abstract update(...args: any[]): void;
 
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, alwaysShowHealthBar: boolean = false) {
     // Draw Shield
     if (this.shield > 0) {
       ctx.beginPath();
@@ -46,7 +46,7 @@ export abstract class Character {
     ctx.fill();
 
     // Health bar
-    if (this.health < this.maxHealth || this.shield > 0) {
+    if (alwaysShowHealthBar || this.health < this.maxHealth || this.shield > 0) {
       const barWidth = this.radius * 2;
       const barHeight = 5;
       const barX = this.position.x - this.radius;

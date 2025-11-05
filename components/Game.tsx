@@ -1,21 +1,25 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Vector2D, Item, ItemSlot } from '../game/types';
+import { CharacterData, GameStats, GameContext, Item, Vector2D, ItemSlot, NPCType, Recipe } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy, EnemyType } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
 import { FloatingText } from '../game/entities/FloatingText';
-import { DroppedItem } from '../game/entities/DroppedItem';
 import { GoldCoin } from '../game/entities/GoldCoin';
-import { GroundEffect } from '../game/entities/GroundEffect';
+import { DroppedItem } from '../game/entities/DroppedItem';
 import { VisualEffect } from '../game/entities/VisualEffect';
-import { GAME_CONFIG } from '../game/constants';
-import { getDistance } from '../game/utils';
-import { getRandomItem } from '../game/items';
+import { GroundEffect } from '../game/entities/GroundEffect';
+import { NPC } from '../game/entities/NPC';
 import useGameLoop from '../hooks/useGameLoop';
 import useKeyboardInput from '../hooks/useKeyboardInput';
+import { getDistance, findNearestEnemy } from '../game/utils';
+import { GAME_CONFIG } from '../game/constants';
+import { getRandomItem, CRAFTING_RECIPES_DB } from '../game/items';
+
 import HUD from './HUD';
+import SkillBar from './SkillBar';
 import Inventory from './Inventory';
+import NPCInteraction from './NPCInteraction';
+import CraftingUI from './CraftingUI';
 
 interface GameProps {
   characterData: CharacterData;
@@ -24,278 +28,315 @@ interface GameProps {
 }
 
 const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const playerRef = useRef<Player | null>(null);
-  if (playerRef.current === null) {
-      playerRef.current = new Player(JSON.parse(JSON.stringify(characterData)));
-  }
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const keys = useKeyboardInput();
+    const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
-  const enemiesRef = useRef<Enemy[]>([]);
-  const projectilesRef = useRef<Projectile[]>([]);
-  const floatingTextsRef = useRef<FloatingText[]>([]);
-  const droppedItemsRef = useRef<DroppedItem[]>([]);
-  const goldCoinsRef = useRef<GoldCoin[]>([]);
-  const groundEffectsRef = useRef<GroundEffect[]>([]);
-  const visualEffectsRef = useRef<VisualEffect[]>([]);
-
-  const [gameStats, setGameStats] = useState({ kills: characterData.kills, gold: characterData.gold });
-  const lastEnemySpawn = useRef(Date.now());
-  const cameraPos = useRef<Vector2D>({ x: 0, y: 0 });
-  const mousePos = useRef<Vector2D>({ x: 0, y: 0 });
-
-  const [isInventoryOpen, setInventoryOpen] = useState(false);
-  
-  const pressedKeys = useKeyboardInput();
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key.toLowerCase() === 'i') {
-            setInventoryOpen(prev => !prev);
-        }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  const gameContext = {
-      player: playerRef.current!,
-      enemies: enemiesRef.current,
-      projectiles: projectilesRef.current,
-      addProjectile: (p: Projectile) => projectilesRef.current.push(p),
-      addFloatingText: (ft: FloatingText) => floatingTextsRef.current.push(ft),
-      addVisualEffect: (ve: VisualEffect) => visualEffectsRef.current.push(ve),
-      addGroundEffect: (ge: GroundEffect) => groundEffectsRef.current.push(ge),
-  };
-
-  const handleCollisions = useCallback(() => {
-    const player = playerRef.current!;
+    // Game state refs
+    const playerRef = useRef<Player | null>(null);
+    const enemiesRef = useRef<Enemy[]>([]);
+    const projectilesRef = useRef<Projectile[]>([]);
+    const floatingTextsRef = useRef<FloatingText[]>([]);
+    const goldCoinsRef = useRef<GoldCoin[]>([]);
+    const droppedItemsRef = useRef<DroppedItem[]>([]);
+    const visualEffectsRef = useRef<VisualEffect[]>([]);
+    const groundEffectsRef = useRef<GroundEffect[]>([]);
+    const npcsRef = useRef<NPC[]>([]);
     
-    projectilesRef.current = projectilesRef.current.filter(projectile => {
-        let hit = false;
-        if (projectile.ownerId === player.id) { // Player projectile
-            enemiesRef.current.forEach(enemy => {
-                if (!hit && projectile.hasCollided(enemy)) {
-                    const ft = enemy.takeDamage(projectile.damage);
-                    if (ft) floatingTextsRef.current.push(ft);
-                    if (enemy.isDead) handleEnemyDeath(enemy);
-                    hit = true;
-                }
-            });
-        } else { // Enemy projectile
-            if (projectile.hasCollided(player)) {
-                const ft = player.takeDamage(projectile.damage);
-                if (ft) floatingTextsRef.current.push(ft);
-                if (player.isDead) handlePlayerDeath();
-                hit = true;
+    // UI state
+    const [playerState, setPlayerState] = useState<Player | null>(null);
+    const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+    const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
+    const [isCraftingOpen, setIsCraftingOpen] = useState(false);
+    
+    const lastEnemySpawn = useRef(0);
+
+    const gameContext: GameContext = {
+        addProjectile: (p: Projectile) => projectilesRef.current.push(p),
+        addFloatingText: (ft: FloatingText) => floatingTextsRef.current.push(ft),
+        addVisualEffect: (ve: VisualEffect) => visualEffectsRef.current.push(ve),
+        addGroundEffect: (ge: GroundEffect) => groundEffectsRef.current.push(ge),
+        addDroppedItem: (item: Item, pos: Vector2D) => droppedItemsRef.current.push(new DroppedItem(pos, item)),
+        spawnEnemy: () => spawnEnemy(true),
+        get player() { return playerRef.current as Player },
+        get enemies() { return enemiesRef.current },
+        get projectiles() { return projectilesRef.current },
+    };
+
+    // Initialization
+    useEffect(() => {
+        const player = new Player({ x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, characterData);
+        playerRef.current = player;
+        setPlayerState(player);
+        
+        npcsRef.current.push(new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2 - 100, y: GAME_CONFIG.WORLD_HEIGHT / 2 - 100 }, 'Hephaestus', NPCType.Crafter));
+
+        const handleMouseMove = (e: MouseEvent) => {
+            if (canvasRef.current && playerRef.current) {
+                const rect = canvasRef.current.getBoundingClientRect();
+                const scaleX = canvasRef.current.width / rect.width;
+                const scaleY = canvasRef.current.height / rect.height;
+                const cameraX = playerRef.current.position.x - canvasRef.current.width / 2;
+                const cameraY = playerRef.current.position.y - canvasRef.current.height / 2;
+                setMousePosition({
+                    x: (e.clientX - rect.left) * scaleX + cameraX,
+                    y: (e.clientY - rect.top) * scaleY + cameraY
+                });
             }
+        };
+        
+        const handleKeyDown = (e: KeyboardEvent) => {
+             if (e.key.toLowerCase() === 'i') toggleInventory();
+             if (e.key.toLowerCase() === 'e') {
+                 if (interactingNPC) {
+                    setInteractingNPC(null);
+                 } else {
+                    const player = playerRef.current;
+                    if (!player) return;
+                    const nearbyNPC = npcsRef.current.find(npc => getDistance(player.position, npc.position) < npc.interactionRadius);
+                    if (nearbyNPC) setInteractingNPC(nearbyNPC);
+                 }
+             }
+             if (e.key >= '1' && e.key <= '5') {
+                 playerRef.current?.useSkill(parseInt(e.key) - 1, mousePosition, gameContext);
+             }
+        };
+        
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [characterData]);
+    
+    const spawnEnemy = useCallback((force = false) => {
+        if (!force && (Date.now() - lastEnemySpawn.current < GAME_CONFIG.ENEMY_SPAWN_INTERVAL || enemiesRef.current.length >= GAME_CONFIG.MAX_ENEMIES)) {
+            return;
         }
-        return !hit;
-    });
-    
-    droppedItemsRef.current = droppedItemsRef.current.filter(item => {
-        if (getDistance(player.position, item.position) < player.radius) {
-            return !player.collectItem(item.item);
+        lastEnemySpawn.current = Date.now();
+        const player = playerRef.current;
+        if (!player) return;
+
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 800;
+        const x = player.position.x + Math.cos(angle) * radius;
+        const y = player.position.y + Math.sin(angle) * radius;
+        
+        const enemyTypeRoll = Math.random();
+        let enemyType: EnemyType;
+        if (enemyTypeRoll > 0.9) enemyType = EnemyType.Tank;
+        else if (enemyTypeRoll > 0.7) enemyType = EnemyType.Ranger;
+        else if (enemyTypeRoll > 0.5) enemyType = EnemyType.Scout;
+        else enemyType = EnemyType.Grunt;
+
+        enemiesRef.current.push(new Enemy({ x, y }, enemyType));
+    }, []);
+
+    const handleCollisions = useCallback(() => {
+        const player = playerRef.current;
+        if (!player || player.isDead) return;
+
+        // Projectiles vs Characters
+        projectilesRef.current.forEach(proj => {
+            if (proj.isExpired()) return;
+
+            if (proj.ownerId !== player.id) { // Enemy projectile
+                if (getDistance(proj.position, player.position) < player.radius + proj.radius) {
+                    const ft = player.takeDamage(proj.damage);
+                    if (ft) floatingTextsRef.current.push(ft);
+                    projectilesRef.current = projectilesRef.current.filter(p => p.id !== proj.id);
+                }
+            } else { // Player projectile
+                enemiesRef.current.forEach(enemy => {
+                    if (!enemy.isDead && getDistance(proj.position, enemy.position) < enemy.radius + proj.radius && !proj.hitIds.includes(enemy.id)) {
+                        const ft = enemy.takeDamage(proj.damage);
+                        if(ft) floatingTextsRef.current.push(ft);
+                        
+                        // Handle on-hit effects
+                        if (proj.onHitEffects) {
+                           if (proj.onHitEffects.type === 'explosion' && proj.onHitEffects.radius) {
+                               gameContext.addVisualEffect(new VisualEffect(proj.position, 'fire_explosion', 500, { radius: proj.onHitEffects.radius }));
+                               enemiesRef.current.forEach(e => {
+                                   if(e.id !== enemy.id && getDistance(proj.position, e.position) < proj.onHitEffects!.radius!) {
+                                       const explosionFt = e.takeDamage(proj.damage * 0.5); // AoE damage
+                                       if(explosionFt) floatingTextsRef.current.push(explosionFt);
+                                   }
+                               });
+                           }
+                           if (proj.onHitEffects.type === 'status' && proj.onHitEffects.effect) {
+                               enemy.addStatusEffect(proj.onHitEffects.effect);
+                           }
+                        }
+
+                        if (!proj.piercing) {
+                           projectilesRef.current = projectilesRef.current.filter(p => p.id !== proj.id);
+                        } else {
+                           proj.hitIds.push(enemy.id);
+                        }
+                    }
+                });
+            }
+        });
+        
+        // Player vs Items
+        goldCoinsRef.current = goldCoinsRef.current.filter(coin => {
+            if(getDistance(player.position, coin.position) < player.radius) {
+                player.addGold(1);
+                return false;
+            }
+            return true;
+        });
+
+        droppedItemsRef.current = droppedItemsRef.current.filter(dItem => {
+            if(getDistance(player.position, dItem.position) < player.radius) {
+                if(player.addItem(dItem.item)){
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        // Enemy death logic
+        enemiesRef.current.forEach(enemy => {
+            if (enemy.isDead && !(enemy as any).processedDeath) {
+                player.addXP(enemy.xpValue);
+                player.incrementKills();
+                for (let i = 0; i < Math.floor(Math.random() * 5) + 1; i++) {
+                    goldCoinsRef.current.push(new GoldCoin(enemy.position));
+                }
+                const dropped = getRandomItem(player.characterData.level, enemy.enemyType);
+                if (dropped) {
+                    droppedItemsRef.current.push(new DroppedItem(enemy.position, dropped));
+                }
+                (enemy as any).processedDeath = true;
+            }
+        });
+    }, [gameContext]);
+
+    const update = useCallback(() => {
+        const player = playerRef.current;
+        if (!player) return;
+
+        // --- Updates ---
+        player.update(keys, mousePosition, gameContext);
+        enemiesRef.current.forEach(e => e.update(player, gameContext, GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT));
+        projectilesRef.current.forEach(p => p.update());
+        floatingTextsRef.current.forEach(ft => ft.update());
+        goldCoinsRef.current.forEach(gc => gc.update(player.position));
+        droppedItemsRef.current.forEach(di => di.update(player));
+        visualEffectsRef.current.forEach(ve => ve.update());
+        groundEffectsRef.current.forEach(ge => ge.update(enemiesRef.current, gameContext));
+        
+        // --- Collisions ---
+        handleCollisions();
+        
+        // --- State changes ---
+        if (player.isDead) {
+            onDeath(player.characterData, player.getFinalCharacterData());
+            return;
         }
-        return true;
-    });
-    
-    goldCoinsRef.current = goldCoinsRef.current.filter(coin => {
-        if (getDistance(player.position, coin.position) < player.radius) {
-            player.collectGold(1);
-            setGameStats(prev => ({ ...prev, gold: player.characterData.gold }));
-            return false;
-        }
-        return true;
-    });
-  }, []);
-  
-  const handleEnemyDeath = useCallback((enemy: Enemy) => {
-      const player = playerRef.current!;
-      player.gainXP(enemy.xpValue, gameContext);
-      setGameStats(prev => ({...prev, kills: prev.kills + 1}));
-      
-      const goldAmount = Math.floor(Math.random() * 5) + 1;
-      for (let i = 0; i < goldAmount; i++) {
-          goldCoinsRef.current.push(new GoldCoin(enemy.position));
-      }
-      
-      if (Math.random() < 0.1) { // 10% chance to drop item
-          const item = getRandomItem(player.level);
-          if (item) {
-              droppedItemsRef.current.push(new DroppedItem(enemy.position, item));
-          }
-      }
-  }, []);
-  
-  const handlePlayerDeath = useCallback(() => {
-      const player = playerRef.current!;
-      const finalStats = { level: player.level, kills: gameStats.kills, gold: gameStats.gold };
-      const finalCharacterData = player.getFinalCharacterData();
-      onDeath(finalStats, finalCharacterData);
-  }, [gameStats, onDeath]);
 
-  const drawGame = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    const player = playerRef.current!;
-    
-    cameraPos.current = {
-      x: player.position.x - canvas.width / 2,
-      y: player.position.y - canvas.height / 2,
-    };
-    
-    cameraPos.current.x = Math.max(0, Math.min(cameraPos.current.x, GAME_CONFIG.WORLD_WIDTH - canvas.width));
-    cameraPos.current.y = Math.max(0, Math.min(cameraPos.current.y, GAME_CONFIG.WORLD_HEIGHT - canvas.height));
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.translate(-cameraPos.current.x, -cameraPos.current.y);
-    
-    drawGrid(ctx, canvas.width, canvas.height);
-    
-    groundEffectsRef.current.forEach(ge => ge.draw(ctx));
-    droppedItemsRef.current.forEach(di => di.draw(ctx));
-    goldCoinsRef.current.forEach(gc => gc.draw(ctx));
-    enemiesRef.current.forEach(enemy => enemy.draw(ctx));
-    player.draw(ctx);
-    projectilesRef.current.forEach(p => p.draw(ctx));
-    visualEffectsRef.current.forEach(ve => ve.draw(ctx));
-    floatingTextsRef.current.forEach(ft => ft.draw(ctx));
-    
-    ctx.restore();
-  }, []);
+        // --- Spawning ---
+        spawnEnemy();
+        
+        // --- Cleanup ---
+        enemiesRef.current = enemiesRef.current.filter(e => !(e.isDead && (e as any).processedDeath));
+        projectilesRef.current = projectilesRef.current.filter(p => !p.isExpired());
+        floatingTextsRef.current = floatingTextsRef.current.filter(ft => !ft.isExpired());
+        visualEffectsRef.current = visualEffectsRef.current.filter(ve => !ve.isExpired());
+        groundEffectsRef.current = groundEffectsRef.current.filter(ge => !ge.isExpired());
 
-  const spawnEnemy = useCallback(() => {
-    const player = playerRef.current!;
-    const spawnDistance = 800;
-    const angle = Math.random() * Math.PI * 2;
-    const x = player.position.x + Math.cos(angle) * spawnDistance;
-    const y = player.position.y + Math.sin(angle) * spawnDistance;
-    
-    const clampedX = Math.max(0, Math.min(x, GAME_CONFIG.WORLD_WIDTH));
-    const clampedY = Math.max(0, Math.min(y, GAME_CONFIG.WORLD_HEIGHT));
-    
-    const enemyTypes = Object.values(EnemyType).filter(v => !isNaN(Number(v)));
-    const randomType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)] as EnemyType;
+        setPlayerState({ ...player });
+    }, [keys, mousePosition, gameContext, onDeath, spawnEnemy, handleCollisions]);
 
-    enemiesRef.current.push(new Enemy({ x: clampedX, y: clampedY }, randomType));
-  }, []);
+    const draw = useCallback(() => {
+        const canvas = canvasRef.current;
+        const player = playerRef.current;
+        if (!canvas || !player) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
 
-  const gameLoop = useCallback(() => {
-    const player = playerRef.current!;
-    if (player.isDead) return;
+        // Clear and setup camera
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-player.position.x + canvas.width / 2, -player.position.y + canvas.height / 2);
 
-    player.setMousePosition({ x: mousePos.current.x + cameraPos.current.x, y: mousePos.current.y + cameraPos.current.y });
-    if (!isInventoryOpen) {
-        player.update(pressedKeys, gameContext);
-    }
-    enemiesRef.current.forEach(enemy => enemy.update(player, gameContext, GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT));
-    projectilesRef.current.forEach(p => p.update());
-    floatingTextsRef.current.forEach(ft => ft.update());
-    droppedItemsRef.current.forEach(di => di.update(player));
-    goldCoinsRef.current.forEach(gc => gc.update(player.position));
-    groundEffectsRef.current.forEach(ge => ge.update(enemiesRef.current, floatingTextsRef.current));
-    visualEffectsRef.current.forEach(ve => ve.update());
-    
-    handleCollisions();
-
-    if (Date.now() - lastEnemySpawn.current > GAME_CONFIG.ENEMY_SPAWN_RATE) {
-      spawnEnemy();
-      lastEnemySpawn.current = Date.now();
-    }
-    
-    enemiesRef.current = enemiesRef.current.filter(e => !e.isDead);
-    projectilesRef.current = projectilesRef.current.filter(p => !p.isExpired());
-    floatingTextsRef.current = floatingTextsRef.current.filter(ft => !ft.isExpired());
-    groundEffectsRef.current = groundEffectsRef.current.filter(ge => !ge.isExpired());
-    visualEffectsRef.current = visualEffectsRef.current.filter(ve => !ve.isExpired());
-    
-    drawGame();
-  }, [pressedKeys, isInventoryOpen, handleCollisions, spawnEnemy, drawGame]);
-
-  const drawGrid = (ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number) => {
-    const gridSize = 50;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-    ctx.lineWidth = 1;
-    
-    const startX = Math.floor(cameraPos.current.x / gridSize) * gridSize;
-    const endX = startX + canvasWidth + gridSize;
-    const startY = Math.floor(cameraPos.current.y / gridSize) * gridSize;
-    const endY = startY + canvasHeight + gridSize;
-    
-    for (let x = startX; x < endX; x += gridSize) {
+        // Draw grid
+        const gridSize = 50;
         ctx.beginPath();
-        ctx.moveTo(x, startY);
-        ctx.lineTo(x, endY);
+        for (let x = 0; x <= GAME_CONFIG.WORLD_WIDTH; x += gridSize) {
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, GAME_CONFIG.WORLD_HEIGHT);
+        }
+        for (let y = 0; y <= GAME_CONFIG.WORLD_HEIGHT; y += gridSize) {
+            ctx.moveTo(0, y);
+            ctx.lineTo(GAME_CONFIG.WORLD_WIDTH, y);
+        }
+        ctx.strokeStyle = '#27272a'; // zinc-800
         ctx.stroke();
-    }
-    for (let y = startY; y < endY; y += gridSize) {
-        ctx.beginPath();
-        ctx.moveTo(startX, y);
-        ctx.lineTo(endX, y);
-        ctx.stroke();
-    }
-  };
+        
+        // Draw world boundaries
+        ctx.strokeStyle = '#f59e0b'; // amber-500
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0, 0, GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+        // Draw entities
+        groundEffectsRef.current.forEach(e => e.draw(ctx));
+        droppedItemsRef.current.forEach(item => item.draw(ctx));
+        goldCoinsRef.current.forEach(coin => coin.draw(ctx));
+        enemiesRef.current.forEach(e => e.draw(ctx));
+        player.draw(ctx);
+        npcsRef.current.forEach(npc => npc.draw(ctx));
+        projectilesRef.current.forEach(p => p.draw(ctx));
+        visualEffectsRef.current.forEach(ve => ve.draw(ctx));
+        floatingTextsRef.current.forEach(ft => ft.draw(ctx));
+
+        ctx.restore();
+    }, []);
     
-    const resize = () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+    useGameLoop(() => {
+        update();
+        draw();
+    });
+
+    // UI Handlers
+    const toggleInventory = () => setIsInventoryOpen(prev => !prev);
+
+    const handleEquipItem = (inventoryIndex: number) => {
+        playerRef.current?.equipItem(inventoryIndex);
+        setPlayerState({...playerRef.current!});
+    };
+
+    const handleUnequipItem = (slot: ItemSlot) => {
+        playerRef.current?.unequipItem(slot);
+        setPlayerState({...playerRef.current!});
+    };
+
+    const handleLeave = () => {
+        onReturnToSelect(playerRef.current!.getFinalCharacterData());
     };
     
-    const handleMouseMove = (e: MouseEvent) => {
-        mousePos.current = { x: e.clientX, y: e.clientY };
+    const handleCraftItem = (recipe: Recipe) => {
+        if (playerRef.current?.craftItem(recipe)) {
+            setPlayerState({ ...playerRef.current });
+        } else {
+            console.log("Crafting failed: Insufficient materials or inventory space.");
+        }
     };
-
-    resize();
-    window.addEventListener('resize', resize);
-    canvas.addEventListener('mousemove', handleMouseMove);
-
-    return () => {
-        window.removeEventListener('resize', resize);
-        canvas.removeEventListener('mousemove', handleMouseMove);
-    };
-  }, []);
-  
-  useGameLoop(gameLoop);
-  
-  const handleReturnToSelect = () => {
-      onReturnToSelect(playerRef.current!.getFinalCharacterData());
-  };
-  
-  const handleEquip = (item: Item, inventoryIndex: number) => {
-      playerRef.current!.equipItem(item, inventoryIndex);
-  };
-  
-  const handleUnequip = (slot: ItemSlot) => {
-      playerRef.current!.unequipItem(slot);
-  };
-
-  return (
-    <div className="w-full h-full relative">
-      <canvas ref={canvasRef} className="absolute inset-0 bg-gray-900" />
-      <HUD 
-        player={playerRef.current} 
-        gameStats={gameStats}
-        onToggleInventory={() => setInventoryOpen(prev => !prev)}
-        onReturnToSelect={handleReturnToSelect}
-      />
-      <Inventory
-        inventory={playerRef.current!.characterData.inventory}
-        equipment={playerRef.current!.characterData.equipment}
-        onEquip={handleEquip}
-        onUnequip={handleUnequip}
-        isOpen={isInventoryOpen}
-        onClose={() => setInventoryOpen(false)}
-      />
-    </div>
-  );
+    
+    return (
+        <div className="relative w-screen h-screen overflow-hidden bg-gray-800">
+            <canvas ref={canvasRef} width={window.innerWidth} height={window.innerHeight} className="absolute top-0 left-0" />
+            <HUD player={playerState} enemies={enemiesRef.current} npcs={npcsRef.current} worldDimensions={{ width: GAME_CONFIG.WORLD_WIDTH, height: GAME_CONFIG.WORLD_HEIGHT }} onLeave={handleLeave} onToggleInventory={toggleInventory}/>
+            <SkillBar skills={playerState?.skills || []}/>
+            {isInventoryOpen && playerState && <Inventory characterData={playerState.characterData} onItemEquip={handleEquipItem} onItemUnequip={handleUnequipItem} toggleInventory={toggleInventory}/>}
+            {interactingNPC && <NPCInteraction npc={interactingNPC} onClose={() => setInteractingNPC(null)} onOpenCrafting={() => { setIsCraftingOpen(true); setInteractingNPC(null); }}/>}
+            {isCraftingOpen && playerState && <CraftingUI recipes={CRAFTING_RECIPES_DB} characterData={playerState.characterData} onCraft={handleCraftItem} onClose={() => setIsCraftingOpen(false)}/>}
+        </div>
+    );
 };
 
 export default Game;
