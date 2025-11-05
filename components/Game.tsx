@@ -273,6 +273,24 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect })
         // Draw world background
         ctx.fillStyle = '#111827'; // gray-900
         ctx.fillRect(0, 0, GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
+
+        // Draw grid
+        const gridSize = 40; // NPC radius is 18, diameter 36. 40 is a nice round number.
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+
+        for (let x = 0; x <= GAME_CONFIG.WORLD_WIDTH; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, GAME_CONFIG.WORLD_HEIGHT);
+            ctx.stroke();
+        }
+        for (let y = 0; y <= GAME_CONFIG.WORLD_HEIGHT; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(GAME_CONFIG.WORLD_WIDTH, y);
+            ctx.stroke();
+        }
         
         // Draw safe zone
         const worldCenterX = GAME_CONFIG.WORLD_WIDTH / 2;

@@ -9,17 +9,30 @@ interface VendorUIProps {
     onClose: () => void;
 }
 
+const getRarityClasses = (rarity: ItemRarity) => {
+    switch (rarity) {
+        case ItemRarity.Uncommon: return { border: 'border-green-600', bg: 'bg-green-900/50', hoverBorder: 'hover:border-green-500', hoverBg: 'hover:bg-green-800/50', shadow: 'shadow-green-500/30' };
+        case ItemRarity.Rare: return { border: 'border-blue-600', bg: 'bg-blue-900/50', hoverBorder: 'hover:border-blue-500', hoverBg: 'hover:bg-blue-800/50', shadow: 'shadow-blue-500/30' };
+        case ItemRarity.Epic: return { border: 'border-purple-600', bg: 'bg-purple-900/50', hoverBorder: 'hover:border-purple-500', hoverBg: 'hover:bg-purple-800/50', shadow: 'shadow-purple-500/30' };
+        case ItemRarity.Legendary: return { border: 'border-orange-600', bg: 'bg-orange-900/50', hoverBorder: 'hover:border-orange-500', hoverBg: 'hover:bg-orange-800/50', shadow: 'shadow-orange-500/30' };
+        default: return { border: 'border-gray-600', bg: 'bg-gray-900/50', hoverBorder: 'hover:border-gray-500', hoverBg: 'hover:bg-gray-800/50', shadow: '' };
+    }
+};
+
+
 const VendorItemSlot: React.FC<{
     item: Item | null;
     index: number;
     onSell: (item: Item, index: number) => void;
 }> = ({ item, index, onSell }) => {
     const [isHovered, setHovered] = useState(false);
+    
     if (!item) {
         return <div className="w-16 h-16 bg-gray-900/50 border-2 border-gray-700 rounded-md" />;
     }
-
-    const price = (item.sellPrice || 0) * (item.quantity || 1);
+    
+    const rarityClasses = getRarityClasses(item.rarity);
+    const price = (item.sellPrice || 0);
 
     const handleRightClick = (e: React.MouseEvent) => {
         if (e.shiftKey && item) {
@@ -30,7 +43,7 @@ const VendorItemSlot: React.FC<{
 
     return (
         <div 
-            className="w-16 h-16 bg-gray-900 border-2 border-gray-600 rounded-md relative group flex items-center justify-center cursor-pointer"
+            className={`w-16 h-16 border-2 rounded-md relative group flex items-center justify-center cursor-pointer transition-all duration-200 ${rarityClasses.bg} ${rarityClasses.border} ${rarityClasses.hoverBorder} ${rarityClasses.hoverBg} ${item ? `shadow-lg ${rarityClasses.shadow}` : ''}`}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
             onClick={() => onSell(item, index)}
