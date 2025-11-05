@@ -1,0 +1,5 @@
+{
+  "name": "yumyum.io",
+  "description": "A browser-based cooperative PvE IO game similar to Hordes.io, built with React, TypeScript, and Canvas. Players choose a class, fight monsters, and level up in a dynamic world.",
+  "requestFramePermissions": []
+}
