@@ -1,51 +1,58 @@
 import React from 'react';
-import { NPC, NPCType } from '../game/entities/NPC';
+import { NPC } from '../game/entities/NPC';
+import { NPCType, CharacterData, Recipe, Item } from '../game/types';
+import CraftingUI from './CraftingUI';
+import VendorUI from './VendorUI';
 
 interface NPCInteractionProps {
     npc: NPC;
+    characterData: CharacterData;
+    recipes: Recipe[];
     onClose: () => void;
-    // FIX: Added onOpenCrafting to allow Game component to control UI state.
-    onOpenCrafting: () => void;
+    onCraft: (recipe: Recipe) => void;
+    onSell: (item: Item, inventoryIndex: number) => void;
 }
 
-
-const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, onClose, onOpenCrafting }) => {
+const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, characterData, recipes, onClose, onCraft, onSell }) => {
     
     const renderContent = () => {
         switch (npc.npcType) {
-            case NPCType.QuestGiver:
-                return <p>"Hello adventurer! I have a quest for you... (not implemented yet)."</p>;
-            case NPCType.Vendor:
-                 return <p>"Care to browse my wares? (not implemented yet)."</p>;
             case NPCType.Crafter:
+                return <CraftingUI 
+                            recipes={recipes} 
+                            characterData={characterData} 
+                            onCraft={onCraft} 
+                            onClose={onClose} 
+                        />;
+            case NPCType.Vendor:
                  return (
-                    <>
-                        <p className="mb-4">"I can forge powerful items for you, if you have the materials."</p>
-                        <button 
-                            onClick={onOpenCrafting} 
-                            className="bg-teal-500 text-white font-bold py-2 px-6 rounded hover:bg-teal-600 transition-colors"
-                        >
-                            Open Crafting
-                        </button>
-                    </>
+                    <VendorUI
+                        characterData={characterData}
+                        onSell={onSell}
+                        onClose={onClose}
+                    />
+                );
+            case NPCType.QuestGiver:
+                 return (
+                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto" onClick={onClose}>
+                        <div className="bg-gray-800/90 backdrop-blur-md p-6 rounded-xl shadow-lg border border-gray-700 max-w-3xl w-full" onClick={e => e.stopPropagation()}>
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-2xl font-semibold text-blue-400">Quest Giver</h3>
+                                <button onClick={onClose} className="text-2xl text-gray-400 hover:text-white">&times;</button>
+                            </div>
+                            <p className="text-gray-300">"Greetings, adventurer! I may have some tasks for you in the future."</p>
+                        </div>
+                    </div>
                  );
             default:
-                return <p>"Greetings."</p>;
+                return null;
         }
     }
-    
+
     return (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center pointer-events-auto" onClick={onClose}>
-            <div className="bg-gray-800/90 backdrop-blur-md p-6 rounded-xl shadow-lg border border-gray-700 max-w-2xl w-full" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-3xl font-bold text-white">{npc.name}</h2>
-                    <button onClick={onClose} className="text-2xl text-gray-400 hover:text-white">&times;</button>
-                </div>
-                <div className="text-gray-300">
-                    {renderContent()}
-                </div>
-            </div>
-        </div>
+        <>
+            {renderContent()}
+        </>
     );
 };
 

@@ -17,12 +17,15 @@ const ItemTooltip: React.FC<ItemTooltipProps> = ({ item }) => {
   return (
     <div className="absolute bottom-full mb-2 w-64 bg-gray-900 border border-gray-700 text-white text-sm rounded-lg p-3 text-left opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-2xl">
       <p className={`font-bold text-lg ${rarityColors[item.rarity]}`}>{item.name}</p>
-      <p className="text-gray-500 capitalize mb-2">{ItemRarity[item.rarity]} {item.slot}</p>
+      <p className="text-gray-500 capitalize mb-2">
+        {ItemRarity[item.rarity]} {item.type === 'Material' ? 'Material' : item.slot}
+        {item.quantity && item.quantity > 1 && ` (x${item.quantity})`}
+      </p>
       
       <div className="border-t border-gray-700 my-2"></div>
 
       <div className="space-y-1 text-green-400">
-        {Object.entries(item.stats).map(([stat, value]) => (
+        {item.stats && Object.entries(item.stats).map(([stat, value]) => (
           <p key={stat}>
             +{value} {stat.replace(/([A-Z])/g, ' $1').trim()}
           </p>
@@ -33,6 +36,13 @@ const ItemTooltip: React.FC<ItemTooltipProps> = ({ item }) => {
         <>
             <div className="border-t border-gray-700 my-2"></div>
             <p className="text-gray-400 italic">"{item.description}"</p>
+        </>
+      )}
+
+      {item.sellPrice && (
+        <>
+          <div className="border-t border-gray-700 my-2"></div>
+          <p className="text-yellow-400">Sell Price: {item.sellPrice * (item.quantity || 1)} G</p>
         </>
       )}
     </div>

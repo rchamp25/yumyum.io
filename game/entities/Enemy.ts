@@ -37,6 +37,7 @@ export class Enemy extends Character {
         break;
     }
     super(position, radius, health, color, damage);
+    this.name = EnemyType[type];
     this.enemyType = type;
     this.speed = speed * (0.9 + Math.random() * 0.2);
     this.xpValue = xp;
@@ -64,8 +65,17 @@ export class Enemy extends Character {
 
         if (distanceToPlayer > this.attackRange) {
             const currentSpeed = this.speed * (this.hasStatus('slow') ? 0.5 : 1);
-            this.position.x += direction.x * currentSpeed;
-            this.position.y += direction.y * currentSpeed;
+            const nextX = this.position.x + direction.x * currentSpeed;
+            const nextY = this.position.y + direction.y * currentSpeed;
+
+            const nextDistanceToCenter = getDistance({ x: nextX, y: nextY }, { x: worldWidth / 2, y: worldHeight / 2 });
+            
+            // Prevent entering safe zone
+            if (nextDistanceToCenter > GAME_CONFIG.SAFE_ZONE_RADIUS - this.radius) {
+                this.position.x = nextX;
+                this.position.y = nextY;
+            }
+            
         } else {
             const now = Date.now();
             if (now - this.lastAttackTime > this.attackCooldown) {
@@ -79,9 +89,9 @@ export class Enemy extends Character {
   attack(player: Player, game: GameContext, direction: Vector2D) {
       if (this.enemyType === EnemyType.Ranger) {
 // FIX: Use the addProjectile method from the game context for consistency and to adhere to the intended API.
-          game.addProjectile(new Projectile(this.position, direction, this.damage, 6, this.id, '#f43f5e'));
+          game.addProjectile(new Projectile(this.position, direction, this.damage, 6, this.id, this.name, '#f43f5e'));
       } else {
-          const ft = player.takeDamage(this.damage);
+          const ft = player.takeDamage(this.damage, this);
 // FIX: Use the addFloatingText method from the game context as `floatingTexts` is not a property of the context.
           if (ft) game.addFloatingText(ft);
       }

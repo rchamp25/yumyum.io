@@ -6,6 +6,7 @@ let nextId = 0;
 export abstract class Character {
   // FIX: Changed id type from number to `string | number` to allow both string IDs for players and numeric IDs for other characters.
   id: string | number;
+  name: string;
   position: Vector2D;
   radius: number;
   health: number;
@@ -24,6 +25,7 @@ export abstract class Character {
     this.maxHealth = health;
     this.color = color;
     this.damage = damage;
+    this.name = "Character";
   }
 
   abstract update(...args: any[]): void;
@@ -71,7 +73,7 @@ export abstract class Character {
     }
   }
 
-  takeDamage(amount: number): FloatingText | null {
+  takeDamage(amount: number, source?: { name: string }): FloatingText | null {
     if (this.isDead) return null;
 
     let damageTaken = amount;
@@ -119,7 +121,7 @@ export abstract class Character {
         }
         if (effect.type === 'dot' && effect.damagePerTick) {
             const damage = (effect.damagePerTick / effect.duration) * (1000/60); 
-            this.takeDamage(damage);
+            this.takeDamage(damage, { name: 'DoT Effect' });
         }
         return true;
     });

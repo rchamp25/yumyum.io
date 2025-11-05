@@ -1,139 +1,139 @@
 import React from 'react';
 import { Player } from '../game/entities/Player';
+// FIX: Imported CharacterClass to resolve name not found error.
+import { GameStats, Vector2D, NPCType, CharacterClass } from '../game/types';
+import SkillBar from './SkillBar';
+import { GAME_CONFIG } from '../game/constants';
 import { Enemy } from '../game/entities/Enemy';
-import { NPC, NPCType } from '../game/entities/NPC';
-import { InventoryIcon, HammerIcon } from './icons';
+import { NPC } from '../game/entities/NPC';
+import { HammerIcon, CoinIcon } from './icons';
 
 interface HUDProps {
-  player: Player | null;
-  enemies: Enemy[];
-  npcs: NPC[];
-  worldDimensions: { width: number; height: number };
-  onLeave: () => void;
-  onToggleInventory: () => void;
-}
-
-const StatBar: React.FC<{
-  current: number;
-  max: number;
-  color: string;
-  label: string;
-}> = ({ current, max, color, label }) => {
-  const percentage = max > 0 ? (current / max) * 100 : 0;
-  return (
-    <div className="w-full bg-gray-700 rounded-full h-5 relative overflow-hidden border-2 border-gray-900">
-      <div
-        className={`h-full rounded-full transition-all duration-300 ease-in-out ${color}`}
-        style={{ width: `${percentage}%` }}
-      />
-      <span className="absolute inset-0 w-full text-center text-white text-xs font-bold flex items-center justify-center drop-shadow-md">
-        {label}: {Math.round(current)} / {max}
-      </span>
-    </div>
-  );
-};
-
-const Minimap: React.FC<{
     player: Player;
+    gameStats: GameStats;
     enemies: Enemy[];
     npcs: NPC[];
-    worldDimensions: { width: number; height: number };
-}> = ({ player, enemies, npcs, worldDimensions }) => {
-    const mapSize = 160; // size of minimap in pixels
-    const scaleX = mapSize / worldDimensions.width;
-    const scaleY = mapSize / worldDimensions.height;
-    
+    toggleInventory: () => void;
+    onReturnToSelect: () => void;
+    nearbyNPC: NPC | null;
+    onUseSkill: (index: number) => void;
+}
+
+const StatBar: React.FC<{ value: number; maxValue: number; color: string; bgColor: string }> = ({ value, maxValue, color, bgColor }) => {
+    const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
     return (
-        <div className="absolute top-4 right-4 w-40 h-40 bg-gray-900/70 backdrop-blur-sm border-2 border-gray-600 rounded-full overflow-hidden pointer-events-auto">
-            <div className="absolute inset-0">
+        <div className={`w-full h-5 ${bgColor} rounded-full overflow-hidden border-2 border-gray-900/50`}>
+            <div className={`h-full ${color} transition-all duration-300 ease-out`} style={{ width: `${percentage}%` }}></div>
+        </div>
+    );
+};
+
+const Minimap: React.FC<{ player: Player, enemies: Enemy[], npcs: NPC[] }> = ({ player, enemies, npcs }) => {
+    const mapSize = 200;
+    const worldSize = { w: GAME_CONFIG.WORLD_WIDTH, h: GAME_CONFIG.WORLD_HEIGHT };
+    const scale = mapSize / (worldSize.w * 0.5); // Adjust view range on minimap
+
+    const worldToMap = (pos: Vector2D) => {
+        const relativeX = pos.x - player.position.x;
+        const relativeY = pos.y - player.position.y;
+        return {
+            x: mapSize / 2 + relativeX * scale,
+            y: mapSize / 2 + relativeY * scale,
+        };
+    };
+
+    return (
+        <div 
+            className="w-52 h-52 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-lg border-2 border-gray-700 overflow-hidden"
+            style={{ width: mapSize, height: mapSize }}
+        >
+            <div className="relative w-full h-full">
                 {/* Player Dot */}
-                <div 
-                    className="absolute w-2 h-2 bg-blue-400 rounded-full border border-white"
-                    style={{ 
-                        left: `${player.position.x * scaleX - 4}px`, 
-                        top: `${player.position.y * scaleY - 4}px` 
-                    }}
-                />
+                <div className="absolute w-2 h-2 bg-blue-400 rounded-full" style={{ top: mapSize/2 - 4, left: mapSize/2 - 4, transform: `translate(0,0)`}}></div>
+
                 {/* Enemy Dots */}
-                {enemies.map(enemy => (
-                    <div
-                        key={enemy.id}
-                        className="absolute w-1.5 h-1.5 bg-red-500 rounded-full"
-                        style={{
-                            left: `${enemy.position.x * scaleX - 3}px`,
-                            top: `${enemy.position.y * scaleY - 3}px`,
-                        }}
-                    />
-                ))}
+                {enemies.map(enemy => {
+                    const mapPos = worldToMap(enemy.position);
+                    if (mapPos.x < 0 || mapPos.x > mapSize || mapPos.y < 0 || mapPos.y > mapSize) return null;
+                    return <div key={enemy.id} className="absolute w-2 h-2 bg-red-500 rounded-full" style={{ top: mapPos.y-4, left: mapPos.x-4 }}></div>;
+                })}
+                
                 {/* NPC Icons */}
-                {npcs.map(npc => (
-                    <div
-                        key={npc.id}
-                        className="absolute"
-                        style={{
-                            left: `${npc.position.x * scaleX - 8}px`,
-                            top: `${npc.position.y * scaleY - 8}px`,
-                        }}
-                    >
-                        {npc.npcType === NPCType.Crafter && <HammerIcon className="w-4 h-4 text-yellow-400" />}
-                    </div>
-                ))}
+                {npcs.map(npc => {
+                    const mapPos = worldToMap(npc.position);
+                     if (mapPos.x < 0 || mapPos.x > mapSize || mapPos.y < 0 || mapPos.y > mapSize) return null;
+                     const icon = npc.npcType === NPCType.Crafter ? <HammerIcon /> : <CoinIcon />;
+                     return <div key={npc.id} className="absolute w-4 h-4 text-yellow-400" style={{ top: mapPos.y-8, left: mapPos.x-8 }}>{icon}</div>
+                })}
             </div>
         </div>
     );
-}
+};
 
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, worldDimensions, onLeave, onToggleInventory }) => {
-  if (!player) return null;
+const HUD: React.FC<HUDProps> = ({ player, gameStats, enemies, npcs, toggleInventory, onReturnToSelect, nearbyNPC, onUseSkill }) => {
+    if (!player) return null;
 
-  const xpPercentage = player.xpToNextLevel > 0 ? (player.characterData.xp / player.xpToNextLevel) * 100 : 0;
+    const finalStats = player.getFinalStats();
+    const xpForNextLevel = GAME_CONFIG.BASE_XP_TO_NEXT_LEVEL * Math.pow(GAME_CONFIG.XP_PER_LEVEL_MULTIPLIER, player.level - 1);
 
-  return (
-    <div className="absolute inset-0 pointer-events-none">
-        {/* Top Left - Player Info */}
-        <div className="absolute top-4 left-4 w-1/4 max-w-sm p-4 bg-gray-800/80 backdrop-blur-sm rounded-lg shadow-lg border border-gray-700 pointer-events-auto flex flex-col space-y-3">
-            <div className="flex items-center">
-                <div className="bg-gray-900 rounded-full w-12 h-12 flex items-center justify-center text-teal-400 text-2xl font-bold border-2 border-gray-600 mr-4">
-                {player.characterData.level}
+    return (
+        <div className="absolute inset-0 pointer-events-none text-white font-sans">
+            {/* Top Left - Player Info */}
+            <div className="absolute top-4 left-4 w-64 p-3 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-lg border border-gray-700">
+                <div className="flex items-center mb-2">
+                    <div className="w-10 h-10 bg-teal-500 rounded-full flex items-center justify-center font-bold text-xl border-2 border-gray-600 mr-3">
+                        {player.level}
+                    </div>
+                    <div>
+                        <h2 className="font-bold text-lg leading-tight">{player.name}</h2>
+                        <p className="text-sm text-gray-400">{CharacterClass[player.characterClass]}</p>
+                    </div>
                 </div>
-                <div>
-                <h2 className="text-xl font-bold text-white">{player.characterData.name}</h2>
-                <p className="text-gray-400">{player.getClassName()}</p>
+                {/* Health Bar */}
+                <div className="relative mb-1">
+                    <StatBar value={player.health} maxValue={finalStats.maxHealth} color="bg-red-500" bgColor="bg-red-900/50" />
+                    <div className="absolute inset-0 flex items-center justify-center text-xs font-bold drop-shadow-md">
+                        {Math.round(player.health)} / {finalStats.maxHealth}
+                    </div>
+                </div>
+                {/* XP Bar */}
+                <div className="relative">
+                    <StatBar value={player.xp} maxValue={xpForNextLevel} color="bg-yellow-500" bgColor="bg-yellow-900/50" />
+                     <div className="absolute inset-0 flex items-center justify-center text-xs font-bold drop-shadow-md">
+                        XP: {player.xp} / {Math.round(xpForNextLevel)}
+                    </div>
                 </div>
             </div>
-            <div className="space-y-2">
-                <StatBar
-                current={player.health}
-                max={player.maxHealth}
-                color="bg-red-500"
-                label="HP"
-                />
-                <div className="w-full bg-purple-900 rounded-full h-3 relative overflow-hidden border border-gray-900">
-                    <div
-                        className="bg-purple-500 h-full rounded-full"
-                        style={{ width: `${xpPercentage}%` }}
-                    />
-                    <span className="absolute inset-0 w-full text-center text-white text-xs font-bold flex items-center justify-center drop-shadow-md text-[10px]">
-                        XP
-                    </span>
+
+            {/* Top Right - Game Stats & Controls */}
+            <div className="absolute top-4 right-4 flex flex-col items-end space-y-3">
+                <Minimap player={player} enemies={enemies} npcs={npcs} />
+                <div className="p-3 bg-gray-900/70 backdrop-blur-sm rounded-lg shadow-lg border border-gray-700 text-right">
+                    <p>Kills: <span className="font-bold">{gameStats.kills}</span></p>
+                    <p>Gold: <span className="font-bold text-yellow-400">{gameStats.gold}</span></p>
+                    <div className="mt-2 space-x-2 pointer-events-auto">
+                         <button onClick={toggleInventory} className="bg-blue-600/80 hover:bg-blue-500 text-white font-bold py-1 px-3 rounded text-sm transition-colors">
+                            Inventory (I)
+                        </button>
+                        <button onClick={onReturnToSelect} className="bg-gray-600/80 hover:bg-gray-500 text-white font-bold py-1 px-3 rounded text-sm transition-colors">
+                            Leave World
+                        </button>
+                    </div>
                 </div>
             </div>
-            <div className="flex space-x-2 pt-2">
-                 <button onClick={onLeave} className="flex-1 bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition-colors text-sm">
-                    Leave World
-                </button>
-                <button onClick={onToggleInventory} className="bg-yellow-600 text-white p-2 rounded hover:bg-yellow-700 transition-colors">
-                    <InventoryIcon className="w-5 h-5"/>
-                </button>
-            </div>
+            
+            {/* NPC Interaction Prompt */}
+            {nearbyNPC && (
+                 <div className="absolute bottom-24 left-1/2 -translate-x-1/2 bg-gray-900/80 p-3 rounded-lg border border-gray-600 text-center shadow-lg">
+                    <p className="text-lg">Press <span className="font-bold text-teal-400">[E]</span> to talk to {nearbyNPC.name}</p>
+                </div>
+            )}
+
+            {/* Bottom Center - Skill Bar */}
+            <SkillBar skills={player.skills} onUseSkill={onUseSkill} />
         </div>
-        
-        {/* Top Right - Minimap */}
-        <Minimap player={player} enemies={enemies} npcs={npcs} worldDimensions={worldDimensions} />
-
-    </div>
-  );
+    );
 };
 
 export default HUD;

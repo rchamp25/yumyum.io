@@ -7,6 +7,7 @@ import DeathScreen from './components/DeathScreen';
 import { authService, GoogleUser } from './services/auth';
 import { storageService } from './services/storage';
 import { CharacterData, CharacterClass, GameStats } from './game/types';
+import { Player } from './game/entities/Player';
 
 type GameState = 'login' | 'char_select' | 'char_create' | 'in_game' | 'dead';
 
@@ -96,9 +97,24 @@ const App: React.FC = () => {
         setGameState('char_select');
     };
 
-    const handleRespawn = () => {
+    const handleReturnToMenu = () => {
         setDeathStats(null);
         setGameState('char_select');
+    };
+
+    const handleRespawnInGame = () => {
+        if (!currentCharacter || !user) return;
+
+        const playerToRespawn = new Player(currentCharacter);
+        playerToRespawn.respawn();
+        const respawnedCharacterData = playerToRespawn.toCharacterData();
+
+        storageService.saveCharacter(user.uid, respawnedCharacterData);
+        setCharacters(storageService.getCharacters(user.uid));
+        
+        setCurrentCharacter(respawnedCharacterData);
+        setDeathStats(null);
+        setGameState('in_game');
     };
 
     const renderContent = () => {
@@ -129,7 +145,11 @@ const App: React.FC = () => {
                                                 onReturnToSelect={handleReturnToSelect}
                                             />;
             case 'dead':
-                return <DeathScreen stats={deathStats} onRespawn={handleRespawn} />;
+                return <DeathScreen 
+                            stats={deathStats} 
+                            onReturnToMenu={handleReturnToMenu} 
+                            onRespawnInGame={handleRespawnInGame}
+                        />;
             default:
                 return <LoginScreen onLogin={handleLogin} />;
         }

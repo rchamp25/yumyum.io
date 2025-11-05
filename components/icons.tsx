@@ -1,63 +1,278 @@
 import React from 'react';
 import { Item, ItemSlot } from '../game/types';
 
-const Icon: React.FC<{ className?: string, children: React.ReactNode }> = ({ className, children }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    {children}
-  </svg>
-);
-
 export const WarriorIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <Icon className={className}>
-    <path d="M19.25 12.25L12 19.5L4.75 12.25L12 5L19.25 12.25Z" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path>
-    <path d="M12 5V2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path>
-    <path d="M12 19.5V22" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path>
-    <path d="M5 12H2" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path>
-    <path d="M19 12H22" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"></path>
-  </Icon>
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M19.25 21.25L12 14L4.75 21.25" />
+        <path d="M12 14V3.75" />
+        <path d="M6.25 6.75H17.75" />
+    </svg>
 );
 
 export const MageIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <Icon className={className}>
-    <path d="M3 7l4-4 4 4M7 3v13" />
-    <path d="M13 21l4-4 4 4M17 21V8" />
-    <path d="M5 21h14" />
-  </Icon>
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6.13 1L6 16a2 2 0 002 2h8a2 2 0 002-2L17.87 1" />
+        <path d="M4 22h16" />
+        <path d="M14.1 4.1L12 2 9.9 4.1" />
+        <path d="M12 12V2" />
+    </svg>
 );
 
 export const ArcherIcon: React.FC<{ className?: string }> = ({ className }) => (
-  <Icon className={className}>
-    <path d="M15 3h6v6" />
-    <path d="M3 21l18-18" />
-    <path d="M10 13L2.1 21.9" />
-    <path d="M11 14l-2.5 2.5" />
-    <path d="M14 11l2.5-2.5" />
-  </Icon>
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 3h6v6" />
+        <path d="M9 21H3v-6" />
+        <path d="M21 3l-7 7" />
+        <path d="M3 21l7-7" />
+        <path d="M12 12l8-8" />
+    </svg>
 );
 
-// --- Skill Icons ---
-// FIX: Replaced generic placeholder icons with more descriptive and unique designs for skills.
-export const SkillIcon1: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></Icon>;
-export const SkillIcon2: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="M13 2H3v10h10V2z"/><path d="M21 12h-6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h6v10z"/></Icon>;
-export const SkillIcon3: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="M4.5 16.5c-1.5 1.5-3 1.5-4.5 0"/><path d="M19.5 4.5c1.5-1.5 3-1.5 4.5 0"/><path d="M6.5 14.5l11-11"/><path d="M14.5 6.5l-11 11"/></Icon>;
-export const SkillIcon4: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="M9 18V5l12-2v13"/><path d="M9 18l-4 4"/><path d="M9 5l4-4"/></Icon>;
-export const SkillIcon5: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Icon>;
+// Generic Icons
+// FIX: Exported SwordIcon, VestIcon, BootsIcon, and RingIcon.
+export const SwordIcon: React.FC<{ className?: string }> = ({ className }) => <WarriorIcon className={className} />;
+export const VestIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 22a2 2 0 002-2V7l-4-3-4 3v13a2 2 0 002 2h4zM8 22a2 2 0 01-2-2V7l4-3 4 3v13a2 2 0 01-2 2H8z" />
+        <path d="M8 7l4-3 4 3" />
+    </svg>
+);
+export const BootsIcon: React.FC<{ className?: string }> = ({ className }) => (
+     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M16 16V6.5a2.5 2.5 0 00-5 0V16" />
+        <path d="M11 16H6a2 2 0 01-2-2v-4a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2h-2" />
+    </svg>
+);
+export const RingIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="4" />
+    </svg>
+);
+const MaterialIcon: React.FC<{ className?: string }> = ({ className }) => (
+     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2l-5.5 9h11z" />
+        <path d="M17.5 22l-5.5-9-5.5 9" />
+    </svg>
+);
 
-// --- UI & Item Icons ---
-export const InventoryIcon: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></Icon>;
-export const SwordIcon: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="m15.5 13.5 6-6"/><path d="M22 2 12 12"/><path d="M6 12 2 22"/><path d="M9.5 14.5 2 22"/></Icon>;
-export const VestIcon: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="M18 2H6l-4 8 4 12h12l4-12-4-8Z"/><path d="M6 10h12"/><path d="M6 14h12"/></Icon>;
-export const BootsIcon: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="m2 17 4.5-5.5.5.5-1 2-2 2-2 1.5Z"/><path d="M10 17 8.5 14l-2-3-1-1.5-1.5-.5-1.5 1Z"/><path d="m14 20-3-3 2-2 3 3 2.5 1.5Z"/><path d="M10.5 13.5 12 12l2.5 1.5L16 15l1.5 2.5.5 1.5-1 1-1 1-1 1-1 .5Z"/><path d="M22 17h-5.5l-1.5-2-1.5-2-1-1.5-1-1.5-.5-1.5.5-1 1-1 .5-1 .5-.5 1-1.5L14 3.5 16 2l3.5 3.5.5 1.5Z"/></Icon>;
-export const RingIcon: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="M10.8 12.8a2.3 2.3 0 0 0 3.4 0l1.6-1.6a2.3 2.3 0 0 0-3.4-3.4l-1.6 1.6a2.3 2.3 0 0 0 0 3.4Z"/><path d="M16 6h2v2h-2z"/><path d="M6 16h2v2h-2z"/><circle cx="12" cy="12" r="10"/></Icon>;
-export const HammerIcon: React.FC<{ className?: string }> = ({ className }) => <Icon className={className}><path d="m15 12-8.373 8.373a1 1 0 1 1-1.414-1.414L13.586 10.5"/><path d="M18 15 6 3"/><path d="m22 2-1.5 1.5"/><path d="m2 22 1.5-1.5"/></Icon>;
+// --- Specific Item Icons ---
+const RustySwordIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.5 14.5L9 20l-4-4 5.5-5.5M19 9l-5 5M3 21l-1-1" /><path d="M17 11l-1.5-1.5" /><path d="M21 7l-1.5-1.5" />
+    </svg>
+);
+const SteelLongswordIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21.73 3.27a1 1 0 00-1-1L3.27 19.73a1 1 0 001 1L21.73 4.27z" /><path d="M5 19l4-4" />
+    </svg>
+);
+const FallenKingBladeIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.5 14.5L9 20l-4-4 5.5-5.5m7.5-3.5-5 5" /><path d="M2 22l1-1" /><path d="M18 2l-1.5 1.5M22 6l-1.5 1.5" /><path d="M12 6V3l2 2-2 2-2-2 2-2z" />
+    </svg>
+);
+const ShortbowIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 20c-4.418 0-8-3.582-8-8s3.582-8 8-8" /><path d="M20 4c-1.488 2.11-3.66 4.75-6.5 7.5" /><path d="M4 12h16" />
+    </svg>
+);
+const ElvenBowIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21.44 11.44c.32.32.32.84 0 1.12l-5.6 5.6a.8.8 0 01-1.12 0l-1.6-1.6a.8.8 0 010-1.12l5.6-5.6a.8.8 0 011.12 0z" /><path d="M3 21l6-6" /><path d="M16 8l-6 6" /><path d="M15 3h6v6" /><path d="M21 3l-7 7" />
+    </svg>
+);
+const GnarledStaffIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 21l7-7" /><path d="M12 12l.5-1 .5 1-.5 1-.5-1z" /><path d="M10 14l7-7" /><path d="M13 11l.5-1 .5 1-.5 1-.5-1z" /><path d="M17 7l4-4" />
+    </svg>
+);
+const ArchmageStaffIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 21l8-8" /><path d="M11 13l6-6" /><circle cx="19" cy="5" r="2" /><path d="M5 3l4 4" />
+    </svg>
+);
+const LeatherTunicIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2H18L20 12L12 22L4 12L6 2Z" /><path d="M6 2L12 10L18 2" />
+    </svg>
+);
+const ChainmailVestIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="9" cy="6" r="1"/><circle cx="12" cy="6" r="1"/><circle cx="15" cy="6" r="1"/>
+        <circle cx="7.5" cy="8.5" r="1"/><circle cx="10.5" cy="8.5" r="1"/><circle cx="13.5" cy="8.5" r="1"/><circle cx="16.5" cy="8.5" r="1"/>
+        <path d="M7 11v7h10v-7l-5-2-5 2z"/><path d="M7 11l5-2 5 2"/>
+    </svg>
+);
+const PlateArmorIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3L6 8V16L12 21L18 16V8L12 3Z" /><path d="M6 8L12 12L18 8" /><path d="M12 12V21" />
+    </svg>
+);
+const MageRobesIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 3v4h14V3" /><path d="M7 7l-2 12h14l-2-12" /><path d="M12 7v14" />
+    </svg>
+);
+const DragonscaleHauberkIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L4 8v8l8 6 8-6V8l-8-6z" /><path d="M4 8l8 4 8-4" /><path d="M12 2v10" /><path d="M12 12l-8 4" /><path d="M12 12l8 4" />
+    </svg>
+);
+const WornBootsIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 9V5a2 2 0 00-2-2H8a2 2 0 00-2 2v4" /><path d="M4 11V5a2 2 0 012-2h2" /><path d="M10 11h4" /><path d="M20 11v8a2 2 0 01-2 2H6a2 2 0 01-2-2v-8" />
+    </svg>
+);
+const SturdyGreavesIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6" /><path d="M18 12V7a2 2 0 00-2-2h- электрика-4a2 2 0 00-2 2v5" /><path d="M6 12V7a2 2 0 012-2h4a2 2 0 012 2v5" /><path d="M12 12h-0.01" />
+    </svg>
+);
+const SwiftnessBootsIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 12l-2-7-5 2-3-5-3 5-5-2-2 7v8a2 2 0 002 2h16a2 2 0 002-2v-8z" /><path d="M12 12V2" />
+    </svg>
+);
+const PlatedSabatonsIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 20h16" /><path d="M6 16V8a2 2 0 012-2h8a2 2 0 012 2v8" /><path d="M8 12h8" />
+    </svg>
+);
+const WindwalkersIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 19V5" /><path d="M12 5l-4 4" /><path d="M12 5l4 4" /><path d="M5 12h14" />
+    </svg>
+);
+const VitalityRingIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="8"/><path d="M12 12l-2 2 4 4 4-4-2-2"/><path d="M12 12V6"/>
+    </svg>
+);
+const PowerAmuletIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 11.5l2 2 4-4"/>
+    </svg>
+);
+const AncientKingSealIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="9"/><path d="M12 15l-3-3 3-3 3 3-3 3z"/><path d="M12 1v4m0 14v4m-9-9H-1m26 0h-4M4.2 4.2l2.8 2.8m10 10l2.8 2.8m-10-15.6l2.8-2.8m-10 10l-2.8 2.8"/>
+    </svg>
+);
+const CommonScrapsIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 6l-4 4 4 4"/><path d="M10 18l4-4-4-4"/>
+    </svg>
+);
+const UncommonMetalIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 18L18 6" /><path d="M12 12L6 6l12 12" />
+    </svg>
+);
+const RareCrystalIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L4 8l8 6 8-6-8-6z"/><path d="M4 8v8l8 6 8-6V8"/>
+    </svg>
+);
+const EpicOrbIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 00-3.5 19.4"/>
+    </svg>
+);
+const LegendaryCoreIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L4 8l8 14 8-14-8-6z"/><path d="M12 2v20"/>
+    </svg>
+);
 
-export const ItemIcon: React.FC<{ item: Item, className?: string }> = ({ item, className }) => {
+export const HammerIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 12l-8.5 8.5" /><path d="M5.5 11l8-8" /><path d="M12 15l-1.5 1.5" /><path d="M22 2l-5 5" /><path d="M10 14l-1.5 1.5" />
+    </svg>
+);
+export const CoinIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="8" /><path d="M12 18V6" /><path d="M16 14c-2 0-3-1-3-3s1-3 3-3" />
+    </svg>
+);
+
+
+export const SkillIcon1: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3l18 18" /><path d="M12 12l4 4" /><path d="M16 12l4-4" /><path d="M8 12l-4 4" />
+    </svg>
+);
+export const SkillIcon2: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
+    </svg>
+);
+export const SkillIcon3: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+);
+export const SkillIcon4: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v18" /><path d="M9 18l3 3 3-3" /><path d="M15 6l-3-3-3 3" />
+    </svg>
+);
+export const SkillIcon5: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4.5 12.5l-1 5.5c-0.1 0.4 0.3 0.8 0.7 0.7l5.5-1" />
+        <path d="M12.5 4.5l5.5-1c-0.4-0.1-0.8 0.3-0.7 0.7l-1 5.5" />
+        <path d="M4.5 19.5l1-5.5c0.1-0.4 -0.3-0.8 -0.7-0.7l-5.5 1" />
+        <path d="M19.5 4.5l-5.5 1c-0.4 0.1-0.8-0.3-0.7-0.7l1-5.5" />
+    </svg>
+);
+
+const itemIconMap: { [key: string]: React.FC<{ className?: string }> } = {
+  // Weapons
+  'w_com_01': RustySwordIcon,
+  'w_com_02': ShortbowIcon,
+  'w_com_03': GnarledStaffIcon,
+  'w_unc_01': SteelLongswordIcon,
+  'w_rar_01': ElvenBowIcon,
+  'w_epi_01': ArchmageStaffIcon,
+  'w_leg_01': FallenKingBladeIcon,
+  // Armor
+  'a_com_01': LeatherTunicIcon,
+  'a_unc_01': ChainmailVestIcon,
+  'a_rar_01': PlateArmorIcon,
+  'a_epi_01': MageRobesIcon,
+  'a_leg_01': DragonscaleHauberkIcon,
+  // Boots
+  'b_com_01': WornBootsIcon,
+  'b_unc_01': SturdyGreavesIcon,
+  'b_rar_01': SwiftnessBootsIcon,
+  'b_epi_01': PlatedSabatonsIcon,
+  'b_leg_01': WindwalkersIcon,
+  // Accessories
+  'x_rar_01': VitalityRingIcon,
+  'x_epi_01': PowerAmuletIcon,
+  'x_leg_01': AncientKingSealIcon,
+  // Materials
+  'mat_com': CommonScrapsIcon,
+  'mat_unc': UncommonMetalIcon,
+  'mat_rar': RareCrystalIcon,
+  'mat_epi': EpicOrbIcon,
+  'mat_leg': LegendaryCoreIcon,
+};
+
+export const ItemIcon: React.FC<{ item: Item; className?: string }> = ({ item, className }) => {
+    const SpecificIcon = itemIconMap[item.id];
+    if (SpecificIcon) {
+        return <SpecificIcon className={className} />;
+    }
+    // Fallback to generic icons
+    if (item.type === 'Material') {
+        return <MaterialIcon className={className} />;
+    }
     switch (item.slot) {
         case ItemSlot.Weapon: return <SwordIcon className={className} />;
         case ItemSlot.Armor: return <VestIcon className={className} />;
         case ItemSlot.Boots: return <BootsIcon className={className} />;
         case ItemSlot.Accessory: return <RingIcon className={className} />;
-        default:
-            return <div className={className}>?</div>;
+        default: return <div className={className}>?</div>;
     }
 };

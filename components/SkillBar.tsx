@@ -1,15 +1,15 @@
-
 import React, { useState, useEffect } from 'react';
 import { SkillState } from '../game/types';
 import { SkillIcon1, SkillIcon2, SkillIcon3, SkillIcon4, SkillIcon5 } from './icons';
 
 interface SkillBarProps {
   skills: SkillState[];
+  onUseSkill: (index: number) => void;
 }
 
 const skillIcons = [SkillIcon1, SkillIcon2, SkillIcon3, SkillIcon4, SkillIcon5];
 
-const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{ className?: string }> }> = ({ skill, keybind, Icon }) => {
+const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{ className?: string }>; onClick: () => void }> = ({ skill, keybind, Icon, onClick }) => {
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -28,15 +28,21 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
   }, [skill.lastUsed, skill.definition.cooldown]);
 
   const percentage = (cooldown / skill.definition.cooldown) * 100;
+  const isOnCooldown = cooldown > 0;
 
   return (
-    <div className="relative w-14 h-14 bg-gray-900 border-2 border-gray-600 rounded-md flex items-center justify-center group">
-      <Icon className="w-8 h-8 text-gray-400" />
+    <button
+      onClick={onClick}
+      disabled={isOnCooldown}
+      className="relative w-14 h-14 bg-gray-900 border-2 border-gray-600 rounded-md flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:cursor-not-allowed disabled:opacity-60"
+      aria-label={`Use skill: ${skill.definition.name} (Key ${keybind})`}
+    >
+      <Icon className={`w-8 h-8 ${isOnCooldown ? 'text-gray-500' : 'text-gray-400'}`} />
       <div className="absolute -top-2 -right-2 bg-gray-900 border border-gray-600 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold text-teal-400">
         {keybind}
       </div>
 
-      {cooldown > 0 && (
+      {isOnCooldown && (
         <>
           <div
             className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-black/60"
@@ -53,18 +59,24 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
         <p className="text-gray-300">{skill.definition.description}</p>
         <p className="text-gray-500">Cooldown: {skill.definition.cooldown / 1000}s</p>
       </div>
-    </div>
+    </button>
   );
 };
 
-const SkillBar: React.FC<SkillBarProps> = ({ skills }) => {
+const SkillBar: React.FC<SkillBarProps> = ({ skills, onUseSkill }) => {
   if (!skills) return null;
 
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
       <div className="flex space-x-3 bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-2xl border border-gray-700">
         {skills.map((skill, index) => (
-          <SkillSlot key={index} skill={skill} keybind={(index + 1).toString()} Icon={skillIcons[index]} />
+          <SkillSlot 
+            key={index} 
+            skill={skill} 
+            keybind={(index + 1).toString()} 
+            Icon={skillIcons[index]}
+            onClick={() => onUseSkill(index)} 
+          />
         ))}
       </div>
     </div>

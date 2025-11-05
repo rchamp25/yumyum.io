@@ -22,10 +22,18 @@ export enum CharacterClass {
   Archer,
 }
 
+export interface DeathEvent {
+    timestamp: number;
+    message: string;
+}
+
 export interface GameStats {
   level: number;
   kills: number;
   gold: number;
+  totalDamageTaken?: number;
+  killerName?: string | null;
+  deathLog?: DeathEvent[];
 }
 
 export interface CharacterStats {
@@ -44,6 +52,8 @@ export interface CharacterData extends GameStats {
   stats: CharacterStats;
   inventory: (Item | null)[];
   equipment: Record<ItemSlot, Item | null>;
+  skills?: SkillState[];
+  position?: Vector2D;
 }
 
 export enum ItemSlot {
@@ -73,6 +83,7 @@ export interface Item {
     stackable?: boolean;
     quantity?: number;
     levelReq?: number;
+    sellPrice?: number;
 }
 
 // FIX: Expanded StatusEffect to include buffs for more complex skills.
@@ -98,7 +109,6 @@ export interface GameContext {
     addVisualEffect: (effect: VisualEffect) => void;
     addGroundEffect: (effect: GroundEffect) => void;
     addDroppedItem: (item: Item, position: Vector2D) => void;
-    spawnEnemy: () => void;
     player: Player;
     enemies: Enemy[];
     projectiles: Projectile[];

@@ -12,16 +12,18 @@ export class GroundEffect {
     effect: Omit<StatusEffect, 'startTime'>;
     lastTickTime: number = 0;
     tickInterval: number = 500; // ms
+    ownerName: string;
     // FIX: Added 'whirlwind' to the list of allowed effect types.
     type: 'default' | 'rain_of_arrows' | 'whirlwind';
 
-    constructor(position: Vector2D, radius: number, duration: number, color: string, effect: Omit<StatusEffect, 'startTime'>, type: 'default' | 'rain_of_arrows' | 'whirlwind' = 'default') {
+    constructor(position: Vector2D, radius: number, duration: number, color: string, effect: Omit<StatusEffect, 'startTime'>, ownerName: string, type: 'default' | 'rain_of_arrows' | 'whirlwind' = 'default') {
         this.position = { ...position };
         this.radius = radius;
         this.duration = duration;
         this.startTime = Date.now();
         this.color = color;
         this.effect = effect;
+        this.ownerName = ownerName;
         this.type = type;
     }
 
@@ -34,7 +36,7 @@ export class GroundEffect {
                 if (getDistance(this.position, enemy.position) < this.radius + enemy.radius) {
                     if (this.effect.type === 'dot' && this.effect.damagePerTick) {
                         const tickDamage = this.effect.damagePerTick * (this.tickInterval / 1000);
-                        const ft = enemy.takeDamage(tickDamage);
+                        const ft = enemy.takeDamage(tickDamage, { name: this.ownerName });
                         // FIX: Used game context to add floating text.
                         if (ft) game.addFloatingText(ft);
                     } else {

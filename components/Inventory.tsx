@@ -48,12 +48,15 @@ const ItemSlotComponent: React.FC<{
         >
             {item ? (
                 <>
-                    {/* FIX: Use dynamic ItemIcon component instead of text placeholder */}
                     <ItemIcon item={item} className="w-10 h-10 text-gray-300" />
+                    {item.quantity && item.quantity > 1 && (
+                        <div className="absolute top-0 right-0 bg-gray-900/80 text-white text-xs font-bold px-1.5 py-0.5 rounded-bl-md rounded-tr-md">
+                            {item.quantity}
+                        </div>
+                    )}
                     {isHovered && <ItemTooltip item={item} />}
                 </>
             ) : (
-                 // FIX: Show placeholder icon for empty equipment slots
                  slotType && <EmptySlotIcon slot={slotType} />
             )}
         </div>
@@ -73,7 +76,6 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
                         <ItemSlotComponent 
                             key={slot}
                             item={characterData.equipment[slot]}
-                            // FIX: Changed from onRightClick to onClick for better UX
                             onClick={() => onItemUnequip(slot)}
                             slotType={slot}
                         />
