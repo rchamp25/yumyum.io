@@ -11,7 +11,7 @@ import { NPC, NPCType } from '../game/entities/NPC';
 import { DroppedItem } from '../game/entities/DroppedItem';
 import { GAME_CONFIG } from '../game/constants';
 import { getDistance, findNearestEnemy } from '../game/utils';
-import { getRandomItem, CRAFTING_RECIPES_DB } from '../game/items';
+import { getRandomItem, CRAFTING_RECIPES_DB, ITEMS_DB } from '../game/items';
 import useGameLoop from '../hooks/useGameLoop';
 import HUD from './HUD';
 import Inventory from './Inventory';
@@ -23,9 +23,10 @@ interface GameProps {
   characterData: CharacterData;
   onDeath: (stats: GameStats, finalCharacterData: CharacterData) => void;
   onReturnToSelect: (finalCharacterData: CharacterData) => void;
+  isDevMode: boolean;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect }) => {
+const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isDevMode }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [player, setPlayer] = useState<Player>(() => new Player(characterData));
     const [enemies, setEnemies] = useState<Enemy[]>([]);
@@ -373,6 +374,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect })
 
 
     const handleItemEquip = (inventoryIndex: number) => {
+        if (player.isInCombat) {
+            gameContext.addFloatingText(new FloatingText("Cannot change equipment in combat", player.position, '#f87171'));
+            return;
+        }
         const item = player.inventory[inventoryIndex];
         if (!item || item.type !== 'Equipment' || !item.slot) return;
         
@@ -385,6 +390,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect })
     };
 
     const handleItemUnequip = (itemSlot: ItemSlot) => {
+        if (player.isInCombat) {
+            gameContext.addFloatingText(new FloatingText("Cannot change equipment in combat", player.position, '#f87171'));
+            return;
+        }
         const item = player.equipment[itemSlot];
         if (!item) return;
 
@@ -458,6 +467,22 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect })
         setPlayer(newPlayer);
         gameContext.addFloatingText(new FloatingText(`+${totalValue} G`, {x: newPlayer.position.x, y: newPlayer.position.y + 20}, '#facc15'));
     };
+
+    const handleDevSpawnItem = (itemId: string) => {
+        if (!isDevMode) return;
+        const itemToSpawn = ITEMS_DB[itemId];
+        if (!itemToSpawn) return;
+
+        const newPlayer = new Player(player.toCharacterData());
+        const emptySlot = newPlayer.inventory.findIndex(slot => !slot);
+
+        if (emptySlot !== -1) {
+            newPlayer.inventory[emptySlot] = { ...itemToSpawn };
+            setPlayer(newPlayer);
+        } else {
+            gameContext.addFloatingText(new FloatingText("Inventory Full!", newPlayer.position, '#f87171'));
+        }
+    };
     
     // Using refs to pass latest state to event handlers without re-binding them
     const playerRef = useRef(player);
@@ -530,6 +555,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect })
                 toggleInventory={toggleInventory}
                 onReturnToSelect={handleReturnToSelect}
                 onUseSkill={useSkill}
+                isDevMode={isDevMode}
+                onDevSpawnItem={handleDevSpawnItem}
             />
             {isInventoryOpen && (
                 <Inventory 

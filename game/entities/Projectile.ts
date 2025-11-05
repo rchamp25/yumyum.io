@@ -79,6 +79,10 @@ export class Projectile {
   onHit(target: Character, game: GameContext) {
     if (this.hitIds.includes(target.id)) return;
 
+    if (this.ownerId === game.player.id) {
+        game.player.enterCombat();
+    }
+
     const ft = target.takeDamage(this.damage, { name: this.ownerName });
     if (ft) game.addFloatingText(ft);
     this.hitIds.push(target.id);

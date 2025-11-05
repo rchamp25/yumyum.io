@@ -24,6 +24,17 @@ export class Player extends Character {
     lastHitBy: { name: string } | null = null;
     deathLog: DeathEvent[] = [];
 
+    lastCombatTime: number = 0;
+    isInCombat: boolean = false;
+    lastRegenTime: number = 0;
+
+    private readonly COMBAT_TIMEOUT = 5000; // 5 seconds
+    private readonly REGEN_INTERVAL_OOC = 1000; // 1 second
+    private readonly REGEN_AMOUNT_OOC = 5;
+    private readonly REGEN_INTERVAL_COMBAT = 5000; // 5 seconds
+    private readonly REGEN_AMOUNT_COMBAT = 10;
+
+
     constructor(data: CharacterData) {
         super(data.position || { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.PLAYER_RADIUS, data.stats.maxHealth, '#4ade80', data.stats.damage);
         this.id = data.id;
@@ -55,9 +66,34 @@ export class Player extends Character {
         this.recalculateStats();
     }
 
+    enterCombat() {
+        this.isInCombat = true;
+        this.lastCombatTime = Date.now();
+    }
+
     update(pressedKeys: Set<string>, mousePosition: Vector2D, worldWidth: number, worldHeight: number) {
         this.processStatusEffects();
         if (this.isDead) return;
+
+        // Combat timeout check
+        if (this.isInCombat && Date.now() - this.lastCombatTime > this.COMBAT_TIMEOUT) {
+            this.isInCombat = false;
+        }
+
+        // HP Regeneration
+        if (this.health < this.maxHealth) {
+            const now = Date.now();
+            const interval = this.isInCombat ? this.REGEN_INTERVAL_COMBAT : this.REGEN_INTERVAL_OOC;
+            const amount = this.isInCombat ? this.REGEN_AMOUNT_COMBAT : this.REGEN_AMOUNT_OOC;
+
+            // Initialize lastRegenTime on first update if needed
+            if (this.lastRegenTime === 0) this.lastRegenTime = now;
+
+            if (now - this.lastRegenTime >= interval) {
+                this.health = Math.min(this.maxHealth, this.health + amount);
+                this.lastRegenTime = now;
+            }
+        }
 
         let moveX = 0;
         let moveY = 0;
@@ -88,6 +124,7 @@ export class Player extends Character {
     takeDamage(amount: number, source?: { name: string }): FloatingText | null {
         const result = super.takeDamage(amount, source);
         if (result && amount > 0) {
+            this.enterCombat();
             this.totalDamageTaken += amount;
             if (source) {
                 this.lastHitBy = source;
@@ -127,11 +164,23 @@ export class Player extends Character {
     }
 
     addXp(amount: number) {
+        if (this.level >= GAME_CONFIG.MAX_LEVEL) {
+            this.xp = 0;
+            return;
+        }
+
         this.xp += amount;
         let xpForNextLevel = GAME_CONFIG.BASE_XP_TO_NEXT_LEVEL * Math.pow(GAME_CONFIG.XP_PER_LEVEL_MULTIPLIER, this.level - 1);
-        while (this.xp >= xpForNextLevel) {
+        
+        while (this.xp >= xpForNextLevel && this.level < GAME_CONFIG.MAX_LEVEL) {
             this.levelUp(xpForNextLevel);
-            xpForNextLevel = GAME_CONFIG.BASE_XP_TO_NEXT_LEVEL * Math.pow(GAME_CONFIG.XP_PER_LEVEL_MULTIPLIER, this.level - 1);
+            if (this.level < GAME_CONFIG.MAX_LEVEL) {
+                xpForNextLevel = GAME_CONFIG.BASE_XP_TO_NEXT_LEVEL * Math.pow(GAME_CONFIG.XP_PER_LEVEL_MULTIPLIER, this.level - 1);
+            }
+        }
+
+        if (this.level >= GAME_CONFIG.MAX_LEVEL) {
+            this.xp = 0;
         }
     }
     
@@ -165,6 +214,7 @@ export class Player extends Character {
         this.deathLog = [];
         this.totalDamageTaken = 0;
         this.lastHitBy = null;
+        this.isInCombat = false;
     }
 
     toCharacterData(): CharacterData {

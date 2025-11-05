@@ -15,6 +15,7 @@ const stomp: SkillDefinition = {
     description: 'Smash the ground, damaging and slowing nearby enemies.',
     cooldown: 8000,
     effect: (caster, target, game) => {
+        caster.enterCombat();
         const radius = 150;
         game.addVisualEffect(new VisualEffect(caster.position, 'stomp_wave', 500, { radius, color: '#facc15' }));
         game.enemies.forEach(enemy => {
@@ -36,6 +37,7 @@ const charge: SkillDefinition = {
     range: 400,
     effect: (caster, target, game) => {
         if (target instanceof Character) {
+            caster.enterCombat();
             const direction = normalizeVector({ x: target.position.x - caster.position.x, y: target.position.y - caster.position.y });
             const distance = getDistance(caster.position, target.position) - target.radius;
             const chargePos = {
@@ -61,7 +63,7 @@ const whirlwind: SkillDefinition = {
     effect: (caster, target, game) => {
         const radius = 120;
         const duration = 3000;
-        game.addGroundEffect(new GroundEffect(caster.position, radius, duration, 'rgba(255, 255, 255, 0.8)', { type: 'dot', duration, damagePerTick: caster.getFinalStats().damage * 2 }, caster.name, 'whirlwind'));
+        game.addGroundEffect(new GroundEffect(caster.position, radius, duration, 'rgba(255, 255, 255, 0.8)', { type: 'dot', duration, damagePerTick: caster.getFinalStats().damage * 2 }, caster.id, caster.name, 'whirlwind'));
     }
 };
 
@@ -85,6 +87,7 @@ const execute: SkillDefinition = {
     range: 60,
     effect: (caster, target, game) => {
         if (target instanceof Character) {
+            caster.enterCombat();
             game.addVisualEffect(new VisualEffect(target.position, 'slash_arc', 300, { radius: 40, color: 'red' }));
             const ft = target.takeDamage(caster.getFinalStats().damage * 3, caster);
             if(ft) game.addFloatingText(ft);
@@ -120,6 +123,7 @@ const frostNova: SkillDefinition = {
     description: 'Release a wave of frost, damaging and slowing nearby enemies.',
     cooldown: 10000,
     effect: (caster, target, game) => {
+        caster.enterCombat();
         const radius = 200;
         game.addVisualEffect(new VisualEffect(caster.position, 'frost_nova', 600, { radius, color: '#60a5fa' }));
         game.enemies.forEach(enemy => {
@@ -281,7 +285,7 @@ const rainOfArrows: SkillDefinition = {
         const radius = 150;
         const duration = 5000;
         const targetPos = target as Vector2D;
-        game.addGroundEffect(new GroundEffect(targetPos, radius, duration, '#22c55e', { type: 'dot', duration, damagePerTick: caster.getFinalStats().damage * 3 }, caster.name, 'rain_of_arrows'));
+        game.addGroundEffect(new GroundEffect(targetPos, radius, duration, '#22c55e', { type: 'dot', duration, damagePerTick: caster.getFinalStats().damage * 3 }, caster.id, caster.name, 'rain_of_arrows'));
     }
 };
 

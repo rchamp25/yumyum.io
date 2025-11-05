@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Item, ItemSlot, CharacterData, ItemRarity } from '../game/types';
 import ItemTooltip from './ItemTooltip';
 import { ItemIcon, SwordIcon, VestIcon, BootsIcon, RingIcon } from './icons';
@@ -10,7 +11,7 @@ interface InventoryProps {
   toggleInventory: () => void;
 }
 
-const getRarityClasses = (rarity: ItemRarity) => {
+export const getRarityClasses = (rarity: ItemRarity) => {
     switch (rarity) {
         case ItemRarity.Uncommon: return { border: 'border-green-600', bg: 'bg-green-900/50', hoverBorder: 'hover:border-green-500', hoverBg: 'hover:bg-green-800/50', shadow: 'shadow-green-500/30' };
         case ItemRarity.Rare: return { border: 'border-blue-600', bg: 'bg-blue-900/50', hoverBorder: 'hover:border-blue-500', hoverBg: 'hover:bg-blue-800/50', shadow: 'shadow-blue-500/30' };
@@ -20,7 +21,7 @@ const getRarityClasses = (rarity: ItemRarity) => {
     }
 };
 
-const EmptySlotIcon: React.FC<{ slot: ItemSlot }> = ({ slot }) => {
+export const EmptySlotIcon: React.FC<{ slot: ItemSlot }> = ({ slot }) => {
     const className = "w-8 h-8 text-gray-700";
     switch (slot) {
         case ItemSlot.Weapon: return <SwordIcon className={className} />;
@@ -31,20 +32,39 @@ const EmptySlotIcon: React.FC<{ slot: ItemSlot }> = ({ slot }) => {
     }
 };
 
-const ItemSlotComponent: React.FC<{ 
+export const ItemSlotComponent: React.FC<{ 
     item: Item | null; 
-    onClick: () => void;
+    onClick?: () => void;
+    onContextMenu?: (e: React.MouseEvent) => void;
     slotType?: ItemSlot;
-}> = ({ item, onClick, slotType }) => {
+    footer?: React.ReactNode;
+}> = ({ item, onClick, onContextMenu, slotType, footer }) => {
     const [isHovered, setHovered] = useState(false);
+    const slotRef = useRef<HTMLDivElement>(null);
+    const [parentRect, setParentRect] = useState<DOMRect | null>(null);
     const rarityClasses = item ? getRarityClasses(item.rarity) : getRarityClasses(ItemRarity.Common);
+    const tooltipContainer = document.getElementById('tooltip-root');
+
+    const handleMouseEnter = () => {
+        if (slotRef.current) {
+            setParentRect(slotRef.current.getBoundingClientRect());
+            setHovered(true);
+        }
+    };
+
+    const handleMouseLeave = () => {
+        setHovered(false);
+        setParentRect(null);
+    };
     
     return (
         <div 
-            className={`w-16 h-16 border-2 rounded-md relative group flex items-center justify-center cursor-pointer transition-all duration-200 ${rarityClasses.bg} ${rarityClasses.border} ${rarityClasses.hoverBorder} ${rarityClasses.hoverBg} ${item ? `shadow-lg ${rarityClasses.shadow}` : ''}`}
+            ref={slotRef}
+            className={`w-16 h-16 border-2 rounded-md relative flex items-center justify-center transition-all duration-200 ${rarityClasses.bg} ${rarityClasses.border} ${onClick ? `cursor-pointer ${rarityClasses.hoverBorder} ${rarityClasses.hoverBg}`: ''} ${item ? `shadow-lg ${rarityClasses.shadow}` : ''}`}
             onClick={onClick}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
+            onContextMenu={onContextMenu}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
         >
             {item ? (
                 <>
@@ -54,11 +74,17 @@ const ItemSlotComponent: React.FC<{
                             {item.quantity}
                         </div>
                     )}
-                    {isHovered && <ItemTooltip item={item} />}
                 </>
             ) : (
                  slotType && <EmptySlotIcon slot={slotType} />
             )}
+            {isHovered && footer}
+            {isHovered && item && parentRect && tooltipContainer && 
+                createPortal(
+                    <ItemTooltip item={item} parentRect={parentRect} />,
+                    tooltipContainer
+                )
+            }
         </div>
     );
 };

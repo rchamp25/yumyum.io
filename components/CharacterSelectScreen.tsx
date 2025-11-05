@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { CharacterData, CharacterClass } from '../game/types';
 import { WarriorIcon, MageIcon, ArcherIcon } from './icons';
 import { GoogleUser } from '../services/auth';
@@ -11,6 +11,8 @@ interface CharacterSelectScreenProps {
   onCreateNew: () => void;
   onDeleteCharacter: (characterId: string) => void;
   onLogout: () => void;
+  isDevMode: boolean;
+  onSetDevMode: (isDev: boolean) => void;
 }
 
 const ClassIcon: React.FC<{ charClass: CharacterClass, className?: string }> = ({ charClass, className }) => {
@@ -42,7 +44,7 @@ const CharacterCard: React.FC<{ character: CharacterData, onSelect: () => void, 
                 </div>
                 <div className="text-left text-sm text-gray-400 space-y-1">
                     <p>Kills: <span className="font-semibold text-white">{character.kills}</span></p>
-                    <p>Gold: <span className="font-semibold text-yellow-400">{character.gold}</span></p>
+                    <p>Gold: <span className="font-semibold text-yellow-400">{character.gold.toLocaleString()}</span></p>
                 </div>
             </div>
             <div className="mt-4 flex space-x-2">
@@ -60,7 +62,41 @@ const EmptySlotCard: React.FC<{ onCreate: () => void }> = ({ onCreate }) => (
     </button>
 );
 
-const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, characters, onSelectCharacter, onCreateNew, onDeleteCharacter, onLogout }) => {
+const DevModeToggle: React.FC<{ isDevMode: boolean, onSetDevMode: (isDev: boolean) => void }> = ({ isDevMode, onSetDevMode }) => {
+    const [code, setCode] = useState('');
+
+    const handleActivate = () => {
+        if (code === 'gabs') {
+            onSetDevMode(true);
+        } else {
+            alert('Incorrect dev code.');
+        }
+    };
+
+    return (
+        <div className={`p-2 rounded-lg border transition-colors ${isDevMode ? 'bg-green-900/50 border-green-500' : 'bg-gray-800/50 border-gray-600'}`}>
+            <h4 className="text-xs font-bold text-gray-400 mb-1">Dev Tools</h4>
+            {isDevMode ? (
+                <p className="text-sm font-bold text-green-400">Dev Mode Active</p>
+            ) : (
+                <div className="flex items-center space-x-2">
+                    <input 
+                        type="text"
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        placeholder="Dev Code"
+                        className="bg-gray-900 text-white text-sm rounded border border-gray-500 px-2 py-1 w-24"
+                    />
+                    <button onClick={handleActivate} className="bg-gray-600 text-white text-sm font-semibold py-1 px-2 rounded hover:bg-gray-500 transition-colors">
+                        Activate
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, characters, onSelectCharacter, onCreateNew, onDeleteCharacter, onLogout, isDevMode, onSetDevMode }) => {
   const slots = Array(3).fill(null);
   characters.forEach((char, index) => {
     if(index < 3) slots[index] = char;
@@ -73,7 +109,10 @@ const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, cha
             <h1 className="text-4xl font-bold text-white text-left">Your Heroes</h1>
             <p className="text-gray-400 text-left">Welcome, {user.displayName}!</p>
         </div>
-        <button onClick={onLogout} className="bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition-colors">Sign Out</button>
+        <div className="flex items-start space-x-4">
+          <DevModeToggle isDevMode={isDevMode} onSetDevMode={onSetDevMode} />
+          <button onClick={onLogout} className="bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition-colors">Sign Out</button>
+        </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {slots.map((char, index) =>

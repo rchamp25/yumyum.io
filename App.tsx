@@ -8,6 +8,8 @@ import { authService, GoogleUser } from './services/auth';
 import { storageService } from './services/storage';
 import { CharacterData, CharacterClass, GameStats } from './game/types';
 import { Player } from './game/entities/Player';
+import { MATERIALS_DB } from './game/items';
+import { GAME_CONFIG } from './game/constants';
 
 type GameState = 'login' | 'char_select' | 'char_create' | 'in_game' | 'dead';
 
@@ -18,6 +20,7 @@ const App: React.FC = () => {
     const [currentCharacter, setCurrentCharacter] = useState<CharacterData | null>(null);
     const [deathStats, setDeathStats] = useState<GameStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isDevMode, setDevMode] = useState(false);
 
     useEffect(() => {
         const unsubscribe = authService.onAuthStateChanged(authUser => {
@@ -52,7 +55,24 @@ const App: React.FC = () => {
     };
     
     const handleSelectCharacter = (character: CharacterData) => {
-        setCurrentCharacter(character);
+        let finalCharacterData = character;
+        if (isDevMode) {
+            // Create a deep copy to avoid mutating the original character state
+            const devCharacter = JSON.parse(JSON.stringify(character)) as CharacterData;
+            
+            devCharacter.level = GAME_CONFIG.MAX_LEVEL;
+            devCharacter.gold = 100000;
+            devCharacter.xp = 0;
+
+            const materials = Object.values(MATERIALS_DB);
+            for (let i = 0; i < materials.length; i++) {
+                if (i < devCharacter.inventory.length) {
+                    devCharacter.inventory[i] = { ...materials[i], quantity: 999 };
+                }
+            }
+            finalCharacterData = devCharacter;
+        }
+        setCurrentCharacter(finalCharacterData);
         setGameState('in_game');
     };
 
@@ -132,6 +152,8 @@ const App: React.FC = () => {
                                     onCreateNew={handleCreateNew}
                                     onDeleteCharacter={handleDeleteCharacter}
                                     onLogout={handleLogout}
+                                    isDevMode={isDevMode}
+                                    onSetDevMode={setDevMode}
                                 />;
             case 'char_create':
                 return <CharacterCreationScreen 
@@ -143,6 +165,7 @@ const App: React.FC = () => {
                                                 characterData={currentCharacter} 
                                                 onDeath={handleDeath}
                                                 onReturnToSelect={handleReturnToSelect}
+                                                isDevMode={isDevMode}
                                             />;
             case 'dead':
                 return <DeathScreen 
