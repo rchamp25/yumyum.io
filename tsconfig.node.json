@@ -1,10 +1,15 @@
 {
   "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
+    "target": "ES2022",
+    "lib": ["ESNext"],
     "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist-server"
   },
-  "include": ["vite.config.ts", "server.ts"]
+  "include": ["server.ts", "game/**/*.ts"],
+  "exclude": ["node_modules"]
 }

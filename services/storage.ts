@@ -50,14 +50,18 @@ class StorageService {
         health: GAME_CONFIG.PLAYER_HEALTH,
         damage: GAME_CONFIG.PLAYER_DAMAGE,
         speed: GAME_CONFIG.PLAYER_SPEED,
+        healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
+        itemFind: GAME_CONFIG.PLAYER_ITEM_FIND,
       },
-      inventory: Array(20).fill(null),
+      inventory: Array(GAME_CONFIG.DEFAULT_INVENTORY_SIZE).fill(null),
       equipment: {
           [ItemSlot.Weapon]: null,
           [ItemSlot.Armor]: null,
           [ItemSlot.Boots]: null,
           [ItemSlot.Accessory]: null,
+          [ItemSlot.Bag]: null,
       },
+      discoveredWaypoints: ['wp_spawn'],
     };
 
     characters.push(newCharacter);

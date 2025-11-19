@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { CharacterData, CharacterClass } from '../game/types';
 import { WarriorIcon, MageIcon, ArcherIcon } from './icons';
@@ -13,6 +12,8 @@ interface CharacterSelectScreenProps {
   onLogout: () => void;
   isDevMode: boolean;
   onSetDevMode: (isDev: boolean) => void;
+  isOnlineMode: boolean;
+  onSetOnlineMode: (isOnline: boolean) => void;
 }
 
 const ClassIcon: React.FC<{ charClass: CharacterClass, className?: string }> = ({ charClass, className }) => {
@@ -96,20 +97,45 @@ const DevModeToggle: React.FC<{ isDevMode: boolean, onSetDevMode: (isDev: boolea
     );
 };
 
-const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, characters, onSelectCharacter, onCreateNew, onDeleteCharacter, onLogout, isDevMode, onSetDevMode }) => {
+const ModeToggle: React.FC<{ isOnline: boolean, onToggle: (isOnline: boolean) => void }> = ({ isOnline, onToggle }) => {
+    return (
+        <div className="p-2 rounded-lg bg-gray-800/50 border-gray-600 border">
+            <h4 className="text-xs font-bold text-gray-400 mb-2">World Type</h4>
+            <div className="w-48 h-8 flex items-center bg-gray-900 rounded-full p-1">
+                <button
+                    onClick={() => onToggle(false)}
+                    className={`w-1/2 h-full rounded-full flex items-center justify-center font-bold text-sm transition-colors duration-300
+                    ${!isOnline ? 'bg-teal-500 text-white' : 'text-gray-400'}`}
+                >
+                    Private
+                </button>
+                <button
+                    onClick={() => onToggle(true)}
+                    className={`w-1/2 h-full rounded-full flex items-center justify-center font-bold text-sm transition-colors duration-300
+                    ${isOnline ? 'bg-red-600 text-white' : 'text-gray-400'}`}
+                >
+                    Online
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, characters, onSelectCharacter, onCreateNew, onDeleteCharacter, onLogout, isDevMode, onSetDevMode, isOnlineMode, onSetOnlineMode }) => {
   const slots = Array(3).fill(null);
   characters.forEach((char, index) => {
     if(index < 3) slots[index] = char;
   });
 
   return (
-    <div className="bg-gray-900/50 backdrop-blur-md p-8 rounded-xl shadow-lg border border-gray-700 text-center max-w-4xl w-full">
+    <div className="bg-gray-900/50 backdrop-blur-md p-8 rounded-xl shadow-lg border border-gray-700 text-center max-w-5xl w-full">
       <div className="flex justify-between items-start mb-6">
         <div>
             <h1 className="text-4xl font-bold text-white text-left">Your Heroes</h1>
             <p className="text-gray-400 text-left">Welcome, {user.displayName}!</p>
         </div>
         <div className="flex items-start space-x-4">
+          <ModeToggle isOnline={isOnlineMode} onToggle={onSetOnlineMode} />
           <DevModeToggle isDevMode={isDevMode} onSetDevMode={onSetDevMode} />
           <button onClick={onLogout} className="bg-gray-700 text-white font-bold py-2 px-4 rounded hover:bg-gray-600 transition-colors">Sign Out</button>
         </div>

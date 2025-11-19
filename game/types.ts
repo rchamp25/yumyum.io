@@ -1,15 +1,10 @@
-// Forward-declare entity classes for GameContext
-// FIX: Added import for Character to resolve type error in SkillDefinition.
-import { Character } from './entities/Character';
-import { Player } from './entities/Player';
-import { Enemy } from './entities/Enemy';
-import { Projectile } from './entities/Projectile';
-import { FloatingText } from './entities/FloatingText';
-import { VisualEffect } from './entities/VisualEffect';
-import { GroundEffect } from './entities/GroundEffect';
-// FIX: Removed circular dependency import of Item.
-// import { Item } from './items';
 
+import type { Player } from './entities/Player';
+import type { Enemy } from './entities/Enemy';
+import type { Projectile } from './entities/Projectile';
+import type { FloatingText } from './entities/FloatingText';
+import type { VisualEffect } from './entities/VisualEffect';
+import type { GroundEffect } from './entities/GroundEffect';
 
 export interface Vector2D {
   x: number;
@@ -22,106 +17,97 @@ export enum CharacterClass {
   Archer,
 }
 
-export interface DeathEvent {
-    timestamp: number;
+export enum ItemSlot {
+  Weapon = 'Weapon',
+  Armor = 'Armor',
+  Boots = 'Boots',
+  Accessory = 'Accessory',
+  Bag = 'Bag',
+}
+
+export enum ItemRarity {
+  Common,
+  Uncommon,
+  Rare,
+  Epic,
+  Legendary,
+}
+
+export interface ItemStats {
+  damage?: number;
+  maxHealth?: number;
+  speed?: number;
+  healthRegen?: number;
+  maxInventorySlots?: number;
+  itemFind?: number; // Percentage as decimal (0.5 = 50%)
+}
+
+export interface Item {
+  id: string;
+  name: string;
+  type: 'Equipment' | 'Material';
+  slot?: ItemSlot;
+  rarity: ItemRarity;
+  stats?: ItemStats;
+  description?: string;
+  sellPrice: number;
+  quantity?: number;
+}
+
+export interface CharacterData {
+  id: string;
+  name: string;
+  characterClass: CharacterClass;
+  level: number;
+  xp: number;
+  gold: number;
+  kills: number;
+  stats: {
+    maxHealth: number;
+    health: number;
+    damage: number;
+    speed: number;
+    healthRegen: number;
+    itemFind: number;
+  };
+  inventory: (Item | null)[];
+  equipment: Record<ItemSlot, Item | null>;
+  position?: Vector2D; // For online mode
+  discoveredWaypoints?: string[];
+}
+
+export interface DeathLogEvent {
     message: string;
 }
 
 export interface GameStats {
+  killerName: string;
   level: number;
   kills: number;
   gold: number;
-  totalDamageTaken?: number;
-  killerName?: string | null;
-  deathLog?: DeathEvent[];
+  totalDamageTaken: number;
+  deathLog: DeathLogEvent[];
 }
 
-export interface CharacterStats {
-    // FIX: Added health to correctly store current health when saving character data.
-    health?: number;
-    maxHealth: number;
-    damage: number;
-    speed: number;
-}
-
-export interface CharacterData extends GameStats {
-  id: string;
-  name: string;
-  characterClass: CharacterClass;
-  xp: number;
-  stats: CharacterStats;
-  inventory: (Item | null)[];
-  equipment: Record<ItemSlot, Item | null>;
-  skills?: SkillState[];
-  position?: Vector2D;
-}
-
-export enum ItemSlot {
-    Weapon = 'Weapon',
-    Armor = 'Armor',
-    Boots = 'Boots',
-    Accessory = 'Accessory',
-}
-
-export enum ItemRarity {
-    Common,
-    Uncommon,
-    Rare,
-    Epic,
-    Legendary,
-}
-
-export interface Item {
-    id: string;
-    name: string;
-    type: 'Equipment' | 'Material';
-    slot?: ItemSlot;
-    rarity: ItemRarity;
-    stats?: Partial<CharacterStats>;
-    description?: string;
-    icon: string;
-    stackable?: boolean;
-    quantity?: number;
-    levelReq?: number;
-    sellPrice?: number;
-}
-
-// FIX: Expanded StatusEffect to include buffs for more complex skills.
 export interface StatusEffect {
-  type: 'stun' | 'slow' | 'dot' | 'shield' | 'damage_buff' | 'attack_speed_buff';
-  duration: number;
-  startTime: number;
-  damagePerTick?: number;
-  shieldHealth?: number;
-  multiplier?: number; // For buffs
-}
-
-export enum EnemyType {
-  Grunt,
-  Scout,
-  Ranger,
-  Tank,
-}
-
-export interface GameContext {
-    addProjectile: (projectile: Projectile) => void;
-    addFloatingText: (text: FloatingText) => void;
-    addVisualEffect: (effect: VisualEffect) => void;
-    addGroundEffect: (effect: GroundEffect) => void;
-    addDroppedItem: (item: Item, position: Vector2D) => void;
-    player: Player;
-    enemies: Enemy[];
-    projectiles: Projectile[];
+    type: 'slow' | 'stun' | 'dot' | 'shield' | 'whirlwind_active' | 'haste' | 'empowered';
+    duration: number;
+    startTime: number;
+    lastTick?: number;
+    // Optional properties for specific effects
+    slowFactor?: number;
+    damagePerTick?: number;
+    shieldHealth?: number;
+    speedMultiplier?: number;
+    damageMultiplier?: number;
 }
 
 export interface SkillDefinition {
-    id: string;
     name: string;
     description: string;
-    cooldown: number;
-    requiresTarget?: boolean;
-    range?: number;
-    effect: (caster: Player, target: Vector2D | Character, game: GameContext) => void;
+    cooldown: number; // in ms
+    unlockLevel: number;
+    use: (player: Player, game: GameContext) => void;
 }
 
 export interface SkillState {
@@ -129,14 +115,29 @@ export interface SkillState {
     lastUsed: number;
 }
 
+export interface GameContext {
+    player: Player;
+    enemies: Enemy[];
+    addProjectile: (projectile: Projectile) => void;
+    addFloatingText: (text: FloatingText) => void;
+    addVisualEffect: (effect: VisualEffect) => void;
+    addGroundEffect: (effect: GroundEffect) => void;
+}
+
 export interface Recipe {
     id: string;
     result: Item;
-    ingredients: { materialId: string, quantity: number }[];
+    ingredients: { materialId: string; quantity: number }[];
 }
 
 export enum NPCType {
     QuestGiver,
     Vendor,
     Crafter,
+}
+
+export interface WaypointData {
+    id: string;
+    name: string;
+    position: Vector2D;
 }

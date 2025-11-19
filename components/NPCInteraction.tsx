@@ -10,7 +10,7 @@ interface NPCInteractionProps {
     recipes: Recipe[];
     onClose: () => void;
     onCraft: (recipe: Recipe) => void;
-    onSell: (item: Item, inventoryIndex: number) => void;
+    onSell: (item: Item, inventoryIndex: number, sellFullStack: boolean) => void;
 }
 
 const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, characterData, recipes, onClose, onCraft, onSell }) => {

@@ -1,113 +1,102 @@
-import { Item, ItemSlot, ItemRarity, Recipe, EnemyType } from './types';
 
-export const ITEMS_DB: { [id: string]: Item } = {
-  // --- WEAPONS ---
-  'w_com_01': { id: 'w_com_01', name: 'Rusty Sword', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Common, stats: { damage: 2 }, description: 'A bit tetanus-y.', icon: 'sword', levelReq: 1, sellPrice: 5 },
-  'w_com_02': { id: 'w_com_02', name: 'Shortbow', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Common, stats: { damage: 2 }, description: 'Good for practice.', icon: 'sword', levelReq: 1, sellPrice: 5 },
-  'w_com_03': { id: 'w_com_03', name: 'Gnarled Staff', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Common, stats: { damage: 2 }, description: 'Smells of moss.', icon: 'sword', levelReq: 1, sellPrice: 5 },
-  'w_unc_01': { id: 'w_unc_01', name: 'Steel Longsword', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Uncommon, stats: { damage: 5, maxHealth: 10 }, description: 'A reliable blade.', icon: 'sword', levelReq: 5, sellPrice: 15 },
-  'w_rar_01': { id: 'w_rar_01', name: 'Elven Bow', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Rare, stats: { damage: 10, speed: 0.2 }, description: 'Whispers of the forest cling to it.', icon: 'sword', levelReq: 10, sellPrice: 40 },
-  'w_epi_01': { id: 'w_epi_01', name: 'Archmage Staff', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Epic, stats: { damage: 20, maxHealth: 25 }, description: 'Crackles with raw power.', icon: 'sword', levelReq: 20, sellPrice: 100 },
-  'w_leg_01': { id: 'w_leg_01', name: 'Blade of the Fallen King', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Legendary, stats: { damage: 40, maxHealth: 100, speed: 0.3 }, description: 'A hero\'s final legacy.', icon: 'sword', levelReq: 30, sellPrice: 250 },
-  
-  // --- ARMOR ---
-  'a_com_01': { id: 'a_com_01', name: 'Leather Tunic', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Common, stats: { maxHealth: 10 }, description: 'Better than nothing.', icon: 'vest', levelReq: 1, sellPrice: 5 },
-  'a_unc_01': { id: 'a_unc_01', name: 'Chainmail Vest', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Uncommon, stats: { maxHealth: 25 }, description: 'Stops a stray arrow or two.', icon: 'vest', levelReq: 5, sellPrice: 15 },
-  'a_rar_01': { id: 'a_rar_01', name: 'Plate Armor', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Rare, stats: { maxHealth: 60 }, description: 'Heavy, but effective.', icon: 'vest', levelReq: 12, sellPrice: 40 },
-  'a_epi_01': { id: 'a_epi_01', name: 'Mage Robes of the Guardian', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Epic, stats: { maxHealth: 75, damage: 5 }, description: 'Woven with protective wards.', icon: 'vest', levelReq: 22, sellPrice: 100 },
-  'a_leg_01': { id: 'a_leg_01', name: 'Dragonscale Hauberk', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Legendary, stats: { maxHealth: 150, damage: 10 }, description: 'Almost indestructible.', icon: 'vest', levelReq: 32, sellPrice: 250 },
-  
-  // --- BOOTS ---
-  'b_com_01': { id: 'b_com_01', name: 'Worn Boots', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Common, stats: { speed: 0.2 }, description: 'Soles are a bit thin.', icon: 'boots', levelReq: 1, sellPrice: 5 },
-  'b_unc_01': { id: 'b_unc_01', name: 'Sturdy Greaves', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Uncommon, stats: { speed: 0.3, maxHealth: 5 }, description: 'Good for stomping.', icon: 'boots', levelReq: 6, sellPrice: 15 },
-  'b_rar_01': { id: 'b_rar_01', name: 'Boots of Swiftness', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Rare, stats: { speed: 0.5 }, description: 'Feel light on your feet.', icon: 'boots', levelReq: 14, sellPrice: 40 },
-  'b_epi_01': { id: 'b_epi_01', name: 'Plated Sabatons', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Epic, stats: { speed: 0.4, maxHealth: 40 }, description: 'Anchor yourself in battle.', icon: 'boots', levelReq: 24, sellPrice: 100 },
-  'b_leg_01': { id: 'b_leg_01', name: 'Windwalkers', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Legendary, stats: { speed: 0.8, maxHealth: 20 }, description: 'Move like the wind.', icon: 'boots', levelReq: 34, sellPrice: 250 },
-  
-  // --- ACCESSORIES ---
-  'x_rar_01': { id: 'x_rar_01', name: 'Ring of Vitality', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Rare, stats: { maxHealth: 40 }, description: 'Pulses with a faint warmth.', icon: 'ring', levelReq: 8, sellPrice: 60 },
-  'x_epi_01': { id: 'x_epi_01', name: 'Amulet of Power', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Epic, stats: { damage: 15, maxHealth: 25 }, description: 'A gem that hums with energy.', icon: 'ring', levelReq: 18, sellPrice: 150 },
-  'x_leg_01': { id: 'x_leg_01', name: 'Seal of the Ancient King', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Legendary, stats: { damage: 20, maxHealth: 50, speed: 0.1 }, description: 'A symbol of forgotten royalty.', icon: 'ring', levelReq: 28, sellPrice: 350 },
+import { Item, ItemRarity, ItemSlot, Recipe } from './types';
+import { LOOT_CONFIG } from './constants';
+
+// --- MATERIALS ---
+export const MATERIALS_DB: { [key: string]: Item } = {
+    'mat_com': { id: 'mat_com', name: 'Common Scraps', type: 'Material', rarity: ItemRarity.Common, sellPrice: 1 },
+    'mat_unc': { id: 'mat_unc', name: 'Uncommon Metal', type: 'Material', rarity: ItemRarity.Uncommon, sellPrice: 5 },
+    'mat_rar': { id: 'mat_rar', name: 'Rare Crystal', type: 'Material', rarity: ItemRarity.Rare, sellPrice: 20 },
+    'mat_epi': { id: 'mat_epi', name: 'Epic Orb', type: 'Material', rarity: ItemRarity.Epic, sellPrice: 100 },
+    'mat_leg': { id: 'mat_leg', name: 'Legendary Core', type: 'Material', rarity: ItemRarity.Legendary, sellPrice: 500 },
 };
 
-export const MATERIALS_DB: { [id: string]: Item } = {
-    'mat_com': { id: 'mat_com', name: 'Common Scraps', type: 'Material', rarity: ItemRarity.Common, description: 'Bits and pieces from common foes.', icon: '', stackable: true, quantity: 1, sellPrice: 1 },
-    'mat_unc': { id: 'mat_unc', name: 'Uncommon Metal', type: 'Material', rarity: ItemRarity.Uncommon, description: 'A sturdy, but unremarkable metal.', icon: '', stackable: true, quantity: 1, sellPrice: 3 },
-    'mat_rar': { id: 'mat_rar', name: 'Rare Crystal', type: 'Material', rarity: ItemRarity.Rare, description: 'Glows with a faint inner light.', icon: '', stackable: true, quantity: 1, sellPrice: 10 },
-    'mat_epi': { id: 'mat_epi', name: 'Epic Orb', type: 'Material', rarity: ItemRarity.Epic, description: 'Swirls with captured magic.', icon: '', stackable: true, quantity: 1, sellPrice: 25 },
-    'mat_leg': { id: 'mat_leg', name: 'Legendary Core', type: 'Material', rarity: ItemRarity.Legendary, description: 'The heart of a powerful entity.', icon: '', stackable: true, quantity: 1, sellPrice: 75 },
+// --- WEAPONS ---
+export const WEAPONS_DB: { [key: string]: Item } = {
+    'w_com_01': { id: 'w_com_01', name: 'Rusty Sword', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Common, stats: { damage: 3 }, sellPrice: 5 },
+    'w_com_02': { id: 'w_com_02', name: 'Shortbow', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Common, stats: { damage: 3 }, sellPrice: 5 },
+    'w_com_03': { id: 'w_com_03', name: 'Gnarled Staff', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Common, stats: { damage: 3 }, sellPrice: 5 },
+    'w_unc_01': { id: 'w_unc_01', name: 'Steel Longsword', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Uncommon, stats: { damage: 8 }, sellPrice: 25 },
+    'w_rar_01': { id: 'w_rar_01', name: 'Elven Bow', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Rare, stats: { damage: 15 }, sellPrice: 100 },
+    'w_epi_01': { id: 'w_epi_01', name: 'Archmage Staff', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Epic, stats: { damage: 25 }, sellPrice: 500 },
+    'w_leg_01': { id: 'w_leg_01', name: 'Fallen King Blade', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Legendary, stats: { damage: 45, maxHealth: 50 }, description: "It thirsts for vengeance.", sellPrice: 2000 },
 };
 
-export const CRAFTING_RECIPES_DB: Recipe[] = Object.values(ITEMS_DB).map(item => {
-    const ingredients: {materialId: string, quantity: number}[] = [];
-    switch (item.rarity) {
-        case ItemRarity.Common: 
-            ingredients.push({ materialId: 'mat_com', quantity: 3 });
-            break;
-        case ItemRarity.Uncommon: 
-            ingredients.push({ materialId: 'mat_com', quantity: 5 });
-            ingredients.push({ materialId: 'mat_unc', quantity: 2 });
-            break;
-        case ItemRarity.Rare: 
-            ingredients.push({ materialId: 'mat_unc', quantity: 8 });
-            ingredients.push({ materialId: 'mat_rar', quantity: 3 });
-            break;
-        case ItemRarity.Epic:
-            ingredients.push({ materialId: 'mat_rar', quantity: 10 });
-            ingredients.push({ materialId: 'mat_epi', quantity: 4 });
-            break;
-        case ItemRarity.Legendary:
-            ingredients.push({ materialId: 'mat_epi', quantity: 12 });
-            ingredients.push({ materialId: 'mat_leg', quantity: 5 });
-            break;
-    }
-    return { id: `craft_${item.id}`, result: item, ingredients };
-});
-
-const getRarityFromRoll = (roll: number): ItemRarity => {
-    if (roll > 0.98) return ItemRarity.Legendary; // 2%
-    if (roll > 0.90) return ItemRarity.Epic;      // 8%
-    if (roll > 0.70) return ItemRarity.Rare;      // 20%
-    if (roll > 0.40) return ItemRarity.Uncommon;  // 30%
-    return ItemRarity.Common;                     // 40%
+// --- ARMOR ---
+export const ARMOR_DB: { [key: string]: Item } = {
+    'a_com_01': { id: 'a_com_01', name: 'Leather Tunic', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Common, stats: { maxHealth: 10 }, sellPrice: 5 },
+    'a_unc_01': { id: 'a_unc_01', name: 'Chainmail Vest', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Uncommon, stats: { maxHealth: 25, healthRegen: 0.5 }, sellPrice: 25 },
+    'a_rar_01': { id: 'a_rar_01', name: 'Plate Armor', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Rare, stats: { maxHealth: 50, healthRegen: 1 }, sellPrice: 100 },
+    'a_epi_01': { id: 'a_epi_01', name: 'Mage Robes', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Epic, stats: { maxHealth: 80, damage: 5, healthRegen: 1.5 }, sellPrice: 500 },
+    'a_leg_01': { id: 'a_leg_01', name: 'Dragonscale Hauberk', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Legendary, stats: { maxHealth: 150, damage: 10, healthRegen: 3 }, description: "Crafted from the scales of an ancient wyrm.", sellPrice: 2000 },
 };
 
-const getLootBonus = (level: number, enemyType: EnemyType) => {
-    let bonus = level / 200; // up to +15% at level 30
-    if (enemyType === EnemyType.Tank || enemyType === EnemyType.Ranger) bonus += 0.05; // 5% bonus for elites
-    return bonus;
+// --- BOOTS ---
+export const BOOTS_DB: { [key: string]: Item } = {
+    'b_com_01': { id: 'b_com_01', name: 'Worn Boots', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Common, stats: { speed: 0.1 }, sellPrice: 5 },
+    'b_unc_01': { id: 'b_unc_01', name: 'Sturdy Greaves', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Uncommon, stats: { speed: 0.2, maxHealth: 10 }, sellPrice: 25 },
+    'b_rar_01': { id: 'b_rar_01', name: 'Swiftness Boots', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Rare, stats: { speed: 0.4 }, sellPrice: 100 },
+    'b_epi_01': { id: 'b_epi_01', name: 'Plated Sabatons', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Epic, stats: { speed: 0.3, maxHealth: 40, healthRegen: 1 }, sellPrice: 500 },
+    'b_leg_01': { id: 'b_leg_01', name: 'Windwalkers', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Legendary, stats: { speed: 0.6 }, description: "Walk on air itself.", sellPrice: 2000 },
 };
 
-// FIX: Restored getRandomItem to support more complex loot drops based on level and enemy type.
-export function getRandomItem(level: number, enemyType: EnemyType): Item | null {
-    const dropTypeRoll = Math.random();
+// --- ACCESSORIES ---
+export const ACCESSORIES_DB: { [key: string]: Item } = {
+    'x_rar_01': { id: 'x_rar_01', name: 'Vitality Ring', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Rare, stats: { maxHealth: 30, healthRegen: 2, itemFind: 0.2 }, sellPrice: 150 },
+    'x_epi_01': { id: 'x_epi_01', name: 'Power Amulet', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Epic, stats: { damage: 8, healthRegen: 1, itemFind: 0.35 }, sellPrice: 600 },
+    'x_leg_01': { id: 'x_leg_01', name: 'Ancient King Seal', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Legendary, stats: { maxHealth: 75, damage: 15, healthRegen: 5, itemFind: 0.5 }, description: "The symbol of a forgotten dynasty.", sellPrice: 2500 },
+};
 
-    if (dropTypeRoll < 0.6) { // 60% chance for equipment
-        const possibleItems = Object.values(ITEMS_DB).filter(i => (i.levelReq || 1) <= level);
-        if (possibleItems.length === 0) return null;
+// --- BAGS ---
+export const BAGS_DB: { [key: string]: Item } = {
+    'bag_com': { id: 'bag_com', name: 'Leather Pouch', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Common, stats: { maxInventorySlots: 2, maxHealth: 5, itemFind: 0.05 }, sellPrice: 15 },
+    'bag_unc': { id: 'bag_unc', name: 'Canvas Sack', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Uncommon, stats: { maxInventorySlots: 4, maxHealth: 10, speed: 0.1, itemFind: 0.1 }, sellPrice: 40 },
+    'bag_rar': { id: 'bag_rar', name: 'Adventurer\'s Backpack', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Rare, stats: { maxInventorySlots: 6, maxHealth: 20, speed: 0.3, itemFind: 0.2 }, sellPrice: 150 },
+    'bag_epi': { id: 'bag_epi', name: 'Void Satchel', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Epic, stats: { maxInventorySlots: 8, maxHealth: 35, speed: 0.6, itemFind: 0.35 }, sellPrice: 600 },
+    'bag_leg': { id: 'bag_leg', name: 'Dimensional Bag', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Legendary, stats: { maxInventorySlots: 10, maxHealth: 50, speed: 2.0, itemFind: 0.5 }, description: "It's bigger on the inside.", sellPrice: 2500 },
+};
 
-        const rarityRoll = Math.random() + getLootBonus(level, enemyType);
-        const targetRarity = getRarityFromRoll(rarityRoll);
+export const ITEMS_DB: { [key: string]: Item } = { ...WEAPONS_DB, ...ARMOR_DB, ...BOOTS_DB, ...ACCESSORIES_DB, ...BAGS_DB };
+export const ALL_EQUIPMENT = Object.values(ITEMS_DB);
 
-        let filteredItems = possibleItems.filter(i => i.rarity === targetRarity);
-        // Fallback to find a lower rarity item if no items of the target rarity are available
-        let currentRarity = targetRarity;
-        while(filteredItems.length === 0 && currentRarity >= 0) {
-            currentRarity--;
-            filteredItems = possibleItems.filter(i => i.rarity === currentRarity);
-        }
-
-        if (filteredItems.length > 0) {
-            return { ...filteredItems[Math.floor(Math.random() * filteredItems.length)] };
-        }
-    } else if (dropTypeRoll < 0.95) { // 35% chance for materials
-        const possibleMaterials = Object.values(MATERIALS_DB);
-        const rarityRoll = Math.random() + getLootBonus(level, enemyType) / 2; // Materials are slightly more common
-        const targetRarity = getRarityFromRoll(rarityRoll);
-        
-        const material = possibleMaterials.find(m => m.rarity === targetRarity);
-        return material ? { ...material, quantity: 1 } : { ...MATERIALS_DB['mat_com'], quantity: 1 };
-    }
+export const CRAFTING_RECIPES: Recipe[] = [
+    { id: 'craft_w_unc_01', result: WEAPONS_DB['w_unc_01'], ingredients: [{ materialId: 'mat_com', quantity: 10 }, { materialId: 'mat_unc', quantity: 2 }] },
+    { id: 'craft_a_unc_01', result: ARMOR_DB['a_unc_01'], ingredients: [{ materialId: 'mat_com', quantity: 12 }, { materialId: 'mat_unc', quantity: 3 }] },
+    { id: 'craft_b_unc_01', result: BOOTS_DB['b_unc_01'], ingredients: [{ materialId: 'mat_com', quantity: 8 }, { materialId: 'mat_unc', quantity: 1 }] },
+    { id: 'craft_bag_unc', result: BAGS_DB['bag_unc'], ingredients: [{ materialId: 'mat_com', quantity: 15 }, { materialId: 'mat_unc', quantity: 2 }] },
     
-    return null; // 5% chance for no drop
+    { id: 'craft_w_rar_01', result: WEAPONS_DB['w_rar_01'], ingredients: [{ materialId: 'mat_unc', quantity: 15 }, { materialId: 'mat_rar', quantity: 4 }] },
+    { id: 'craft_a_rar_01', result: ARMOR_DB['a_rar_01'], ingredients: [{ materialId: 'mat_unc', quantity: 18 }, { materialId: 'mat_rar', quantity: 5 }] },
+    { id: 'craft_bag_rar', result: BAGS_DB['bag_rar'], ingredients: [{ materialId: 'mat_unc', quantity: 20 }, { materialId: 'mat_rar', quantity: 5 }] },
+    
+    { id: 'craft_w_epi_01', result: WEAPONS_DB['w_epi_01'], ingredients: [{ materialId: 'mat_rar', quantity: 12 }, { materialId: 'mat_epi', quantity: 3 }] },
+    { id: 'craft_bag_epi', result: BAGS_DB['bag_epi'], ingredients: [{ materialId: 'mat_rar', quantity: 15 }, { materialId: 'mat_epi', quantity: 5 }] },
+    
+    { id: 'craft_w_leg_01', result: WEAPONS_DB['w_leg_01'], ingredients: [{ materialId: 'mat_epi', quantity: 10 }, { materialId: 'mat_leg', quantity: 2 }] },
+    { id: 'craft_bag_leg', result: BAGS_DB['bag_leg'], ingredients: [{ materialId: 'mat_epi', quantity: 20 }, { materialId: 'mat_leg', quantity: 5 }] },
+];
+
+export function getRandomItem(level: number, rarityModifier: number = 1): Item | null {
+    const roll = Math.random();
+    let chosenRarity: ItemRarity = ItemRarity.Common;
+    const levelBonus = level * LOOT_CONFIG.LEVEL_RARITY_BONUS;
+
+    if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Legendary] + levelBonus) * rarityModifier) {
+        chosenRarity = ItemRarity.Legendary;
+    } else if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Epic] + levelBonus) * rarityModifier) {
+        chosenRarity = ItemRarity.Epic;
+    } else if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Rare] + levelBonus) * rarityModifier) {
+        chosenRarity = ItemRarity.Rare;
+    } else if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Uncommon] + levelBonus) * rarityModifier) {
+        chosenRarity = ItemRarity.Uncommon;
+    }
+    // Fallback to Common
+
+    const possibleItems = ALL_EQUIPMENT.filter(item => item.rarity === chosenRarity);
+    if (possibleItems.length > 0) {
+        const item = possibleItems[Math.floor(Math.random() * possibleItems.length)];
+        return { ...item }; // Return a copy
+    }
+
+    return null;
 }

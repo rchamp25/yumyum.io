@@ -1,8 +1,9 @@
+
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Item, ItemSlot, CharacterData, ItemRarity } from '../game/types';
 import ItemTooltip from './ItemTooltip';
-import { ItemIcon, SwordIcon, VestIcon, BootsIcon, RingIcon } from './icons';
+import { ItemIcon, SwordIcon, VestIcon, BootsIcon, RingIcon, BagIcon } from './icons';
 
 interface InventoryProps {
   characterData: CharacterData;
@@ -28,6 +29,7 @@ export const EmptySlotIcon: React.FC<{ slot: ItemSlot }> = ({ slot }) => {
         case ItemSlot.Armor: return <VestIcon className={className} />;
         case ItemSlot.Boots: return <BootsIcon className={className} />;
         case ItemSlot.Accessory: return <RingIcon className={className} />;
+        case ItemSlot.Bag: return <BagIcon className={className} />;
         default: return null;
     }
 };
@@ -37,13 +39,14 @@ export const ItemSlotComponent: React.FC<{
     onClick?: () => void;
     onContextMenu?: (e: React.MouseEvent) => void;
     slotType?: ItemSlot;
-    footer?: React.ReactNode;
-}> = ({ item, onClick, onContextMenu, slotType, footer }) => {
+    hoverContent?: React.ReactNode;
+}> = ({ item, onClick, onContextMenu, slotType, hoverContent }) => {
     const [isHovered, setHovered] = useState(false);
     const slotRef = useRef<HTMLDivElement>(null);
     const [parentRect, setParentRect] = useState<DOMRect | null>(null);
     const rarityClasses = item ? getRarityClasses(item.rarity) : getRarityClasses(ItemRarity.Common);
-    const tooltipContainer = document.getElementById('tooltip-root');
+    
+    const tooltipContainer = typeof document !== 'undefined' ? document.getElementById('tooltip-root') : null;
 
     const handleMouseEnter = () => {
         if (slotRef.current) {
@@ -70,7 +73,7 @@ export const ItemSlotComponent: React.FC<{
                 <>
                     <ItemIcon item={item} className="w-10 h-10 text-gray-300" />
                     {item.quantity && item.quantity > 1 && (
-                        <div className="absolute top-0 right-0 bg-gray-900/80 text-white text-xs font-bold px-1.5 py-0.5 rounded-bl-md rounded-tr-md">
+                        <div className="absolute top-0 right-0 bg-gray-900/80 text-white text-xs font-bold px-1.5 py-0.5 rounded-bl-md rounded-tr-md pointer-events-none">
                             {item.quantity}
                         </div>
                     )}
@@ -78,7 +81,9 @@ export const ItemSlotComponent: React.FC<{
             ) : (
                  slotType && <EmptySlotIcon slot={slotType} />
             )}
-            {isHovered && footer}
+            
+            {isHovered && hoverContent}
+            
             {isHovered && item && parentRect && tooltipContainer && 
                 createPortal(
                     <ItemTooltip item={item} parentRect={parentRect} />,
@@ -111,8 +116,8 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
 
             {/* Inventory */}
             <div className="flex-grow">
-                <h2 className="text-2xl font-bold text-white mb-4">Inventory ({characterData.inventory.filter(i => i).length}/20)</h2>
-                <div className="grid grid-cols-5 gap-3">
+                <h2 className="text-2xl font-bold text-white mb-4">Inventory ({characterData.inventory.filter(i => i).length}/{characterData.inventory.length})</h2>
+                <div className="grid grid-cols-5 gap-3 max-h-[60vh] overflow-y-auto pr-2">
                     {characterData.inventory.map((item, index) => (
                         <ItemSlotComponent 
                             key={index}

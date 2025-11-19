@@ -1,9 +1,15 @@
-import express from 'express';
+
+import express, { Request, Response } from 'express';
 import http from 'http';
 import { Server, Socket } from 'socket.io';
 import path from 'path';
-import { Vector2D, CharacterData } from './game/types';
-import { GAME_CONFIG } from './game/constants';
+import { fileURLToPath } from 'url';
+// FIX: Added .js extension to satisfy Node ES module resolver
+import { Vector2D, CharacterData } from './game/types.js';
+import { GAME_CONFIG } from './game/constants.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 interface ServerPlayer {
     id: string; // Corresponds to socket.id
@@ -18,20 +24,21 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow all origins for simplicity in dev
+        origin: "*",
+        methods: ["GET", "POST"]
     }
 });
 
 const players = new Map<string, ServerPlayer>();
 
 // Serve static files from the root directory
-// FIX: Replaced `process.cwd()` with `__dirname` to resolve a TypeScript type error.
-app.use(express.static(__dirname));
+// FIX: Cast express.static return value to 'any' to bypass faulty type checking.
+app.use('/', express.static(__dirname) as any);
 
 // Serve index.html for any other request
-app.get('*', (req, res) => {
-    // FIX: Replaced `process.cwd()` with `__dirname` to resolve a TypeScript type error.
-    res.sendFile(path.resolve(__dirname, 'index.html'));
+// FIX: Cast res to 'any' to access the sendFile method, working around broken type definitions.
+app.get('*', (req: Request, res: Response) => {
+    (res as any).sendFile(path.resolve(__dirname, 'index.html'));
 });
 
 io.on('connection', (socket: Socket) => {

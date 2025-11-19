@@ -4,11 +4,23 @@ import { ItemSlotComponent } from './Inventory';
 
 interface VendorUIProps {
     characterData: CharacterData;
-    onSell: (item: Item, inventoryIndex: number) => void;
+    onSell: (item: Item, inventoryIndex: number, sellFullStack: boolean) => void;
     onClose: () => void;
 }
 
 const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onClose }) => {
+    
+    const handleSell = (item: Item, index: number) => {
+        onSell(item, index, false);
+    };
+
+    const handleRightClick = (e: React.MouseEvent, item: Item, index: number) => {
+        if (item && e.shiftKey) {
+            e.preventDefault();
+            onSell(item, index, true);
+        }
+    };
+
     return (
         <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto" onClick={onClose}>
             <div className="bg-gray-800/90 backdrop-blur-md p-6 rounded-xl shadow-2xl border border-gray-700 text-center max-w-2xl w-full" onClick={e => e.stopPropagation()}>
@@ -21,31 +33,29 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onClose }) =
                     <h3 className="text-xl font-semibold text-white mb-3">Your Inventory</h3>
                     <div className="grid grid-cols-5 gap-3">
                         {characterData.inventory.map((item, index) => {
-                           const handleRightClick = (e: React.MouseEvent) => {
-                                if (e.shiftKey && item) {
-                                    e.preventDefault();
-                                    onSell(item, index);
-                                }
-                            };
-
                            return (
                                <ItemSlotComponent 
                                     key={index}
                                     item={item} 
-                                    onClick={item ? () => onSell(item, index) : undefined}
-                                    onContextMenu={handleRightClick}
-                                    footer={
-                                        item ?
-                                        <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-yellow-500 text-black font-bold text-xs py-1 px-2 rounded-md whitespace-nowrap">
-                                            Sell for {item.sellPrice || 0} G
-                                        </div>
-                                        : null
+                                    onClick={item ? () => handleSell(item, index) : undefined}
+                                    onContextMenu={item ? (e) => handleRightClick(e, item, index) : undefined}
+                                    hoverContent={
+                                        item ? (
+                                            <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-center pointer-events-none rounded-md">
+                                                <p className="text-yellow-400 font-bold text-xs leading-tight">
+                                                    Click to Sell
+                                                </p>
+                                                <p className="text-yellow-400 font-bold text-sm leading-tight">
+                                                    {(item.sellPrice || 0) * (item.quantity || 1)} G
+                                                </p>
+                                            </div>
+                                        ) : null
                                     }
                                 />
                            )
                         })}
                     </div>
-                    <p className="text-gray-500 text-sm mt-4">Hint: Click to sell. Hold [Shift] and right-click to sell items quickly.</p>
+                    <p className="text-gray-500 text-sm mt-4">Hint: Click to sell one. Hold [Shift] and right-click to sell a stack.</p>
                 </div>
             </div>
         </div>

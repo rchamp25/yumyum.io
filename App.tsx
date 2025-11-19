@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import LoginScreen from './components/LoginScreen';
 import CharacterSelectScreen from './components/CharacterSelectScreen';
@@ -8,8 +9,8 @@ import { authService, GoogleUser } from './services/auth';
 import { storageService } from './services/storage';
 import { CharacterData, CharacterClass, GameStats } from './game/types';
 import { Player } from './game/entities/Player';
-import { MATERIALS_DB } from './game/items';
-import { GAME_CONFIG } from './game/constants';
+import { MATERIALS_DB, ALL_EQUIPMENT } from './game/items';
+import { GAME_CONFIG, WAYPOINTS } from './game/constants';
 
 type GameState = 'login' | 'char_select' | 'char_create' | 'in_game' | 'dead';
 
@@ -21,6 +22,7 @@ const App: React.FC = () => {
     const [deathStats, setDeathStats] = useState<GameStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [isDevMode, setDevMode] = useState(false);
+    const [isOnlineMode, setOnlineMode] = useState(false); // New state for world type
 
     useEffect(() => {
         const unsubscribe = authService.onAuthStateChanged(authUser => {
@@ -55,21 +57,38 @@ const App: React.FC = () => {
     };
     
     const handleSelectCharacter = (character: CharacterData) => {
+        if (isOnlineMode) {
+            alert("Error: Online servers are currently unavailable.");
+            return;
+        }
+
         let finalCharacterData = character;
         if (isDevMode) {
             // Create a deep copy to avoid mutating the original character state
             const devCharacter = JSON.parse(JSON.stringify(character)) as CharacterData;
             
             devCharacter.level = GAME_CONFIG.MAX_LEVEL;
-            devCharacter.gold = 100000;
+            devCharacter.gold = 1000000;
             devCharacter.xp = 0;
 
-            const materials = Object.values(MATERIALS_DB);
-            for (let i = 0; i < materials.length; i++) {
-                if (i < devCharacter.inventory.length) {
-                    devCharacter.inventory[i] = { ...materials[i], quantity: 999 };
+            // Unlock all Waypoints
+            devCharacter.discoveredWaypoints = WAYPOINTS.map(wp => wp.id);
+
+            // Spawn All Items
+            const allItems = [...Object.values(MATERIALS_DB), ...ALL_EQUIPMENT];
+            // Expand inventory to fit everything + some buffer
+            const inventorySize = Math.max(20, allItems.length + 5);
+            devCharacter.inventory = Array(inventorySize).fill(null);
+
+            for (let i = 0; i < allItems.length; i++) {
+                const item = allItems[i];
+                if (item.type === 'Material') {
+                    devCharacter.inventory[i] = { ...item, quantity: 999 };
+                } else {
+                    devCharacter.inventory[i] = { ...item };
                 }
             }
+
             finalCharacterData = devCharacter;
         }
         setCurrentCharacter(finalCharacterData);
@@ -154,6 +173,8 @@ const App: React.FC = () => {
                                     onLogout={handleLogout}
                                     isDevMode={isDevMode}
                                     onSetDevMode={setDevMode}
+                                    isOnlineMode={isOnlineMode}
+                                    onSetOnlineMode={setOnlineMode}
                                 />;
             case 'char_create':
                 return <CharacterCreationScreen 
@@ -166,6 +187,7 @@ const App: React.FC = () => {
                                                 onDeath={handleDeath}
                                                 onReturnToSelect={handleReturnToSelect}
                                                 isDevMode={isDevMode}
+                                                isOnlineMode={isOnlineMode}
                                             />;
             case 'dead':
                 return <DeathScreen 
@@ -181,7 +203,6 @@ const App: React.FC = () => {
     return (
         <div className="w-screen h-screen bg-gray-900 text-white flex items-center justify-center font-sans overflow-hidden">
             <div className="absolute inset-0 bg-[url('/background.png')] bg-cover bg-center opacity-20"></div>
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-gray-900"></div>
             
             {renderContent()}
         </div>

@@ -1,3 +1,4 @@
+
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Item, ItemRarity } from '../game/types';
 
@@ -14,6 +15,22 @@ const rarityColors = {
   [ItemRarity.Legendary]: 'text-orange-400',
 };
 
+const formatStatName = (key: string) => {
+    if (key === 'maxInventorySlots') return 'Extra Slots';
+    if (key === 'itemFind') return 'Item Find';
+    // Insert space before capital letters
+    const withSpaces = key.replace(/([A-Z])/g, ' $1').trim();
+    // Capitalize first letter
+    return withSpaces.charAt(0).toUpperCase() + withSpaces.slice(1);
+};
+
+const formatStatValue = (key: string, value: number) => {
+    if (key === 'itemFind') {
+        return `+${Math.round(value * 100)}%`;
+    }
+    return `+${value}`;
+}
+
 const ItemTooltip: React.FC<ItemTooltipProps> = ({ item, parentRect }) => {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<React.CSSProperties>({
@@ -21,7 +38,7 @@ const ItemTooltip: React.FC<ItemTooltipProps> = ({ item, parentRect }) => {
     opacity: 0,
     pointerEvents: 'none',
     zIndex: 9999,
-    transition: 'opacity 0.1s ease-in-out',
+    transition: 'opacity 0.15s ease-in-out',
   });
 
   useLayoutEffect(() => {
@@ -29,15 +46,16 @@ const ItemTooltip: React.FC<ItemTooltipProps> = ({ item, parentRect }) => {
       const tooltipRect = tooltipRef.current.getBoundingClientRect();
       const margin = 10;
 
+      // Default: Position above the item, centered horizontally
       let top = parentRect.top - tooltipRect.height - margin;
       let left = parentRect.left + parentRect.width / 2 - tooltipRect.width / 2;
 
-      // Adjust if offscreen top
+      // If too close to top edge, flip to bottom
       if (top < margin) {
         top = parentRect.bottom + margin;
       }
       
-      // Adjust if offscreen left/right
+      // Clamp horizontal position
       if (left < margin) {
         left = margin;
       } else if (left + tooltipRect.width > window.innerWidth - margin) {
@@ -55,34 +73,53 @@ const ItemTooltip: React.FC<ItemTooltipProps> = ({ item, parentRect }) => {
 
 
   return (
-    <div ref={tooltipRef} style={style} className="w-64 bg-gray-900 border border-gray-700 text-white text-sm rounded-lg p-3 text-left shadow-2xl">
-      <p className={`font-bold text-lg ${rarityColors[item.rarity]}`}>{item.name}</p>
-      <p className="text-gray-500 capitalize mb-2">
-        {ItemRarity[item.rarity]} {item.type === 'Material' ? 'Material' : item.slot}
-        {item.quantity && item.quantity > 1 && ` (x${item.quantity})`}
-      </p>
-      
-      <div className="border-t border-gray-700 my-2"></div>
-
-      <div className="space-y-1 text-green-400">
-        {item.stats && Object.entries(item.stats).map(([stat, value]) => (
-          <p key={stat}>
-            +{value} {stat.replace(/([A-Z])/g, ' $1').trim()}
+    <div 
+        ref={tooltipRef} 
+        style={style} 
+        className="min-w-[200px] max-w-[280px] bg-gray-900/95 border border-gray-600 text-white text-sm rounded-lg p-3 text-left shadow-2xl backdrop-blur-sm z-[9999]"
+    >
+      {/* Header */}
+      <div className="mb-2">
+          <p className={`font-bold text-base ${rarityColors[item.rarity]}`}>{item.name}</p>
+          <p className="text-gray-400 text-xs capitalize">
+            {ItemRarity[item.rarity]} {item.type === 'Material' ? 'Material' : item.slot}
+            {item.quantity && item.quantity > 1 && ` (Stack: ${item.quantity})`}
           </p>
+      </div>
+      
+      <div className="h-px bg-gray-700 my-2"></div>
+
+      {/* Stats */}
+      <div className="space-y-1">
+        {item.stats && Object.entries(item.stats).map(([stat, value]) => (
+          value !== undefined && value !== 0 && (
+            <div key={stat} className="flex justify-between items-center text-green-400 text-xs font-semibold">
+                <span>{formatStatName(stat)}</span>
+                <span>{formatStatValue(stat, value)}</span>
+            </div>
+          )
         ))}
+        {(!item.stats || Object.keys(item.stats).length === 0) && item.type !== 'Material' && (
+            <p className="text-gray-500 text-xs italic">No Stats</p>
+        )}
       </div>
 
+      {/* Description */}
       {item.description && (
         <>
-            <div className="border-t border-gray-700 my-2"></div>
-            <p className="text-gray-400 italic">"{item.description}"</p>
+            <div className="h-px bg-gray-700 my-2"></div>
+            <p className="text-gray-400 italic text-xs leading-relaxed">"{item.description}"</p>
         </>
       )}
 
+      {/* Sell Price */}
       {item.sellPrice && (
         <>
-          <div className="border-t border-gray-700 my-2"></div>
-          <p className="text-yellow-400">Sell Price: {item.sellPrice * (item.quantity || 1)} G</p>
+          <div className="h-px bg-gray-700 my-2"></div>
+          <div className="flex justify-between text-xs">
+             <span className="text-gray-400">Value:</span>
+             <span className="text-yellow-400 font-bold">{item.sellPrice * (item.quantity || 1)} G</span>
+          </div>
         </>
       )}
     </div>

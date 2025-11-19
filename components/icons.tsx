@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Item, ItemSlot } from '../game/types';
 
@@ -49,6 +50,14 @@ export const RingIcon: React.FC<{ className?: string }> = ({ className }) => (
         <circle cx="12" cy="12" r="4" />
     </svg>
 );
+export const BagIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+        <path d="M3 6h18" />
+        <path d="M16 10a4 4 0 01-8 0" />
+    </svg>
+);
+
 const MaterialIcon: React.FC<{ className?: string }> = ({ className }) => (
      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2l-5.5 9h11z" />
@@ -126,7 +135,7 @@ const WornBootsIcon: React.FC<{ className?: string }> = ({ className }) => (
 );
 const SturdyGreavesIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6" /><path d="M18 12V7a2 2 0 00-2-2h- электрика-4a2 2 0 00-2 2v5" /><path d="M6 12V7a2 2 0 012-2h4a2 2 0 012 2v5" /><path d="M12 12h-0.01" />
+        <path d="M20 12v6a2 2 0 01-2 2H6a2 2 0 01-2-2v-6" /><path d="M18 12V7a2 2 0 00-2-2h-4a2 2 0 00-2 2v5" /><path d="M6 12V7a2 2 0 012-2h4a2 2 0 012 2v5" /><path d="M12 12h-0.01" />
     </svg>
 );
 const SwiftnessBootsIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -251,6 +260,12 @@ const itemIconMap: { [key: string]: React.FC<{ className?: string }> } = {
   'x_rar_01': VitalityRingIcon,
   'x_epi_01': PowerAmuletIcon,
   'x_leg_01': AncientKingSealIcon,
+  // Bags
+  'bag_com': BagIcon,
+  'bag_unc': BagIcon,
+  'bag_rar': BagIcon,
+  'bag_epi': BagIcon,
+  'bag_leg': BagIcon,
   // Materials
   'mat_com': CommonScrapsIcon,
   'mat_unc': UncommonMetalIcon,
@@ -273,6 +288,7 @@ export const ItemIcon: React.FC<{ item: Item; className?: string }> = ({ item, c
         case ItemSlot.Armor: return <VestIcon className={className} />;
         case ItemSlot.Boots: return <BootsIcon className={className} />;
         case ItemSlot.Accessory: return <RingIcon className={className} />;
+        case ItemSlot.Bag: return <BagIcon className={className} />;
         default: return <div className={className}>?</div>;
     }
 };
