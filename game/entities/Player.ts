@@ -2,7 +2,7 @@
 import { Character } from './Character';
 import { CharacterData, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity } from '../types';
 import { normalizeVector, getDistance } from '../math';
-import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, BOSS_ZONES, BOSS_CONFIG } from '../constants';
+import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS } from '../constants';
 import { SKILLS_DB } from '../skills';
 import { FloatingText } from './FloatingText';
 import { calculateFinalStats } from '../stats';
@@ -438,9 +438,6 @@ export class Player extends Character {
     }
 
     toCharacterData(): CharacterData {
-        // Re-run final calc just to be safe, but we really want to export BASE stats
-        const finalStats = calculateFinalStats(this.baseStats, this.equipment, this.position);
-        
         // We export THIS.BASESTATS. This is critical.
         // The server or game reload will re-apply equipment bonuses.
         // We do NOT export 'finalStats' into the 'stats' field, or we get double-stats bug.

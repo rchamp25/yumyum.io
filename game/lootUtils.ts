@@ -1,6 +1,6 @@
 
 import { Item, ItemRarity, Vector2D } from './types';
-import { LOOT_CONFIG, BOSS_CONFIG, BOSS_TYPES, ENEMY_TYPES } from './constants';
+import { LOOT_CONFIG, BOSS_CONFIG } from './constants';
 import { ALL_EQUIPMENT, ALL_MYTHICS, MATERIALS_DB } from './items';
 
 export interface LootResult {
@@ -10,7 +10,7 @@ export interface LootResult {
 
 export function generateLoot(
     enemyLevel: number, 
-    enemyPosition: Vector2D, 
+    _enemyPosition: Vector2D, 
     isBoss: boolean, 
     playerItemFind: number
 ): Item[] {
