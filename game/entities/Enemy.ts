@@ -370,7 +370,8 @@ export class Enemy extends Character {
                 y: player.position.y - this.position.y
             });
             // Bosses should always be able to hit players with ranged attacks
-            game.addProjectile(new Projectile(this.position, direction, this.damage, 6, this.id, this.name, this.level, '#a1a1aa'));
+            // Pass isHostile = true
+            game.addProjectile(new Projectile(this.position, direction, this.damage, 6, this.id, this.name, this.level, '#a1a1aa', 1, true));
         }
     }
 

@@ -29,6 +29,10 @@ export const socketService = {
       callback(socket.id || '');
     });
   },
+  
+  get id() {
+      return socket?.id;
+  },
 
   joinGame(characterData: CharacterData) {
     if (socket) {

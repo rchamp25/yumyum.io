@@ -61,7 +61,9 @@ io.on('connection', (socket: Socket) => {
     socket.on('player_input', (inputKeys: string[]) => {
         const player = players.get(socket.id);
         if (player) {
-            player.input = new Set(inputKeys);
+            // Ensure inputKeys is an array before creating Set
+            const keys = Array.isArray(inputKeys) ? inputKeys : [];
+            player.input = new Set(keys);
         }
     });
 

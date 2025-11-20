@@ -47,12 +47,14 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const [npcs, setNpcs] = useState<NPC[]>([]);
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [camera, setCamera] = useState({ x: 0, y: 0 });
+  const [otherPlayers, setOtherPlayers] = useState<any[]>([]);
   
   const [isInventoryOpen, setInventoryOpen] = useState(false);
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
   const [interactingWaypoint, setInteractingWaypoint] = useState<Waypoint | null>(null);
 
   const pressedKeys = useKeyboardInput();
+  const playerIdRef = useRef<string>('');
 
   const addProjectile = useCallback((p: Projectile) => setProjectiles(prev => [...prev, p]), []);
   const addFloatingText = useCallback((ft: FloatingText) => setFloatingTexts(prev => [...prev, ft]), []);
@@ -221,9 +223,20 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
     // Socket Connection for Online Mode
     if (isOnlineMode) {
-        socketService.connect(() => {
-            console.log("Connected to game server!");
+        socketService.connect((id) => {
+            playerIdRef.current = id;
+            console.log("Connected to game server!", id);
             socketService.joinGame(characterData);
+        });
+
+        socketService.onGameState((gameState) => {
+            const others: any[] = [];
+            Object.entries(gameState).forEach(([id, data]) => {
+                if (id !== playerIdRef.current) {
+                    others.push(data);
+                }
+            });
+            setOtherPlayers(others);
         });
     }
 
@@ -309,6 +322,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     return () => {
         if (isOnlineMode) {
             socketService.disconnect();
+            socketService.offGameState();
         }
     };
 
@@ -320,6 +334,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     bossSpawnTimerRef.current++;
 
     if (!player || player.isDead) return;
+
+    if (isOnlineMode) {
+        socketService.sendInput(Array.from(pressedKeys));
+    }
 
     // Update player safe zone status
     const playerDistFromCenter = getDistance(player.position, {x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2});
@@ -458,7 +476,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     
     // Collisions
     projectiles.forEach(p => {
-        if (p.ownerId === player.id) {
+        if (p.ownerId === player.id || !p.isHostile) { // Friendly fire or own projectile
+             // PvE: Players projectiles only hit Enemies.
+             // Friendly projectiles pass through other players (handled by not checking them).
             for (const enemy of updatedEnemies) {
                 if (enemy.isDead) continue;
                 if (getDistance(p.position, enemy.position) < p.radius + enemy.radius) {
@@ -466,7 +486,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                     if (!p.piercing && p.bounces <= 0) p.expire();
                 }
             }
-        } else {
+        } else if (p.isHostile) {
+             // Hostile (Enemy) projectiles hit Player.
              if (getDistance(p.position, player.position) < p.radius + player.radius) {
                  p.onHit(player, gameContext);
                  if (!p.piercing) p.expire();
@@ -541,7 +562,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }));
     }
 
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints, camera, playSound]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints, camera, playSound, isOnlineMode]);
 
   useGameLoop(gameLoop);
 
@@ -640,6 +661,46 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     enemies.forEach(e => {
         if(isVisible(e.position, e.radius)) e.draw(ctx);
     });
+
+    // Draw Other Players
+    otherPlayers.forEach(op => {
+        // Simple rendering for remote players
+        if (!isVisible(op.position, GAME_CONFIG.PLAYER_RADIUS)) return;
+        
+        ctx.save();
+        ctx.translate(op.position.x, op.position.y);
+        
+        // Shadow
+        ctx.beginPath();
+        ctx.ellipse(0, GAME_CONFIG.PLAYER_RADIUS, GAME_CONFIG.PLAYER_RADIUS, GAME_CONFIG.PLAYER_RADIUS / 2, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fill();
+
+        // Body
+        ctx.beginPath();
+        ctx.arc(0, 0, GAME_CONFIG.PLAYER_RADIUS, 0, Math.PI * 2);
+        // Determine color based on class
+        const colors = ['#ef4444', '#3b82f6', '#22c55e']; // Warrior, Mage, Archer
+        ctx.fillStyle = colors[op.characterData.characterClass] || '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Name
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.fillText(op.characterData.name, 0, GAME_CONFIG.PLAYER_RADIUS + 22);
+        
+        // Level
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText(`Lv. ${op.characterData.level}`, 0, -GAME_CONFIG.PLAYER_RADIUS - 8);
+
+        ctx.restore();
+    });
     
     player.draw(ctx);
     
@@ -656,7 +717,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     });
 
     ctx.restore();
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers]);
 
   const toggleInventory = useCallback(() => {
     if (interactingNPC || interactingWaypoint) return;

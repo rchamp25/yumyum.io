@@ -29,6 +29,7 @@ export class Projectile {
   range: number = 1000;
   distanceTraveled: number = 0;
   bossDamageMultiplier: number;
+  isHostile: boolean;
 
 
   constructor(
@@ -40,7 +41,8 @@ export class Projectile {
     ownerName: string,
     ownerLevel: number,
     color: string = 'white',
-    bossDamageMultiplier: number = 1
+    bossDamageMultiplier: number = 1,
+    isHostile: boolean = false
   ) {
     this.id = nextId++;
     this.position = { ...startPosition };
@@ -56,6 +58,7 @@ export class Projectile {
     this.ownerLevel = ownerLevel;
     this.color = color;
     this.bossDamageMultiplier = bossDamageMultiplier;
+    this.isHostile = isHostile;
   }
 
   update() {
