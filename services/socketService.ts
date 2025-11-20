@@ -1,3 +1,4 @@
+
 import { io, Socket } from "socket.io-client";
 import { CharacterData } from "../game/types";
 
@@ -19,10 +20,8 @@ export const socketService = {
       return;
     }
     
-    // In a development environment, the server might be on a different port.
-    // In a production environment, it would connect to the same host.
-    // FIX: Replaced Vite-specific `import.meta.env.DEV` with a runtime check to resolve a type error.
-    const serverUrl = window.location.hostname === 'localhost' ? 'http://localhost:3000' : '';
+    // Use environment variable if available (Production), otherwise fallback to localhost (Dev)
+    const serverUrl = (import.meta as any).env.VITE_SERVER_URL || 'http://localhost:3000';
     socket = io(serverUrl);
 
     socket.on('connect', () => {
