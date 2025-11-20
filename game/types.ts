@@ -54,6 +54,7 @@ export interface Item {
   description?: string;
   sellPrice: number;
   quantity?: number;
+  locked?: boolean;
 }
 
 export interface CharacterData {
@@ -77,6 +78,7 @@ export interface CharacterData {
   equipment: Record<ItemSlot, Item | null>;
   position?: Vector2D; // For online mode
   discoveredWaypoints?: string[];
+  hasClaimedDevRewards?: boolean; // Tracks if dev mode items have been granted
 }
 
 export interface DeathLogEvent {
@@ -125,6 +127,7 @@ export interface GameContext {
     addFloatingText: (text: FloatingText) => void;
     addVisualEffect: (effect: VisualEffect) => void;
     addGroundEffect: (effect: GroundEffect) => void;
+    playSound: (type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => void;
 }
 
 export interface Recipe {

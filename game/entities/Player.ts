@@ -1,6 +1,6 @@
 
 import { Character } from './Character';
-import { CharacterData, Vector2D, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe } from '../types';
+import { CharacterData, Vector2D, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity } from '../types';
 import { normalizeVector, getDistance, findNearestEnemy } from '../utils';
 import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, BOSS_ZONES, BOSS_CONFIG } from '../constants';
 import { Projectile } from './Projectile';
@@ -19,6 +19,7 @@ export class Player extends Character {
     baseStats: CharacterData['stats'];
     skills: SkillState[];
     discoveredWaypoints: string[];
+    hasClaimedDevRewards: boolean; // Tracks if dev rewards were granted
     
     lastAttackTime: number = 0;
     attackCooldown: number = 500; // ms
@@ -53,6 +54,7 @@ export class Player extends Character {
         this.baseStats = { ...data.stats };
         this.health = Math.min(data.stats.health, finalStats.maxHealth);
         this.discoveredWaypoints = data.discoveredWaypoints || ['wp_spawn'];
+        this.hasClaimedDevRewards = data.hasClaimedDevRewards || false;
 
         this.skills = SKILLS_DB[this.characterClass].map(def => ({
             definition: def,
@@ -83,6 +85,15 @@ export class Player extends Character {
                 final.bossDamageMultiplier += item.stats.bossDamageMultiplier || 0;
             }
         });
+
+        // SET BONUS CHECK: Mythic Accessory + Mythic Bag
+        const hasMythicAccessory = equipment[ItemSlot.Accessory]?.rarity === ItemRarity.Mythic;
+        const hasMythicBag = equipment[ItemSlot.Bag]?.rarity === ItemRarity.Mythic;
+        
+        if (hasMythicAccessory && hasMythicBag) {
+            final.damage = Math.floor(final.damage * 1.5);
+        }
+
         return final;
     }
 
@@ -98,9 +109,13 @@ export class Player extends Character {
              }
         }
 
-        // Apply Boss Zone Item Find Multiplier (500% increase -> 6x multiplier)
+        // Apply Boss Zone Item Find Bonus (Flat amount)
         if (inBossZone) {
-            stats.itemFind = (stats.itemFind || 0) * BOSS_CONFIG.BOSS_ITEM_FIND_MULTIPLIER;
+            stats.itemFind = (stats.itemFind || 0) + BOSS_CONFIG.BOSS_ITEM_FIND_BONUS;
+            // Cap at 1000%
+            if (stats.itemFind > 10.0) {
+                stats.itemFind = 10.0;
+            }
         }
 
         return stats;
@@ -200,6 +215,7 @@ export class Player extends Character {
             // Tick 4 times per second = every 250ms
             if (now - whirlwindEffect.lastTick >= 250) {
                 whirlwindEffect.lastTick = now;
+                let hitAny = false;
                 
                 game.enemies.forEach(enemy => {
                     if (getDistance(this.position, enemy.position) < 120 + enemy.radius) {
@@ -209,9 +225,16 @@ export class Player extends Character {
                             dmg *= stats.bossDamageMultiplier;
                         }
                         const ft = enemy.takeDamage(dmg, { name: this.name, level: this.level });
-                        if(ft) game.addFloatingText(ft);
+                        if(ft) {
+                            game.addFloatingText(ft);
+                            hitAny = true;
+                        }
                     }
                 });
+                
+                if (hitAny) {
+                    game.playSound('hit');
+                }
             }
         }
 
@@ -318,6 +341,13 @@ export class Player extends Character {
         return false;
     }
 
+    toggleItemLock(inventoryIndex: number) {
+        const item = this.inventory[inventoryIndex];
+        if (item) {
+            item.locked = !item.locked;
+        }
+    }
+
     equipItem(inventoryIndex: number) {
         const item = this.inventory[inventoryIndex];
         if (!item || item.type !== 'Equipment' || !item.slot) return;
@@ -391,6 +421,7 @@ export class Player extends Character {
     sellItem(inventoryIndex: number, sellFullStack: boolean): boolean {
         const item = this.inventory[inventoryIndex];
         if (!item) return false;
+        if (item.locked) return false;
 
         if (item.type === 'Material' && item.quantity && item.quantity > 1 && !sellFullStack) {
             this.gold += item.sellPrice;
@@ -400,6 +431,21 @@ export class Player extends Character {
             this.inventory[inventoryIndex] = null;
         }
         return true;
+    }
+
+    sellUnlockedItemsByRarity(rarity: ItemRarity): number {
+        let goldGained = 0;
+        for (let i = 0; i < this.inventory.length; i++) {
+            const item = this.inventory[i];
+            // Only sell equipment of the specified rarity that is unlocked
+            if (item && item.type === 'Equipment' && item.rarity === rarity && !item.locked) {
+                const value = item.sellPrice * (item.quantity || 1);
+                goldGained += value;
+                this.inventory[i] = null;
+            }
+        }
+        this.gold += goldGained;
+        return goldGained;
     }
 
     discoverWaypoint(waypointId: string): boolean {
@@ -472,7 +518,8 @@ export class Player extends Character {
             inventory: this.inventory,
             equipment: this.equipment,
             position: this.position,
-            discoveredWaypoints: this.discoveredWaypoints
+            discoveredWaypoints: this.discoveredWaypoints,
+            hasClaimedDevRewards: this.hasClaimedDevRewards // Persist the flag
         };
     }
 }

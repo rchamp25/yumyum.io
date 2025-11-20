@@ -64,7 +64,10 @@ export class GroundEffect {
                     if (this.effect.type === 'dot' && this.effect.damagePerTick) {
                         const tickDamage = this.effect.damagePerTick * (this.tickInterval / 1000);
                         const ft = player.takeDamage(tickDamage, { name: this.ownerName, level: this.ownerLevel });
-                        if (ft) game.addFloatingText(ft);
+                        if (ft) {
+                            game.addFloatingText(ft);
+                            game.playSound('damage');
+                        }
                     } else {
                         player.addStatusEffect(this.effect);
                     }

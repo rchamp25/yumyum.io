@@ -7,7 +7,7 @@ import Game from './components/Game';
 import DeathScreen from './components/DeathScreen';
 import { authService, GoogleUser } from './services/auth';
 import { storageService } from './services/storage';
-import { CharacterData, CharacterClass, GameStats, ItemRarity } from './game/types';
+import { CharacterData, CharacterClass, GameStats, ItemRarity, Item } from './game/types';
 import { Player } from './game/entities/Player';
 import { MATERIALS_DB, ALL_EQUIPMENT } from './game/items';
 import { GAME_CONFIG, WAYPOINTS } from './game/constants';
@@ -63,40 +63,58 @@ const App: React.FC = () => {
         }
 
         let finalCharacterData = character;
-        if (isDevMode) {
-            // Create a deep copy to avoid mutating the original character state
+
+        // ONLY apply dev mode changes if dev mode is ON AND the character hasn't claimed rewards yet.
+        // This prevents overwriting the inventory (and item locks) on subsequent logins.
+        if (isDevMode && !character.hasClaimedDevRewards) {
+            // Create a deep copy to avoid mutating the original character state immediately
             const devCharacter = JSON.parse(JSON.stringify(character)) as CharacterData;
             
             devCharacter.level = GAME_CONFIG.MAX_LEVEL;
-            devCharacter.gold = 1000000;
+            devCharacter.gold = 10000000; // 10 Million Gold
             devCharacter.xp = 0;
 
             // Unlock all Waypoints
             devCharacter.discoveredWaypoints = WAYPOINTS.map(wp => wp.id);
 
-            // Spawn Only Legendary Items
-            const legendaryEquipment = ALL_EQUIPMENT.filter(i => i.rarity === ItemRarity.Legendary);
+            // Dynamically find the highest rarity tier in the game
+            const maxRarity = Math.max(...ALL_EQUIPMENT.map(i => i.rarity));
+            const topTierEquipment = ALL_EQUIPMENT.filter(i => i.rarity === maxRarity);
             
-            // Spawn ALL Materials (All Tiers)
+            // Spawn ALL Materials (2 Stacks of each)
             const allMaterials = Object.values(MATERIALS_DB);
+            const materialItems: Item[] = [];
+            allMaterials.forEach(mat => {
+                // Add two full stacks
+                materialItems.push({ ...mat, quantity: 999 });
+                materialItems.push({ ...mat, quantity: 999 });
+            });
             
-            const devItems = [...legendaryEquipment, ...allMaterials];
+            const devItems = [...topTierEquipment, ...materialItems];
 
-            // Expand inventory to fit everything + some buffer
+            // Expand inventory to fit everything + some buffer (using new global config size or items length)
             const inventorySize = Math.max(GAME_CONFIG.DEFAULT_INVENTORY_SIZE, devItems.length + 5);
             devCharacter.inventory = Array(inventorySize).fill(null);
 
             for (let i = 0; i < devItems.length; i++) {
                 const item = devItems[i];
-                if (item.type === 'Material') {
-                    devCharacter.inventory[i] = { ...item, quantity: 999 };
-                } else {
-                    devCharacter.inventory[i] = { ...item };
-                }
+                // Materials already have quantity set above
+                devCharacter.inventory[i] = { ...item };
+            }
+
+            // Mark as claimed so we don't wipe inventory next time
+            devCharacter.hasClaimedDevRewards = true;
+            
+            // Save the updated state immediately to persistence
+            if (user) {
+                storageService.saveCharacter(user.uid, devCharacter);
+                // Refresh character list to reflect changes in UI if we go back
+                setCharacters(storageService.getCharacters(user.uid));
             }
 
             finalCharacterData = devCharacter;
         }
+
         setCurrentCharacter(finalCharacterData);
         setGameState('in_game');
     };

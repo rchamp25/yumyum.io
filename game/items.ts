@@ -30,6 +30,7 @@ export const ARMOR_DB: { [key: string]: Item } = {
     'a_rar_01': { id: 'a_rar_01', name: 'Plate Armor', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Rare, stats: { maxHealth: 50, healthRegen: 1 }, sellPrice: 100 },
     'a_epi_01': { id: 'a_epi_01', name: 'Mage Robes', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Epic, stats: { maxHealth: 80, damage: 5, healthRegen: 1.5 }, sellPrice: 500 },
     'a_leg_01': { id: 'a_leg_01', name: 'Dragonscale Hauberk', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Legendary, stats: { maxHealth: 150, damage: 10, healthRegen: 3 }, description: "Crafted from the scales of an ancient wyrm.", sellPrice: 2000 },
+    'a_myt_01': { id: 'a_myt_01', name: 'Titan\'s Heartplate', type: 'Equipment', slot: ItemSlot.Armor, rarity: ItemRarity.Mythic, stats: { maxHealth: 500, damage: 20, healthRegen: 10, itemFind: 1.0 }, description: "Pulsing with the life force of a dead titan.", sellPrice: 10000 },
 };
 
 // --- BOOTS ---
@@ -39,6 +40,7 @@ export const BOOTS_DB: { [key: string]: Item } = {
     'b_rar_01': { id: 'b_rar_01', name: 'Swiftness Boots', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Rare, stats: { speed: 0.4 }, sellPrice: 100 },
     'b_epi_01': { id: 'b_epi_01', name: 'Plated Sabatons', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Epic, stats: { speed: 0.3, maxHealth: 40, healthRegen: 1 }, sellPrice: 500 },
     'b_leg_01': { id: 'b_leg_01', name: 'Windwalkers', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Legendary, stats: { speed: 0.6 }, description: "Walk on air itself.", sellPrice: 2000 },
+    'b_myt_01': { id: 'b_myt_01', name: 'Voidwalker Treads', type: 'Equipment', slot: ItemSlot.Boots, rarity: ItemRarity.Mythic, stats: { speed: 1.2, maxHealth: 200, itemFind: 1.0 }, description: "Step through the fabric of reality.", sellPrice: 10000 },
 };
 
 // --- ACCESSORIES ---
@@ -46,6 +48,7 @@ export const ACCESSORIES_DB: { [key: string]: Item } = {
     'x_rar_01': { id: 'x_rar_01', name: 'Vitality Ring', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Rare, stats: { maxHealth: 30, healthRegen: 2, itemFind: 0.2 }, sellPrice: 150 },
     'x_epi_01': { id: 'x_epi_01', name: 'Power Amulet', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Epic, stats: { damage: 8, healthRegen: 1, itemFind: 0.35 }, sellPrice: 600 },
     'x_leg_01': { id: 'x_leg_01', name: 'Ancient King Seal', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Legendary, stats: { maxHealth: 75, damage: 15, healthRegen: 5, itemFind: 0.5 }, description: "The symbol of a forgotten dynasty.", sellPrice: 2500 },
+    'x_myt_01': { id: 'x_myt_01', name: 'Soul of the Universe', type: 'Equipment', slot: ItemSlot.Accessory, rarity: ItemRarity.Mythic, stats: { maxHealth: 250, damage: 50, healthRegen: 8, itemFind: 1.5 }, description: "A fragment of creation. (Set Bonus: 1.5x Dmg with Infinity Pouch)", sellPrice: 10000 },
 };
 
 // --- BAGS ---
@@ -55,10 +58,21 @@ export const BAGS_DB: { [key: string]: Item } = {
     'bag_rar': { id: 'bag_rar', name: 'Adventurer\'s Backpack', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Rare, stats: { maxInventorySlots: 6, maxHealth: 20, speed: 0.3, itemFind: 0.2 }, sellPrice: 150 },
     'bag_epi': { id: 'bag_epi', name: 'Void Satchel', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Epic, stats: { maxInventorySlots: 8, maxHealth: 35, speed: 0.6, itemFind: 0.35 }, sellPrice: 600 },
     'bag_leg': { id: 'bag_leg', name: 'Dimensional Bag', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Legendary, stats: { maxInventorySlots: 10, maxHealth: 50, speed: 2.0, itemFind: 0.5 }, description: "It's bigger on the inside.", sellPrice: 2500 },
+    'bag_myt_01': { id: 'bag_myt_01', name: 'Infinity Pouch', type: 'Equipment', slot: ItemSlot.Bag, rarity: ItemRarity.Mythic, stats: { maxInventorySlots: 25, maxHealth: 100, speed: 3.0, itemFind: 1.5 }, description: "Contains a universe of storage. (Set Bonus: 1.5x Dmg with Soul of Universe)", sellPrice: 10000 },
 };
 
 export const ITEMS_DB: { [key: string]: Item } = { ...WEAPONS_DB, ...ARMOR_DB, ...BOOTS_DB, ...ACCESSORIES_DB, ...BAGS_DB };
 export const ALL_EQUIPMENT = Object.values(ITEMS_DB);
+export const ALL_MYTHICS = ALL_EQUIPMENT.filter(i => i.rarity === ItemRarity.Mythic);
+
+// Recipe Costs (Doubled from previous Mythic Weapon requirement)
+const MYTHIC_RECIPE_COST = [
+    { materialId: 'mat_leg', quantity: 60 }, 
+    { materialId: 'mat_epi', quantity: 120 },
+    { materialId: 'mat_rar', quantity: 200 },
+    { materialId: 'mat_unc', quantity: 400 },
+    { materialId: 'mat_com', quantity: 1000 }
+];
 
 export const CRAFTING_RECIPES: Recipe[] = [
     { id: 'craft_w_unc_01', result: WEAPONS_DB['w_unc_01'], ingredients: [{ materialId: 'mat_com', quantity: 10 }, { materialId: 'mat_unc', quantity: 2 }] },
@@ -76,18 +90,12 @@ export const CRAFTING_RECIPES: Recipe[] = [
     { id: 'craft_w_leg_01', result: WEAPONS_DB['w_leg_01'], ingredients: [{ materialId: 'mat_epi', quantity: 10 }, { materialId: 'mat_leg', quantity: 2 }] },
     { id: 'craft_bag_leg', result: BAGS_DB['bag_leg'], ingredients: [{ materialId: 'mat_epi', quantity: 20 }, { materialId: 'mat_leg', quantity: 5 }] },
 
-    // Mythic - Doubled Costs
-    { 
-        id: 'craft_w_myt_01', 
-        result: WEAPONS_DB['w_myt_01'], 
-        ingredients: [
-            { materialId: 'mat_leg', quantity: 30 }, 
-            { materialId: 'mat_epi', quantity: 60 },
-            { materialId: 'mat_rar', quantity: 100 },
-            { materialId: 'mat_unc', quantity: 200 },
-            { materialId: 'mat_com', quantity: 500 }
-        ] 
-    },
+    // Mythic Recipes - All slots
+    { id: 'craft_w_myt_01', result: WEAPONS_DB['w_myt_01'], ingredients: MYTHIC_RECIPE_COST },
+    { id: 'craft_a_myt_01', result: ARMOR_DB['a_myt_01'], ingredients: MYTHIC_RECIPE_COST },
+    { id: 'craft_b_myt_01', result: BOOTS_DB['b_myt_01'], ingredients: MYTHIC_RECIPE_COST },
+    { id: 'craft_x_myt_01', result: ACCESSORIES_DB['x_myt_01'], ingredients: MYTHIC_RECIPE_COST },
+    { id: 'craft_bag_myt_01', result: BAGS_DB['bag_myt_01'], ingredients: MYTHIC_RECIPE_COST },
 ];
 
 export function getRandomItem(level: number, rarityModifier: number = 1): Item | null {

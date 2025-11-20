@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { Item, CharacterData } from '../game/types';
+import React, { useState } from 'react';
+import { Item, CharacterData, ItemRarity } from '../game/types';
 import { ItemSlotComponent } from './Inventory';
 import { ITEMS_DB } from '../game/items';
 
@@ -9,10 +9,26 @@ interface VendorUIProps {
     onSell: (item: Item, inventoryIndex: number, sellFullStack: boolean) => void;
     onBuy: (item: Item, cost: number) => void;
     onClose: () => void;
+    onSellByRarity?: (rarity: ItemRarity) => void;
 }
 
-const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClose }) => {
-    
+interface ConfirmationModalState {
+    isOpen: boolean;
+    type: 'stack' | 'rarity';
+    item?: Item;
+    index?: number;
+    totalGold: number;
+    count: number;
+}
+
+const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClose, onSellByRarity }) => {
+    const [confirmModal, setConfirmModal] = useState<ConfirmationModalState>({
+        isOpen: false,
+        type: 'stack',
+        totalGold: 0,
+        count: 0
+    });
+
     const itemsForSale = [
         ITEMS_DB['w_unc_01'], // Steel Longsword
         ITEMS_DB['a_com_01'], // Leather Tunic
@@ -22,15 +38,57 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
     // Buying price logic (usually higher than sell price, e.g., 2x sell price)
     const getBuyPrice = (item: Item) => item.sellPrice * 2;
 
-    const handleSell = (item: Item, index: number) => {
+    const handleSellClick = (item: Item, index: number) => {
+        if (item.locked) return;
         onSell(item, index, false);
     };
 
     const handleRightClick = (e: React.MouseEvent, item: Item, index: number) => {
         if (item && e.shiftKey) {
             e.preventDefault();
-            onSell(item, index, true);
+            
+            if (item.locked) return;
+
+            if (item.type === 'Material' && item.quantity && item.quantity > 1) {
+                // Confirm Sell Stack
+                setConfirmModal({
+                    isOpen: true,
+                    type: 'stack',
+                    item: item,
+                    index: index,
+                    count: item.quantity,
+                    totalGold: item.sellPrice * item.quantity
+                });
+            } else if (item.type === 'Equipment') {
+                // Confirm Sell All Unlocked by Rarity
+                // Calculate how many items of this rarity are unlocked
+                const unlockedItems = characterData.inventory.filter(i => i && i.type === 'Equipment' && i.rarity === item.rarity && !i.locked);
+                const count = unlockedItems.length;
+                const totalGold = unlockedItems.reduce((acc, curr) => acc + ((curr?.sellPrice || 0) * (curr?.quantity || 1)), 0);
+
+                setConfirmModal({
+                    isOpen: true,
+                    type: 'rarity',
+                    item: item, // Used for rarity reference
+                    totalGold: totalGold,
+                    count: count
+                });
+            } else {
+                 // Single item that isn't a stack - just sell it or maybe confirm? 
+                 // Current behavior for single click is sell. Shift+Click usually implies bulk. 
+                 // Let's just sell normally if it's a single non-stack item.
+                 onSell(item, index, true);
+            }
         }
+    };
+
+    const confirmSell = () => {
+        if (confirmModal.type === 'stack' && confirmModal.item && confirmModal.index !== undefined) {
+            onSell(confirmModal.item, confirmModal.index, true);
+        } else if (confirmModal.type === 'rarity' && confirmModal.item && onSellByRarity) {
+            onSellByRarity(confirmModal.item.rarity);
+        }
+        setConfirmModal({ ...confirmModal, isOpen: false });
     };
 
     return (
@@ -96,10 +154,10 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
                                     <ItemSlotComponent 
                                         key={index}
                                         item={item} 
-                                        onClick={item ? () => handleSell(item, index) : undefined}
+                                        onClick={item ? () => handleSellClick(item, index) : undefined}
                                         onContextMenu={item ? (e) => handleRightClick(e, item, index) : undefined}
                                         hoverContent={
-                                            item ? (
+                                            item && !item.locked ? (
                                                 <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-center pointer-events-none rounded-md p-1">
                                                     <p className="text-yellow-400 font-bold text-[10px] leading-tight">
                                                         Sell:
@@ -108,16 +166,61 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
                                                         {(item.sellPrice || 0) * (item.quantity || 1)} G
                                                     </p>
                                                 </div>
+                                            ) : item && item.locked ? (
+                                                <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center text-center pointer-events-none rounded-md p-1">
+                                                    <p className="text-red-400 font-bold text-xs leading-tight">LOCKED</p>
+                                                </div>
                                             ) : null
                                         }
                                     />
                                 ))}
                             </div>
-                             <p className="text-gray-500 text-xs mt-4">Hint: Hold [Shift] + Right-Click to sell a stack.</p>
+                             <p className="text-gray-500 text-xs mt-4">Hint: Hold [Shift] + Right-Click to sell bulk/stack.</p>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {/* Confirmation Modal */}
+            {confirmModal.isOpen && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
+                    <div className="bg-gray-800 border-2 border-gray-600 rounded-lg p-6 max-w-md w-full text-center shadow-2xl animate-fade-in">
+                        <h3 className="text-2xl font-bold text-white mb-4">Confirm Sale</h3>
+                        
+                        <p className="text-gray-300 mb-2">
+                            {confirmModal.type === 'stack' ? (
+                                <>
+                                    Sell stack of <span className="text-white font-bold">{confirmModal.count}x {confirmModal.item?.name}</span>?
+                                </>
+                            ) : (
+                                <>
+                                    Sell <span className="text-white font-bold">{confirmModal.count} unlocked {ItemRarity[confirmModal.item!.rarity]} items</span>?
+                                </>
+                            )}
+                        </p>
+                        
+                        <div className="bg-black/40 p-3 rounded-lg mb-6 inline-block">
+                            <span className="text-gray-400 text-sm mr-2">Total Value:</span>
+                            <span className="text-yellow-400 font-bold text-xl">{confirmModal.totalGold.toLocaleString()} G</span>
+                        </div>
+
+                        <div className="flex justify-center space-x-4">
+                            <button 
+                                onClick={() => setConfirmModal({...confirmModal, isOpen: false})}
+                                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded font-bold transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={confirmSell}
+                                className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded font-bold transition-colors"
+                            >
+                                Confirm Sell
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

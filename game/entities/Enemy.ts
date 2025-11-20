@@ -3,7 +3,7 @@ import { Character } from './Character';
 import { Vector2D, GameContext, Item, ItemRarity } from '../types';
 import { normalizeVector, getDistance } from '../utils';
 import { DroppedItem } from './DroppedItem';
-import { MATERIALS_DB, getRandomItem, ALL_EQUIPMENT, WEAPONS_DB } from '../items';
+import { MATERIALS_DB, getRandomItem, ALL_EQUIPMENT, ALL_MYTHICS } from '../items';
 import { GAME_CONFIG, LOOT_CONFIG, BOSS_CONFIG, BOSS_ZONES } from '../constants';
 import { Projectile } from './Projectile';
 import { FloatingText } from './FloatingText';
@@ -357,7 +357,12 @@ export class Enemy extends Character {
         if (this.type.attackType === 'melee') {
             if (getDistance(this.position, player.position) < this.attackRange + player.radius) {
                 const ft = player.takeDamage(this.damage, { name: this.name, level: this.level });
-                if (ft) game.addFloatingText(ft);
+                if (ft) {
+                    game.addFloatingText(ft);
+                    if ('id' in player && player.id === game.player.id) {
+                        game.playSound('damage');
+                    }
+                }
             }
         } else { // Ranged
             const direction = normalizeVector({
@@ -461,11 +466,12 @@ export class Enemy extends Character {
 
         // Boss Specific Mythic Drop
         if (this.isBoss) {
-             const mythicChance = 0.01 * itemFindMultiplier; // 1% base chance scaled by item find (e.g. 600% IF = 6% chance)
+             const mythicChance = 0.01 * itemFindMultiplier; // 1% base chance scaled by item find
              if (Math.random() < mythicChance) {
-                 const bossHunter = WEAPONS_DB['w_myt_01'];
-                 if (bossHunter) {
-                     drops.push(new DroppedItem(this.position, { ...bossHunter }));
+                 // Pick a random mythic from the pool
+                 if (ALL_MYTHICS.length > 0) {
+                     const randomMythic = ALL_MYTHICS[Math.floor(Math.random() * ALL_MYTHICS.length)];
+                     drops.push(new DroppedItem(this.position, { ...randomMythic }));
                  }
              }
         }

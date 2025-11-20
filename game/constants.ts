@@ -27,7 +27,7 @@ export const BOSS_CONFIG = {
     SPAWN_COOLDOWN: 180000, // 3 Minutes
     MAX_ACTIVE_BOSSES: 2, // Only 2 bosses alive at once
     BOSS_DROP_BONUS: 10, // Extra items dropped by bosses
-    BOSS_ITEM_FIND_MULTIPLIER: 6, // 6x multiplier (500% increase) when in boss zone
+    BOSS_ITEM_FIND_BONUS: 5.0, // +500% Item Find (Flat addition)
 };
 
 export const BOSS_ZONES = [

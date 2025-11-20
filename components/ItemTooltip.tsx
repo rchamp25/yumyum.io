@@ -100,7 +100,7 @@ const ItemTooltip: React.FC<ItemTooltipProps> = ({ item, parentRect }) => {
           value !== undefined && value !== 0 && (
             <div key={stat} className="flex justify-between items-center text-green-400 text-xs font-semibold">
                 <span>{formatStatName(stat)}</span>
-                <span>{formatStatValue(stat, value)}</span>
+                <span>{formatStatValue(stat, value as number)}</span>
             </div>
           )
         ))}

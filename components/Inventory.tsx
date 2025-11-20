@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Item, ItemSlot, CharacterData, ItemRarity } from '../game/types';
 import ItemTooltip from './ItemTooltip';
-import { ItemIcon, SwordIcon, VestIcon, BootsIcon, RingIcon, BagIcon } from './icons';
+import { ItemIcon, SwordIcon, VestIcon, BootsIcon, RingIcon, BagIcon, SmallLockIcon } from './icons';
 
 interface InventoryProps {
   characterData: CharacterData;
@@ -11,6 +11,7 @@ interface InventoryProps {
   onItemUnequip: (itemSlot: ItemSlot) => void;
   toggleInventory: () => void;
   onInventoryMove: (fromIndex: number, toIndex: number) => void;
+  onToggleLock?: (itemIndex: number) => void;
 }
 
 export const getRarityClasses = (rarity: ItemRarity) => {
@@ -89,6 +90,11 @@ export const ItemSlotComponent: React.FC<{
                             {item.quantity}
                         </div>
                     )}
+                    {item.locked && (
+                         <div className="absolute top-0 right-0 p-0.5">
+                             <SmallLockIcon className="w-4 h-4 text-yellow-400 drop-shadow-md" />
+                         </div>
+                    )}
                 </>
             ) : (
                  slotType && <EmptySlotIcon slot={slotType} />
@@ -107,9 +113,10 @@ export const ItemSlotComponent: React.FC<{
 };
 
 
-const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onItemUnequip, toggleInventory, onInventoryMove }) => {
+const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onItemUnequip, toggleInventory, onInventoryMove, onToggleLock }) => {
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [mousePos, setMousePos] = useState<{x: number, y: number}>({ x: 0, y: 0 });
+    const [isLockMode, setLockMode] = useState(false);
 
     // Global drag events
     useEffect(() => {
@@ -136,6 +143,7 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
 
 
     const handleSlotMouseDown = (e: React.MouseEvent, index: number) => {
+        if (isLockMode) return; // No dragging in lock mode
         if (characterData.inventory[index]) {
             // Prevent default interaction if needed, usually good for preventing text selection
             e.preventDefault(); 
@@ -145,6 +153,7 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
     };
 
     const handleSlotMouseUp = (e: React.MouseEvent, targetIndex: number) => {
+        if (isLockMode) return;
         if (draggingIndex !== null) {
             e.stopPropagation(); // Prevent global mouse up from firing
             onInventoryMove(draggingIndex, targetIndex);
@@ -166,7 +175,7 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
                             <ItemSlotComponent 
                                 key={slot}
                                 item={characterData.equipment[slot]}
-                                onClick={() => onItemUnequip(slot)}
+                                onClick={() => !isLockMode && onItemUnequip(slot)}
                                 slotType={slot}
                             />
                         ))}
@@ -175,15 +184,25 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
 
                 {/* Inventory */}
                 <div className="flex-grow">
-                    <h2 className="text-2xl font-bold text-white mb-4">Inventory ({characterData.inventory.filter(i => i).length}/{characterData.inventory.length})</h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-2xl font-bold text-white">Inventory ({characterData.inventory.filter(i => i).length}/{characterData.inventory.length})</h2>
+                        <button 
+                            onClick={() => setLockMode(!isLockMode)}
+                            className={`px-3 py-1 rounded text-sm font-bold transition-colors flex items-center gap-2 ${isLockMode ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                        >
+                            <SmallLockIcon className="w-4 h-4" />
+                            {isLockMode ? 'Save Locks' : 'Lock Items'}
+                        </button>
+                    </div>
                     <div className="grid grid-cols-5 gap-3 max-h-[60vh] overflow-y-auto pr-2 select-none">
                         {characterData.inventory.map((item, index) => (
                             <ItemSlotComponent 
                                 key={index}
                                 item={item}
                                 onClick={() => {
-                                    // Only trigger equip if NOT dragging
-                                    if (draggingIndex === null) {
+                                    if (isLockMode && onToggleLock) {
+                                        onToggleLock(index);
+                                    } else if (draggingIndex === null) {
                                         onItemEquip(index);
                                     }
                                 }}
@@ -193,7 +212,9 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
                             />
                         ))}
                     </div>
-                    <div className="mt-4 text-gray-400 text-sm">Drag to move. Click to equip/unequip.</div>
+                    <div className="mt-4 text-gray-400 text-sm">
+                        {isLockMode ? 'Click items to lock/unlock them. Locked items cannot be sold.' : 'Drag to move. Click to equip/unequip.'}
+                    </div>
                 </div>
             </div>
 

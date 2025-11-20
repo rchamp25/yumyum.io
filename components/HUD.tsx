@@ -5,6 +5,7 @@ import { CoinIcon } from './icons';
 import SkillBar from './SkillBar';
 import { Enemy } from '../game/entities/Enemy';
 import { NPC } from '../game/entities/NPC';
+import { Waypoint } from '../game/entities/Waypoint';
 import { GAME_CONFIG, BOSS_CONFIG } from '../game/constants';
 import { getDistance } from '../game/utils';
 
@@ -12,6 +13,7 @@ interface HUDProps {
   player: Player | null;
   enemies: Enemy[];
   npcs: NPC[];
+  waypoints: Waypoint[];
   nearbyNPC: NPC | null;
   onUseSkill: (index: number) => void;
   toggleInventory: () => void;
@@ -66,7 +68,7 @@ const BossHealthBar: React.FC<{ boss: Enemy }> = ({ boss }) => {
     );
 };
 
-const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[] }> = ({ player, enemies, npcs }) => {
+const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[] }> = ({ player, enemies, npcs, waypoints }) => {
     const mapSize = 200;
     const scale = mapSize / Math.max(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
 
@@ -75,16 +77,38 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[] }> = ({ 
 
     return (
         <div className="w-[200px] h-[200px] bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-gray-700 overflow-hidden relative">
+            {/* World Name Watermark */}
+            <div className="absolute top-3 left-0 right-0 text-center pointer-events-none z-0">
+                <span className="text-white/20 font-black text-lg uppercase tracking-[0.2em] drop-shadow-sm select-none">The Rat</span>
+            </div>
+
+            {/* Waypoints */}
+            {waypoints.map(wp => {
+                 const abbr = wp.data.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                 const isDiscovered = player.discoveredWaypoints.includes(wp.data.id);
+                 
+                 return (
+                     <div 
+                        key={wp.data.id}
+                        className="absolute z-10 flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2"
+                        style={{ left: `${wp.data.position.x * scale}px`, top: `${wp.data.position.y * scale}px` }}
+                    >
+                        <div className={`w-1.5 h-1.5 rounded-full ${isDiscovered ? 'bg-cyan-400 shadow-[0_0_4px_#22d3ee]' : 'bg-gray-600'}`}></div>
+                        <span className={`text-[6px] font-bold leading-none mt-0.5 select-none ${isDiscovered ? 'text-cyan-400' : 'text-gray-500'}`}>{abbr}</span>
+                    </div>
+                 );
+            })}
+
             {/* Player Dot */}
             <div 
-                className="absolute w-2 h-2 bg-white rounded-full -translate-x-1/2 -translate-y-1/2"
+                className="absolute w-2 h-2 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-20 shadow-[0_0_5px_white]"
                 style={{ left: `${playerX}px`, top: `${playerY}px` }}
             ></div>
             {/* Enemy Dots */}
             {enemies.map(enemy => (
                  <div 
                     key={enemy.id}
-                    className={`absolute rounded-full -translate-x-1/2 -translate-y-1/2 ${enemy.isBoss ? 'w-3 h-3 bg-purple-500 animate-pulse' : 'w-1.5 h-1.5 bg-red-500'}`}
+                    className={`absolute rounded-full -translate-x-1/2 -translate-y-1/2 z-10 ${enemy.isBoss ? 'w-3 h-3 bg-purple-500 animate-pulse' : 'w-1.5 h-1.5 bg-red-500'}`}
                     style={{ left: `${enemy.position.x * scale}px`, top: `${enemy.position.y * scale}px` }}
                 ></div>
             ))}
@@ -92,7 +116,7 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[] }> = ({ 
              {npcs.map(npc => (
                  <div 
                     key={npc.id}
-                    className="absolute w-2 h-2 bg-yellow-400 rounded-full -translate-x-1/2 -translate-y-1/2"
+                    className="absolute w-2 h-2 bg-yellow-400 rounded-full -translate-x-1/2 -translate-y-1/2 z-10"
                     style={{ left: `${npc.position.x * scale}px`, top: `${npc.position.y * scale}px` }}
                 ></div>
             ))}
@@ -100,7 +124,7 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[] }> = ({ 
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, nearbyNPC, onUseSkill, toggleInventory, isInventoryOpen }) => {
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, onUseSkill, toggleInventory, isInventoryOpen }) => {
   if (!player) return null;
 
   const xpToNext = player.getXpToNextLevel();
@@ -163,7 +187,7 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, nearbyNPC, onUseSkill,
               Item Find: <span className="font-bold text-purple-300">+{Math.round((player.getFinalStats().itemFind || 0) * 100)}%</span>
             </div>
         </div>
-        <Minimap player={player} enemies={enemies} npcs={npcs} />
+        <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} />
       </div>
 
       {/* Center - Interaction Prompt */}

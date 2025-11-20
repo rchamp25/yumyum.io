@@ -97,7 +97,14 @@ export class Projectile {
     }
 
     const ft = target.takeDamage(finalDamage, { name: this.ownerName, level: this.ownerLevel });
-    if (ft) game.addFloatingText(ft);
+    if (ft) {
+        game.addFloatingText(ft);
+        if (target.id === game.player.id) {
+            game.playSound('damage');
+        } else {
+            game.playSound('hit');
+        }
+    }
     this.hitIds.push(target.id);
 
     // Apply on-hit effects
@@ -113,7 +120,11 @@ export class Projectile {
                              explosionDamage *= this.bossDamageMultiplier;
                          }
                          const explosionFt = enemy.takeDamage(explosionDamage, { name: `${this.ownerName}'s Explosion`, level: this.ownerLevel });
-                         if(explosionFt) game.addFloatingText(explosionFt);
+                         if(explosionFt) {
+                             game.addFloatingText(explosionFt);
+                             if (enemy.id === game.player.id) game.playSound('damage');
+                             else game.playSound('hit');
+                         }
                     }
                 });
                 break;
