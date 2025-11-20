@@ -1,6 +1,6 @@
 
 import { io, Socket } from "socket.io-client";
-import { CharacterData, ServerEnemy, Item, Vector2D } from "../game/types";
+import { CharacterData, ServerEnemy, Item, Vector2D, Party, TradeSession } from "../game/types";
 
 interface GameStatePayload {
     players: Record<string, {
@@ -20,6 +20,12 @@ interface EnemyKillPayload {
     xp: number;
     gold: number;
     enemyLevel: number;
+}
+
+interface InvitePayload {
+    fromId: string;
+    fromName: string;
+    type: 'party' | 'trade';
 }
 
 let socket: Socket;
@@ -70,22 +76,62 @@ export const socketService = {
       }
   },
 
+  // --- Party ---
+  inviteToParty(targetName: string) {
+      if(socket) socket.emit('party_invite', targetName);
+  },
+  acceptPartyInvite(fromId: string) {
+      if(socket) socket.emit('party_accept', fromId);
+  },
+  leaveParty() {
+      if(socket) socket.emit('party_leave');
+  },
+
+  // --- Trading ---
+  requestTrade(targetId: string) {
+      if(socket) socket.emit('trade_request', targetId);
+  },
+  acceptTradeRequest(fromId: string) {
+      if(socket) socket.emit('trade_accept', fromId);
+  },
+  updateTradeOffer(gold: number, items: {item: Item, inventoryIndex: number}[]) {
+      if(socket) socket.emit('trade_update', { gold, items });
+  },
+  lockTrade(isLocked: boolean) {
+      if(socket) socket.emit('trade_lock', isLocked);
+  },
+  cancelTrade() {
+      if(socket) socket.emit('trade_cancel');
+  },
+
+
+  // --- Listeners ---
   onGameState(callback: (gameState: GameStatePayload) => void) {
-    if (socket) {
-      socket.on('game_state', callback);
-    }
+    if (socket) socket.on('game_state', callback);
   },
   
   onLootDropped(callback: (drops: LootDropPayload[]) => void) {
-      if (socket) {
-          socket.on('loot_dropped', callback);
-      }
+      if (socket) socket.on('loot_dropped', callback);
   },
   
   onEnemyKilled(callback: (data: EnemyKillPayload) => void) {
-      if (socket) {
-          socket.on('enemy_killed', callback);
-      }
+      if (socket) socket.on('enemy_killed', callback);
+  },
+  
+  onPartyUpdate(callback: (party: Party | null) => void) {
+      if(socket) socket.on('party_update', callback);
+  },
+  
+  onInviteReceived(callback: (invite: InvitePayload) => void) {
+      if(socket) socket.on('invite_received', callback);
+  },
+  
+  onTradeUpdate(callback: (session: TradeSession | null) => void) {
+      if(socket) socket.on('trade_update', callback);
+  },
+  
+  onTradeCompleted(callback: (success: boolean) => void) {
+      if(socket) socket.on('trade_completed', callback);
   },
   
   offGameState() {
@@ -93,6 +139,10 @@ export const socketService = {
           socket.off('game_state');
           socket.off('loot_dropped');
           socket.off('enemy_killed');
+          socket.off('party_update');
+          socket.off('invite_received');
+          socket.off('trade_update');
+          socket.off('trade_completed');
       }
   },
 

@@ -1,6 +1,6 @@
 
 import { SkillDefinition, CharacterClass } from './types';
-import { findNearestEnemy, getDistance, normalizeVector } from './utils';
+import { findNearestEnemy, getDistance, normalizeVector } from './math';
 import { Projectile } from './entities/Projectile';
 import { VisualEffect } from './entities/VisualEffect';
 import { GroundEffect } from './entities/GroundEffect';

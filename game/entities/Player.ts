@@ -63,15 +63,10 @@ export class Player extends Character {
         // Set the sanitized base stats to property
         this.baseStats = cleanBaseStats;
         
-        // Current Health Logic:
-        // Respect the saved current health if valid, but clamp it to the new valid max health.
-        // If saved health is invalid/missing/zero, default to full max health.
-        const savedHealth = data.stats.health;
-        if (typeof savedHealth === 'number' && savedHealth > 0) {
-            this.health = Math.min(savedHealth, finalStats.maxHealth);
-        } else {
-            this.health = finalStats.maxHealth;
-        }
+        // FORCE FULL HEALTH ON LOGIN
+        // We set current health to the calculated Final Max Health (which includes gear).
+        // Previous logic relied on 'data.stats.health' which only held base health, causing HP to be capped low on login.
+        this.health = finalStats.maxHealth;
         
         this.discoveredWaypoints = data.discoveredWaypoints || ['wp_spawn'];
         this.hasClaimedDevRewards = data.hasClaimedDevRewards || false;

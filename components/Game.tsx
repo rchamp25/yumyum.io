@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity } from '../game/types';
+import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -20,6 +20,8 @@ import HUD from './HUD';
 import Inventory from './Inventory';
 import NPCInteraction from './NPCInteraction';
 import FastTravelUI from './FastTravelUI';
+import PartyUI from './PartyUI';
+import TradeUI from './TradeUI';
 import { socketService } from '../services/socketService';
 
 interface GameProps {
@@ -51,6 +53,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const [isInventoryOpen, setInventoryOpen] = useState(false);
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
   const [interactingWaypoint, setInteractingWaypoint] = useState<Waypoint | null>(null);
+  
+  // Multiplayer State
+  const [party, setParty] = useState<Party | null>(null);
+  const [isPartyUIOpen, setPartyUIOpen] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<{type: 'party'|'trade', fromId: string, fromName: string}[]>([]);
+  const [activeTradeSession, setActiveTradeSession] = useState<TradeSession | null>(null);
 
   const pressedKeys = useKeyboardInput();
   const playerIdRef = useRef<string>('');
@@ -157,7 +165,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
              pos.y - radius - buffer < camera.y + cvsHeight;
   };
 
-  // Helper to broadcast updates to server
   const updateServerCharacter = useCallback((p: Player) => {
       if (isOnlineMode) {
           socketService.updateCharacter(p.toCharacterData());
@@ -221,7 +228,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                 updatedPlayer.gainXP(data.xp, addFloatingText, data.enemyLevel);
                 if (updatedPlayer.level > oldLevel) {
                     playSound('level_up');
-                    // Broadcast new level/stats to server
                     socketService.updateCharacter(updatedPlayer.toCharacterData());
                 }
                 
@@ -230,6 +236,30 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                 
                 return updatedPlayer;
             });
+        });
+        
+        socketService.onPartyUpdate((p) => {
+            setParty(p);
+        });
+
+        socketService.onInviteReceived((invite) => {
+            setPendingInvites(prev => [...prev, { type: invite.type, fromId: invite.fromId, fromName: invite.fromName }]);
+        });
+        
+        socketService.onTradeUpdate((session) => {
+            setActiveTradeSession(session);
+            // If trade completed successfully (session becomes null but we need feedback), handled by separate event
+        });
+        
+        socketService.onTradeCompleted((success) => {
+            if (success) {
+                addFloatingText(new FloatingText("Trade Successful!", player!.position, '#4ade80', 24));
+                // Force update player data as trade modified inventory/gold directly on server
+                // Ideally server sends update_character right before this, which we handle
+            } else {
+                addFloatingText(new FloatingText("Trade Failed", player!.position, '#ef4444', 24));
+            }
+            setActiveTradeSession(null);
         });
     }
 
@@ -307,10 +337,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     const updatedEnemies = [...enemies]; 
     if (!isOnlineMode) {
         updatedEnemies.forEach(e => e.update(gameContext));
-        
-        // Offline Spawn Logic
         bossSpawnTimerRef.current++;
-        // ... existing offline spawn logic would go here ...
     }
 
     projectiles.forEach(p => p.update());
@@ -350,7 +377,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         if(getDistance(di.position, player.position) < player.radius) {
             if (player.pickupItem(di.item)) {
                  addFloatingText(new FloatingText(`+ ${di.item.name}`, player.position, '#ffd700'));
-                 updateServerCharacter(player); // Inventory changed
+                 updateServerCharacter(player);
             } else {
                  addFloatingText(new FloatingText(`Inventory Full!`, player.position, '#ff4d4d'));
                  remainingItems.push(di);
@@ -406,7 +433,22 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints, camera, playSound, isOnlineMode, updateServerCharacter]);
 
   useGameLoop(gameLoop);
+  
+  // Invite Handlers
+  const handleAcceptInvite = (invite: {type: 'party'|'trade', fromId: string}) => {
+      if (invite.type === 'party') {
+          socketService.acceptPartyInvite(invite.fromId);
+      } else {
+          socketService.acceptTradeRequest(invite.fromId);
+      }
+      setPendingInvites(prev => prev.filter(i => i.fromId !== invite.fromId));
+  };
+  
+  const handleDeclineInvite = (fromId: string) => {
+       setPendingInvites(prev => prev.filter(i => i.fromId !== fromId));
+  };
 
+  // Render
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -503,9 +545,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers]);
 
   const toggleInventory = useCallback(() => {
-    if (interactingNPC || interactingWaypoint) return;
+    if (interactingNPC || interactingWaypoint || activeTradeSession) return;
     setInventoryOpen(prev => !prev);
-  }, [interactingNPC, interactingWaypoint]);
+  }, [interactingNPC, interactingWaypoint, activeTradeSession]);
 
   const handleUseSkill = (index: number) => {
       if(!player) return;
@@ -522,8 +564,18 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         const key = e.key.toLowerCase();
-        if(key === 'i' || key === 'c') toggleInventory();
-        if(key === 'e') {
+        if (key === 'escape') {
+            setInventoryOpen(false);
+            setPartyUIOpen(false);
+            setInteractingNPC(null);
+            setInteractingWaypoint(null);
+            if (activeTradeSession) socketService.cancelTrade();
+            return;
+        }
+        
+        if (key === 'i' || key === 'c') toggleInventory();
+        
+        if (key === 'e') {
             if (nearbyNPC) {
                 setInteractingNPC(nearbyNPC);
                 setInventoryOpen(false);
@@ -538,8 +590,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleInventory, nearbyNPC, nearbyWaypoint]);
+  }, [toggleInventory, nearbyNPC, nearbyWaypoint, activeTradeSession]);
   
+  // ... inventory handlers ...
   const handleItemEquip = (itemIndex: number) => {
       if (player) {
           player.equipItem(itemIndex);
@@ -635,12 +688,32 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         onUseSkill={handleUseSkill}
         toggleInventory={toggleInventory}
         isInventoryOpen={isInventoryOpen}
+        party={party}
+        onOpenParty={() => setPartyUIOpen(true)}
+        onRequestTrade={(targetId) => socketService.requestTrade(targetId)}
       />
+      
+      {/* Invites */}
+      {pendingInvites.length > 0 && (
+           <div className="absolute top-20 center-x flex flex-col space-y-2 items-center z-50 w-full pointer-events-none">
+                {pendingInvites.map((invite, i) => (
+                    <div key={i} className="bg-gray-900/90 border border-teal-500 p-4 rounded-lg shadow-xl pointer-events-auto flex items-center space-x-4">
+                        <div className="text-white">
+                            <span className="font-bold text-teal-400">{invite.fromName}</span> invited you to {invite.type === 'party' ? 'a party' : 'trade'}.
+                        </div>
+                        <button onClick={() => handleAcceptInvite(invite)} className="bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded font-bold text-sm">Accept</button>
+                        <button onClick={() => handleDeclineInvite(invite.fromId)} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold text-sm">Decline</button>
+                    </div>
+                ))}
+           </div>
+      )}
+
       {!interactingNPC && !interactingWaypoint && nearbyWaypoint && (
          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-24 bg-cyan-900/80 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-cyan-500">
             <p className="font-bold text-lg text-cyan-100">Press [E] to Fast Travel ({nearbyWaypoint.data.name})</p>
         </div>
       )}
+      
       {isInventoryOpen && player && (
         <Inventory 
             characterData={player.toCharacterData()}
@@ -651,6 +724,27 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             onToggleLock={handleToggleItemLock}
         />
       )}
+      
+      {isPartyUIOpen && player && (
+          <PartyUI 
+            party={party}
+            onClose={() => setPartyUIOpen(false)}
+            onInvite={(name) => socketService.inviteToParty(name)}
+            onLeave={() => socketService.leaveParty()}
+          />
+      )}
+      
+      {activeTradeSession && player && (
+          <TradeUI 
+             session={activeTradeSession}
+             currentUserId={player.id as string}
+             inventory={player.inventory}
+             onUpdateOffer={(gold, items) => socketService.updateTradeOffer(gold, items)}
+             onLockOffer={(locked) => socketService.lockTrade(locked)}
+             onCancel={() => socketService.cancelTrade()}
+          />
+      )}
+
       {interactingNPC && player && (
         <NPCInteraction 
             npc={interactingNPC}

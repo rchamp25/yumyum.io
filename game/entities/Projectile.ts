@@ -1,6 +1,6 @@
 
 import { Vector2D, StatusEffect, GameContext } from "../types";
-import { normalizeVector, getDistance, findNearestEnemy } from "../utils";
+import { normalizeVector, getDistance, findNearestEnemy } from "../math";
 import { Character } from "./Character";
 import { Player } from "./Player";
 import { VisualEffect } from "./VisualEffect";
@@ -141,6 +141,7 @@ export class Projectile {
     // Handle bouncing
     if (this.bounces > 0) {
         this.bounces--;
+        // Use 'as any' to cast to the generic requirement, or rely on the fact that Enemy satisfies Targetable
         const newTarget = findNearestEnemy(this.position, game.enemies.filter(e => !this.hitIds.includes(e.id)), 300);
         if (newTarget) {
             const direction = normalizeVector({ x: newTarget.position.x - this.position.x, y: newTarget.position.y - this.position.y });

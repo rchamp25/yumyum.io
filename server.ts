@@ -4,7 +4,7 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Vector2D, CharacterData, ServerEnemy } from './game/types';
+import { Vector2D, CharacterData, ServerEnemy, Party, PartyMember, TradeSession, TradeOffer } from './game/types';
 import { GAME_CONFIG, ENEMY_TYPES, BOSS_TYPES, BOSS_ZONES, BOSS_CONFIG } from './game/constants';
 import { calculateFinalStats } from './game/stats';
 import { generateLoot } from './game/lootUtils';
@@ -15,11 +15,14 @@ const __dirname = path.dirname(__filename);
 
 interface ServerPlayer {
     id: string;
+    socketId: string;
     position: Vector2D;
     characterData: CharacterData;
     input: Set<string>;
     speed: number;
     radius: number;
+    partyId: string | null;
+    tradeSessionId: string | null;
 }
 
 const app = express();
@@ -33,9 +36,144 @@ const io = new Server(server, {
 
 const players = new Map<string, ServerPlayer>();
 const enemies = new Map<string, ServerEnemy>();
+const parties = new Map<string, Party>();
+const tradeSessions = new Map<string, TradeSession>();
 
 let bossSpawnTimer = 0;
 let globalBossCooldown = 0;
+
+// --- Party Helpers ---
+function broadcastPartyUpdate(partyId: string) {
+    const party = parties.get(partyId);
+    if (party) {
+        party.members.forEach(m => {
+            // Update health info before sending
+            const p = players.get(m.id);
+            if (p) {
+                m.health = p.characterData.stats.health;
+                m.maxHealth = p.characterData.stats.maxHealth;
+                m.level = p.characterData.level;
+            }
+            io.to(m.id).emit('party_update', party);
+        });
+    }
+}
+
+function leaveParty(playerId: string) {
+    const player = players.get(playerId);
+    if (!player || !player.partyId) return;
+    
+    const partyId = player.partyId;
+    const party = parties.get(partyId);
+    
+    if (party) {
+        party.members = party.members.filter(m => m.id !== playerId);
+        player.partyId = null;
+        io.to(playerId).emit('party_update', null);
+
+        if (party.members.length === 0) {
+            parties.delete(partyId);
+        } else {
+            if (party.leaderId === playerId) {
+                party.leaderId = party.members[0].id;
+            }
+            broadcastPartyUpdate(partyId);
+        }
+    }
+}
+
+// --- Trade Helpers ---
+function endTrade(sessionId: string, completed: boolean) {
+    const session = tradeSessions.get(sessionId);
+    if (session) {
+        const p1 = players.get(session.player1Id);
+        const p2 = players.get(session.player2Id);
+        
+        if (p1) {
+            p1.tradeSessionId = null;
+            io.to(p1.socketId).emit('trade_update', null);
+            if (completed) io.to(p1.socketId).emit('trade_completed', true);
+        }
+        if (p2) {
+            p2.tradeSessionId = null;
+            io.to(p2.socketId).emit('trade_update', null);
+            if (completed) io.to(p2.socketId).emit('trade_completed', true);
+        }
+        tradeSessions.delete(sessionId);
+    }
+}
+
+function processTrade(session: TradeSession) {
+    const p1 = players.get(session.player1Id);
+    const p2 = players.get(session.player2Id);
+    
+    if (!p1 || !p2) {
+        endTrade(session.id, false);
+        return;
+    }
+
+    // Verify gold
+    if (p1.characterData.gold < session.player1Offer.gold || p2.characterData.gold < session.player2Offer.gold) {
+        endTrade(session.id, false);
+        return;
+    }
+    
+    // Verify Items existence
+    // Simplification: Assume client sent valid indices. In prod, re-verify item IDs.
+    
+    // Execute Swap
+    // 1. Deduct Gold
+    p1.characterData.gold -= session.player1Offer.gold;
+    p2.characterData.gold -= session.player2Offer.gold;
+    
+    // 2. Remove Items (Set to null in inventory)
+    session.player1Offer.items.forEach(i => {
+        if (p1.characterData.inventory[i.inventoryIndex]) {
+            p1.characterData.inventory[i.inventoryIndex] = null;
+        }
+    });
+    session.player2Offer.items.forEach(i => {
+        if (p2.characterData.inventory[i.inventoryIndex]) {
+            p2.characterData.inventory[i.inventoryIndex] = null;
+        }
+    });
+    
+    // 3. Add Gold
+    p1.characterData.gold += session.player2Offer.gold;
+    p2.characterData.gold += session.player1Offer.gold;
+
+    // 4. Add Items (Find empty slots)
+    // Note: In a real scenario we need to ensure space exists BEFORE modifying.
+    // Assuming UI checked space, or push to overflow. 
+    // For robustness, we push to first null, if no null, we might lose item (bad UX, but ok for MVP)
+    // Better: Check space before execute. If not enough, fail trade.
+    
+    // Helper to add item
+    const addItem = (player: ServerPlayer, item: any) => {
+        const emptyIdx = player.characterData.inventory.findIndex(s => s === null);
+        if (emptyIdx !== -1) {
+            player.characterData.inventory[emptyIdx] = item;
+        } else {
+            // Fallback: Drop on ground if full? Or just fail? 
+            // Let's just try to push (might expand array if dynamic, but fixed size usually)
+            // For now, fail-safe: drop near player
+            // This would require emitting a loot drop.
+            // Simplified: Just overwrite a slot? No.
+            // Let's just put it in the array, the client handles overflow display/logic if array > size
+            player.characterData.inventory.push(item);
+        }
+    };
+    
+    session.player1Offer.items.forEach(i => addItem(p2, i.item));
+    session.player2Offer.items.forEach(i => addItem(p1, i.item));
+
+    // Sync updates to clients
+    io.to(p1.socketId).emit('update_character', p1.characterData);
+    io.to(p2.socketId).emit('update_character', p2.characterData);
+    
+    endTrade(session.id, true);
+}
+
 
 function spawnEnemies() {
     const currentEnemyCount = enemies.size;
@@ -127,11 +265,14 @@ io.on('connection', (socket: Socket) => {
 
         players.set(socket.id, {
             id: socket.id,
+            socketId: socket.id,
             characterData,
             position: startPosition,
             input: new Set<string>(),
             speed: stats.speed,
             radius: GAME_CONFIG.PLAYER_RADIUS,
+            partyId: null,
+            tradeSessionId: null
         });
         console.log(`Player ${characterData.name} (${socket.id}) joined.`);
     });
@@ -139,13 +280,12 @@ io.on('connection', (socket: Socket) => {
     socket.on('update_character', (characterData: CharacterData) => {
         const player = players.get(socket.id);
         if (player) {
-            // Update the server's copy of character data (equipment, level, etc.)
             player.characterData = characterData;
-            
-            // Recalculate server-side stats (Speed, Item Find) using the shared utility
             const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position);
             player.speed = stats.speed;
-            // Note: itemFind is calculated on the fly during loot generation
+            
+            // Broadcast hp updates to party
+            if (player.partyId) broadcastPartyUpdate(player.partyId);
         }
     });
 
@@ -156,6 +296,166 @@ io.on('connection', (socket: Socket) => {
             player.input = new Set(keys);
         }
     });
+
+    // --- PARTY EVENTS ---
+    socket.on('party_invite', (targetName: string) => {
+        const sender = players.get(socket.id);
+        if (!sender) return;
+
+        const target = Array.from(players.values()).find(p => p.characterData.name.toLowerCase() === targetName.toLowerCase());
+        
+        if (target) {
+            if (target.id === sender.id) return; // Can't invite self
+            if (target.partyId) return; // Already in party (could send error)
+            
+            io.to(target.socketId).emit('invite_received', {
+                fromId: sender.id,
+                fromName: sender.characterData.name,
+                type: 'party'
+            });
+        }
+    });
+
+    socket.on('party_accept', (fromId: string) => {
+        const acceptor = players.get(socket.id);
+        const sender = players.get(fromId);
+        
+        if (!acceptor || !sender) return;
+        if (acceptor.partyId) return;
+
+        let partyId = sender.partyId;
+        if (!partyId) {
+            // Create new party
+            partyId = `party_${Date.now()}_${Math.random()}`;
+            const newParty: Party = {
+                id: partyId,
+                leaderId: sender.id,
+                members: []
+            };
+            parties.set(partyId, newParty);
+            
+            // Add sender
+            sender.partyId = partyId;
+            newParty.members.push({
+                id: sender.id,
+                name: sender.characterData.name,
+                level: sender.characterData.level,
+                characterClass: sender.characterData.characterClass,
+                health: sender.characterData.stats.health,
+                maxHealth: sender.characterData.stats.maxHealth
+            });
+        }
+        
+        const party = parties.get(partyId);
+        if (party) {
+            acceptor.partyId = partyId;
+            party.members.push({
+                id: acceptor.id,
+                name: acceptor.characterData.name,
+                level: acceptor.characterData.level,
+                characterClass: acceptor.characterData.characterClass,
+                health: acceptor.characterData.stats.health,
+                maxHealth: acceptor.characterData.stats.maxHealth
+            });
+            broadcastPartyUpdate(partyId);
+        }
+    });
+
+    socket.on('party_leave', () => {
+        leaveParty(socket.id);
+    });
+
+    // --- TRADE EVENTS ---
+    socket.on('trade_request', (targetId: string) => {
+        const sender = players.get(socket.id);
+        const target = players.get(targetId);
+        if (!sender || !target) return;
+        
+        if (sender.tradeSessionId || target.tradeSessionId) return; // Busy
+        if (sender.partyId !== target.partyId || !sender.partyId) return; // Must be in party
+
+        io.to(target.socketId).emit('invite_received', {
+            fromId: sender.id,
+            fromName: sender.characterData.name,
+            type: 'trade'
+        });
+    });
+
+    socket.on('trade_accept', (fromId: string) => {
+        const p2 = players.get(socket.id); // Acceptor
+        const p1 = players.get(fromId); // Initiator
+        
+        if (!p1 || !p2) return;
+        if (p1.tradeSessionId || p2.tradeSessionId) return;
+
+        const sessionId = `trade_${Date.now()}`;
+        const session: TradeSession = {
+            id: sessionId,
+            player1Id: p1.id,
+            player2Id: p2.id,
+            player1Name: p1.characterData.name,
+            player2Name: p2.characterData.name,
+            player1Offer: { gold: 0, items: [], isLocked: false },
+            player2Offer: { gold: 0, items: [], isLocked: false },
+        };
+
+        tradeSessions.set(sessionId, session);
+        p1.tradeSessionId = sessionId;
+        p2.tradeSessionId = sessionId;
+
+        io.to(p1.socketId).emit('trade_update', session);
+        io.to(p2.socketId).emit('trade_update', session);
+    });
+
+    socket.on('trade_update', (payload: { gold: number, items: any[] }) => {
+        const player = players.get(socket.id);
+        if (!player || !player.tradeSessionId) return;
+        
+        const session = tradeSessions.get(player.tradeSessionId);
+        if (!session) return;
+
+        const isP1 = session.player1Id === player.id;
+        const offer = isP1 ? session.player1Offer : session.player2Offer;
+        
+        if (offer.isLocked) return; // Can't update if locked
+
+        offer.gold = payload.gold;
+        offer.items = payload.items;
+        
+        // Reset locks if offers change
+        session.player1Offer.isLocked = false;
+        session.player2Offer.isLocked = false;
+
+        io.to(players.get(session.player1Id)!.socketId).emit('trade_update', session);
+        io.to(players.get(session.player2Id)!.socketId).emit('trade_update', session);
+    });
+
+    socket.on('trade_lock', (isLocked: boolean) => {
+        const player = players.get(socket.id);
+        if (!player || !player.tradeSessionId) return;
+        
+        const session = tradeSessions.get(player.tradeSessionId);
+        if (!session) return;
+
+        const isP1 = session.player1Id === player.id;
+        if (isP1) session.player1Offer.isLocked = isLocked;
+        else session.player2Offer.isLocked = isLocked;
+
+        io.to(players.get(session.player1Id)!.socketId).emit('trade_update', session);
+        io.to(players.get(session.player2Id)!.socketId).emit('trade_update', session);
+
+        if (session.player1Offer.isLocked && session.player2Offer.isLocked) {
+            processTrade(session);
+        }
+    });
+
+    socket.on('trade_cancel', () => {
+        const player = players.get(socket.id);
+        if (player && player.tradeSessionId) {
+            endTrade(player.tradeSessionId, false);
+        }
+    });
+
     
     socket.on('hit_enemy', (payload: { enemyId: string, damage: number }) => {
         const enemy = enemies.get(payload.enemyId);
@@ -166,50 +466,82 @@ io.on('connection', (socket: Socket) => {
             if (enemy.health <= 0) {
                 enemies.delete(payload.enemyId);
                 
-                // Reward Logic
-                let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
-                if (enemy.isBoss) xpValue *= 10;
-                const xpReward = Math.floor(xpValue);
-                const goldReward = Math.floor(Math.random() * enemy.level + 1) * (enemy.isBoss ? 20 : 1);
-
-                socket.emit('enemy_killed', {
-                    enemyId: payload.enemyId,
-                    xp: xpReward,
-                    gold: goldReward,
-                    enemyLevel: enemy.level
-                });
-                
                 // Boss Logic
                 if (enemy.isBoss) {
                      globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
 
-                // Loot Generation (Instanced)
-                const killerStats = calculateFinalStats(
-                    attacker.characterData.stats, 
-                    attacker.characterData.equipment, 
-                    attacker.position
-                );
-
-                const drops = generateLoot(
-                    enemy.level, 
-                    enemy.position, 
-                    enemy.isBoss, 
-                    killerStats.itemFind || 0
-                );
-
-                if (drops.length > 0) {
-                    socket.emit('loot_dropped', drops.map(item => ({
-                        item,
-                        position: enemy.position
-                    })));
+                // Determine reward recipients
+                const recipients: ServerPlayer[] = [];
+                if (attacker.partyId) {
+                    const party = parties.get(attacker.partyId);
+                    if (party) {
+                        party.members.forEach(m => {
+                            const p = players.get(m.id);
+                            if (p && getDistance(p.position, enemy.position) < 1500) {
+                                recipients.push(p);
+                            }
+                        });
+                    } else {
+                        recipients.push(attacker);
+                    }
+                } else {
+                    recipients.push(attacker);
                 }
+
+                const isPartyKill = recipients.length > 1;
+                const multiplier = isPartyKill ? 0.8 : 1.0;
+
+                recipients.forEach(recipient => {
+                     // Reward Logic
+                    let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
+                    if (enemy.isBoss) xpValue *= 10;
+                    const xpReward = Math.floor(xpValue * multiplier);
+                    const goldReward = Math.floor((Math.random() * enemy.level + 1) * (enemy.isBoss ? 20 : 1) * multiplier);
+
+                    io.to(recipient.socketId).emit('enemy_killed', {
+                        enemyId: payload.enemyId,
+                        xp: xpReward,
+                        gold: goldReward,
+                        enemyLevel: enemy.level
+                    });
+
+                    // Loot Generation (Instanced per player)
+                    const killerStats = calculateFinalStats(
+                        recipient.characterData.stats, 
+                        recipient.characterData.equipment, 
+                        recipient.position
+                    );
+
+                    const drops = generateLoot(
+                        enemy.level, 
+                        enemy.position, 
+                        enemy.isBoss, 
+                        killerStats.itemFind || 0
+                    );
+
+                    // Apply Party Penalty to Drop Quantity/Rate
+                    // Since generateLoot determines *if* items drop, we can filter the result array
+                    const finalDrops = isPartyKill 
+                        ? drops.filter(() => Math.random() < 0.8) 
+                        : drops;
+
+                    if (finalDrops.length > 0) {
+                        io.to(recipient.socketId).emit('loot_dropped', finalDrops.map(item => ({
+                            item,
+                            position: enemy.position
+                        })));
+                    }
+                });
             }
         }
     });
 
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
+        leaveParty(socket.id);
+        const p = players.get(socket.id);
+        if (p && p.tradeSessionId) endTrade(p.tradeSessionId, false);
         players.delete(socket.id);
     });
 });

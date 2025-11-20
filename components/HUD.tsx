@@ -7,7 +7,8 @@ import { Enemy } from '../game/entities/Enemy';
 import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
 import { GAME_CONFIG, BOSS_CONFIG } from '../game/constants';
-import { getDistance } from '../game/utils';
+import { getDistance } from '../game/math';
+import { Party, CharacterClass } from '../game/types';
 
 interface HUDProps {
   player: Player | null;
@@ -18,6 +19,9 @@ interface HUDProps {
   onUseSkill: (index: number) => void;
   toggleInventory: () => void;
   isInventoryOpen: boolean;
+  party: Party | null;
+  onOpenParty: () => void;
+  onRequestTrade: (targetId: string) => void;
 }
 
 const StatBar: React.FC<{ value: number; maxValue: number; color: string; label: string }> = ({ value, maxValue, color, label }) => {
@@ -68,7 +72,7 @@ const BossHealthBar: React.FC<{ boss: Enemy }> = ({ boss }) => {
     );
 };
 
-const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[] }> = ({ player, enemies, npcs, waypoints }) => {
+const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[]; party: Party | null }> = ({ player, enemies, npcs, waypoints, party }) => {
     const mapSize = 200;
     const scale = mapSize / Math.max(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
 
@@ -124,17 +128,49 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, onUseSkill, toggleInventory, isInventoryOpen }) => {
+const PartyFrame: React.FC<{ member: Party['members'][0], currentUserId: string, onRequestTrade: (id: string) => void }> = ({ member, currentUserId, onRequestTrade }) => {
+    if (member.id === currentUserId) return null; // Don't show self in party frame
+
+    const classColors = {
+        [CharacterClass.Warrior]: 'text-red-400 border-red-500',
+        [CharacterClass.Mage]: 'text-blue-400 border-blue-500',
+        [CharacterClass.Archer]: 'text-green-400 border-green-500',
+    };
+    
+    const colorClass = classColors[member.characterClass] || 'text-gray-400 border-gray-500';
+    const healthPct = (member.health / member.maxHealth) * 100;
+
+    return (
+        <div className={`bg-gray-900/80 backdrop-blur-sm border-l-4 p-2 rounded mb-2 w-48 pointer-events-auto group relative ${colorClass.split(' ')[1]}`}>
+             <div className="flex justify-between items-center">
+                 <span className={`font-bold text-sm ${colorClass.split(' ')[0]}`}>{member.name}</span>
+                 <span className="text-xs text-gray-400">Lv {member.level}</span>
+             </div>
+             <div className="w-full bg-gray-800 h-2 mt-1 rounded-full overflow-hidden">
+                 <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${healthPct}%`}}></div>
+             </div>
+             
+             {/* Trade Button Overlay */}
+             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded">
+                 <button 
+                    onClick={() => onRequestTrade(member.id)}
+                    className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded"
+                 >
+                    Trade
+                 </button>
+             </div>
+        </div>
+    );
+};
+
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, onUseSkill, toggleInventory, isInventoryOpen, party, onOpenParty, onRequestTrade }) => {
   if (!player) return null;
 
   const xpToNext = player.getXpToNextLevel();
   const xpPercentage = xpToNext !== Infinity ? (player.xp / xpToNext) * 100 : 100;
 
-  // Filter active bosses that are alive AND within range of the player (inside the boss zone)
   const activeBosses = enemies.filter(e => {
       if (!e.isBoss || e.isDead) return false;
-      // Only show bar if inside the zone (using distance to boss entity as proxy for zone, 
-      // or could check zone coords if boss wanders too far, but checking boss proximity is safer)
       return getDistance(player.position, e.position) < BOSS_CONFIG.ZONE_RADIUS;
   });
 
@@ -166,6 +202,15 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
             <div className="h-full bg-purple-500 rounded-full" style={{ width: `${xpPercentage}%`}}></div>
         </div>
       </div>
+      
+      {/* Left Side - Party Frames */}
+      {party && (
+          <div className="absolute top-40 left-4 z-40 flex flex-col">
+              {party.members.map(m => (
+                  <PartyFrame key={m.id} member={m} currentUserId={player.id as string} onRequestTrade={onRequestTrade} />
+              ))}
+          </div>
+      )}
 
       {/* Top Right - Vitals & Gold & Minimap */}
       <div className="absolute top-4 right-4 flex flex-col items-end space-y-2 z-40">
@@ -187,7 +232,7 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
               Item Find: <span className="font-bold text-purple-300">+{Math.round((player.getFinalStats().itemFind || 0) * 100)}%</span>
             </div>
         </div>
-        <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} />
+        <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} party={party} />
       </div>
 
       {/* Center - Interaction Prompt */}
@@ -198,8 +243,16 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
       )}
       
       {/* Bottom Center - Skill Bar */}
-      {/* FIX: Pass the entire player object to SkillBar to provide context for skill locking. */}
       {player.skills && <SkillBar player={player} onUseSkill={onUseSkill} />}
+
+      {/* Bottom Left - Party Button */}
+       <button 
+          onClick={onOpenParty}
+          className="absolute bottom-4 left-4 bg-gray-800/80 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-gray-700 pointer-events-auto hover:bg-gray-700/80 transition-colors z-40 flex items-center space-x-2"
+       >
+          <span className="text-xl">👥</span>
+          <span className="font-bold">Party</span>
+       </button>
 
       {/* Bottom Right - Inventory Button */}
        <button 

@@ -1,7 +1,6 @@
 
 import { Vector2D } from "../types";
-// FIX: Imported the missing 'getDistance' utility function.
-import { getDistance } from "../utils";
+import { getDistance } from "../math";
 
 type EffectType = 'dash_trail' | 'stomp_wave' | 'whirlwind' | 'slash_arc' | 'buff_aura' | 'teleport_in' | 'teleport_out' | 'explosion' | 'fire_explosion' | 'frost_nova' | 'rain_of_arrows' | 'loot_sparkle' | 'snow' | 'ember' | 'spore' | 'shimmer';
 

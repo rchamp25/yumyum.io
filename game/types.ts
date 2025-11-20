@@ -161,3 +161,39 @@ export interface ServerEnemy {
     bossZoneId?: string;
     typeId: string; // Key for ENEMY_TYPES or BOSS_TYPES
 }
+
+export interface PartyMember {
+    id: string;
+    name: string;
+    level: number;
+    characterClass: CharacterClass;
+    health: number;
+    maxHealth: number;
+}
+
+export interface Party {
+    id: string;
+    leaderId: string;
+    members: PartyMember[];
+}
+
+export interface TradeItem {
+    item: Item;
+    inventoryIndex: number;
+}
+
+export interface TradeOffer {
+    gold: number;
+    items: TradeItem[];
+    isLocked: boolean;
+}
+
+export interface TradeSession {
+    id: string;
+    player1Id: string;
+    player2Id: string;
+    player1Name: string;
+    player2Name: string;
+    player1Offer: TradeOffer;
+    player2Offer: TradeOffer;
+}

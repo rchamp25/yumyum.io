@@ -17,3 +17,24 @@ export function normalizeVector(vec: Vector2D): Vector2D {
     y: vec.y / length,
   };
 }
+
+// Generic interface to avoid importing the full Enemy class
+interface Targetable {
+    position: Vector2D;
+    isDead: boolean;
+}
+
+export function findNearestEnemy<T extends Targetable>(position: Vector2D, enemies: T[], maxRange: number = Infinity): T | null {
+    let nearest: T | null = null;
+    let minDist = maxRange;
+
+    for (const enemy of enemies) {
+        if (enemy.isDead) continue;
+        const dist = getDistance(position, enemy.position);
+        if (dist < minDist) {
+            minDist = dist;
+            nearest = enemy;
+        }
+    }
+    return nearest;
+}
