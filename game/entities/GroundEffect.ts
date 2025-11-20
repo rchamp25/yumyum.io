@@ -1,3 +1,4 @@
+
 import { Vector2D, StatusEffect, GameContext } from "../types";
 import { Enemy } from "./Enemy";
 import { getDistance } from "../utils";
@@ -14,10 +15,11 @@ export class GroundEffect {
     tickInterval: number = 500; // ms
     ownerId: string | number;
     ownerName: string;
-    // FIX: Added 'whirlwind' to the list of allowed effect types.
+    ownerLevel: number;
     type: 'default' | 'rain_of_arrows' | 'whirlwind';
+    bossDamageMultiplier: number;
 
-    constructor(position: Vector2D, radius: number, duration: number, color: string, effect: Omit<StatusEffect, 'startTime'>, ownerId: string | number, ownerName: string, type: 'default' | 'rain_of_arrows' | 'whirlwind' = 'default') {
+    constructor(position: Vector2D, radius: number, duration: number, color: string, effect: Omit<StatusEffect, 'startTime'>, ownerId: string | number, ownerName: string, ownerLevel: number, type: 'default' | 'rain_of_arrows' | 'whirlwind' = 'default', bossDamageMultiplier: number = 1) {
         this.position = { ...position };
         this.radius = radius;
         this.duration = duration;
@@ -26,29 +28,48 @@ export class GroundEffect {
         this.effect = effect;
         this.ownerId = ownerId;
         this.ownerName = ownerName;
+        this.ownerLevel = ownerLevel;
         this.type = type;
+        this.bossDamageMultiplier = bossDamageMultiplier;
     }
 
-    // FIX: Changed signature to accept GameContext for consistency.
     update(enemies: Enemy[], game: GameContext) {
         const now = Date.now();
         if (now - this.lastTickTime > this.tickInterval) {
             this.lastTickTime = now;
-            enemies.forEach(enemy => {
-                if (getDistance(this.position, enemy.position) < this.radius + enemy.radius) {
-                    if (this.ownerId === game.player.id) {
+            
+            // If owner is Player, check enemies
+            if (this.ownerId === game.player.id) {
+                enemies.forEach(enemy => {
+                    if (getDistance(this.position, enemy.position) < this.radius + enemy.radius) {
                         game.player.enterCombat();
+                        if (this.effect.type === 'dot' && this.effect.damagePerTick) {
+                            const tickDamage = this.effect.damagePerTick * (this.tickInterval / 1000);
+                            let finalDamage = tickDamage;
+                            if (enemy.isBoss) {
+                                finalDamage *= this.bossDamageMultiplier;
+                            }
+                            const ft = enemy.takeDamage(finalDamage, { name: this.ownerName, level: this.ownerLevel });
+                            if (ft) game.addFloatingText(ft);
+                        } else {
+                            enemy.addStatusEffect(this.effect);
+                        }
                     }
+                });
+            } 
+            // If owner is Enemy (Boss), check Player
+            else {
+                const player = game.player;
+                if (getDistance(this.position, player.position) < this.radius + player.radius) {
                     if (this.effect.type === 'dot' && this.effect.damagePerTick) {
                         const tickDamage = this.effect.damagePerTick * (this.tickInterval / 1000);
-                        const ft = enemy.takeDamage(tickDamage, { name: this.ownerName });
-                        // FIX: Used game context to add floating text.
+                        const ft = player.takeDamage(tickDamage, { name: this.ownerName, level: this.ownerLevel });
                         if (ft) game.addFloatingText(ft);
                     } else {
-                        enemy.addStatusEffect(this.effect);
+                        player.addStatusEffect(this.effect);
                     }
                 }
-            });
+            }
         }
     }
 

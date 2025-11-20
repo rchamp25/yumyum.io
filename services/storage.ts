@@ -52,6 +52,7 @@ class StorageService {
         speed: GAME_CONFIG.PLAYER_SPEED,
         healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
         itemFind: GAME_CONFIG.PLAYER_ITEM_FIND,
+        bossDamageMultiplier: 1,
       },
       inventory: Array(GAME_CONFIG.DEFAULT_INVENTORY_SIZE).fill(null),
       equipment: {

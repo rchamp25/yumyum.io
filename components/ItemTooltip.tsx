@@ -13,11 +13,13 @@ const rarityColors = {
   [ItemRarity.Rare]: 'text-blue-400',
   [ItemRarity.Epic]: 'text-purple-400',
   [ItemRarity.Legendary]: 'text-orange-400',
+  [ItemRarity.Mythic]: 'text-rose-500',
 };
 
 const formatStatName = (key: string) => {
     if (key === 'maxInventorySlots') return 'Extra Slots';
     if (key === 'itemFind') return 'Item Find';
+    if (key === 'bossDamageMultiplier') return 'Boss Damage';
     // Insert space before capital letters
     const withSpaces = key.replace(/([A-Z])/g, ' $1').trim();
     // Capitalize first letter
@@ -26,6 +28,9 @@ const formatStatName = (key: string) => {
 
 const formatStatValue = (key: string, value: number) => {
     if (key === 'itemFind') {
+        return `+${Math.round(value * 100)}%`;
+    }
+    if (key === 'bossDamageMultiplier') {
         return `+${Math.round(value * 100)}%`;
     }
     return `+${value}`;

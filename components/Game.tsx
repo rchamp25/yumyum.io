@@ -13,7 +13,7 @@ import { Waypoint } from '../game/entities/Waypoint';
 import { NPCType } from '../game/types';
 import useGameLoop from '../hooks/useGameLoop';
 import useKeyboardInput from '../hooks/useKeyboardInput';
-import { GAME_CONFIG, WAYPOINTS } from '../game/constants';
+import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG } from '../game/constants';
 import { getDistance } from '../game/utils';
 import { CRAFTING_RECIPES } from '../game/items';
 import HUD from './HUD';
@@ -32,6 +32,9 @@ interface GameProps {
 const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isDevMode, isOnlineMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
+  const bossSpawnTimerRef = useRef(0);
+  // Universal Boss Cooldown Timer
+  const globalBossSpawnTimeRef = useRef(0);
   
   const [player, setPlayer] = useState<Player | null>(null);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
@@ -56,6 +59,75 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const addGroundEffect = useCallback((ge: GroundEffect) => setGroundEffects(prev => [...prev, ge]), []);
   const addDroppedItem = useCallback((di: DroppedItem) => setDroppedItems(prev => [...prev, di]), []);
 
+  // Audio synthesis for Boss Roar
+  const playBossSpawnSound = useCallback(() => {
+    try {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContext) return;
+        
+        const ctx = new AudioContext();
+        
+        // Master Gain
+        const masterGain = ctx.createGain();
+        masterGain.connect(ctx.destination);
+        masterGain.gain.setValueAtTime(0.4, ctx.currentTime);
+        masterGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 3);
+
+        // Oscillator 1 (Low Sawtooth - The growl)
+        const osc1 = ctx.createOscillator();
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(100, ctx.currentTime);
+        osc1.frequency.linearRampToValueAtTime(30, ctx.currentTime + 2.5);
+        osc1.connect(masterGain);
+
+        // Oscillator 2 (Square - The distortion/texture)
+        const osc2 = ctx.createOscillator();
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(90, ctx.currentTime);
+        osc2.frequency.linearRampToValueAtTime(20, ctx.currentTime + 2.5);
+        
+        // Detune osc2 slightly for dissonance
+        osc2.detune.setValueAtTime(15, ctx.currentTime);
+        osc2.connect(masterGain);
+
+        // Lowpass Filter to muffle it slightly like a distant roar
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, ctx.currentTime);
+        filter.frequency.linearRampToValueAtTime(200, ctx.currentTime + 2.5);
+        
+        osc1.disconnect();
+        osc2.disconnect();
+        osc1.connect(filter);
+        osc2.connect(filter);
+        filter.connect(masterGain);
+
+        osc1.start();
+        osc2.start();
+        
+        osc1.stop(ctx.currentTime + 3);
+        osc2.stop(ctx.currentTime + 3);
+
+    } catch (e) {
+        console.error("Audio playback failed", e);
+    }
+  }, []);
+
+  // Culling Helper for Game Loop
+  const isVisible = (pos: Vector2D, radius: number = 0, buffer: number = 250) => {
+      // Using camera state from closure might be stale in gameLoop callback if not careful, 
+      // but gameLoop uses refs for most things or `player` which is a dependency.
+      // However, `camera` state updates cause re-render, so `gameLoop` is recreated.
+      // It's safer to assume `camera` is current.
+      const cvsWidth = window.innerWidth;
+      const cvsHeight = window.innerHeight;
+      
+      return pos.x + radius + buffer > camera.x &&
+             pos.x - radius - buffer < camera.x + cvsWidth &&
+             pos.y + radius + buffer > camera.y &&
+             pos.y - radius - buffer < camera.y + cvsHeight;
+  };
+
   // Initialize game
   useEffect(() => {
     const newPlayer = new Player(characterData);
@@ -63,9 +135,17 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
 
     // Spawn initial NPCs
+    // Center is WORLD_WIDTH / 2, WORLD_HEIGHT / 2
+    // Distance increased to 150
+    const cx = GAME_CONFIG.WORLD_WIDTH / 2;
+    const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
+    const dist = 150;
+
     setNpcs([
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2 + 100, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, 'Thomas', NPCType.Crafter),
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2 - 100, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, 'Trevor', NPCType.Vendor),
+        new NPC({ x: cx + dist, y: cy }, 'Thomas', NPCType.Crafter), // Right
+        new NPC({ x: cx - dist, y: cy }, 'Trevor', NPCType.Vendor), // Left
+        new NPC({ x: cx, y: cy - dist }, 'Jackson', NPCType.Seller), // Top (Renamed Type)
+        new NPC({ x: cx, y: cy + dist }, 'Rory', NPCType.WorldTraveler), // Bottom
     ]);
 
     // Initialize Waypoints
@@ -78,7 +158,17 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     const worldCenter = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
     const maxDistFromCenter = Math.max(GAME_CONFIG.WORLD_WIDTH / 2, GAME_CONFIG.WORLD_HEIGHT / 2);
     
-    // Safety counter to prevent infinite loops
+    // --- BOSS SPAWN: INITIALIZE 1 BOSS IMMEDIATELY ---
+    // Pick one random boss zone
+    const initialBossZone = BOSS_ZONES[Math.floor(Math.random() * BOSS_ZONES.length)];
+    const initialBoss = new Enemy({ x: initialBossZone.x, y: initialBossZone.y }, GAME_CONFIG.MAX_LEVEL, initialBossZone.id);
+    initialEnemies.push(initialBoss);
+    
+    // Set Global Boss Cooldown to 3 minutes from now. 
+    // This ensures the 2nd boss (limit 2) spawns 3 minutes after world load.
+    globalBossSpawnTimeRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+
+    // Normal Mob Spawning
     let attempts = 0;
     
     while (initialEnemies.length < targetInitialPopulation && attempts < 2000) {
@@ -103,8 +193,18 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         if (getDistance({x: packCenterX, y: packCenterY}, newPlayer.position) < 800) {
             continue;
         }
+        
+        // 4. Check Boss Zones (Don't spawn normal mobs in boss zones)
+        let inBossZone = false;
+        for (const zone of BOSS_ZONES) {
+             if (getDistance({x: packCenterX, y: packCenterY}, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
+                 inBossZone = true;
+                 break;
+             }
+        }
+        if (inBossZone) continue;
 
-        // 4. Determine Level based on distance
+        // 5. Determine Level based on distance
         const effectiveDist = Math.max(0, radius - GAME_CONFIG.SAFE_ZONE_RADIUS);
         const availableRange = maxDistFromCenter - GAME_CONFIG.SAFE_ZONE_RADIUS;
         const distFactor = effectiveDist / availableRange;
@@ -114,7 +214,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         // Add variance
         zoneLevel = Math.max(1, Math.min(GAME_CONFIG.MAX_LEVEL, zoneLevel - 2 + Math.floor(Math.random() * 5)));
 
-        // 5. Spawn Pack
+        // 6. Spawn Pack
         const packSize = Math.floor(Math.random() * (GAME_CONFIG.ENEMY_PACK_SIZE_MAX - GAME_CONFIG.ENEMY_PACK_SIZE_MIN + 1)) + GAME_CONFIG.ENEMY_PACK_SIZE_MIN;
 
         for (let i = 0; i < packSize; i++) {
@@ -130,12 +230,16 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     }
     setEnemies(initialEnemies);
+    // Trigger sound for initial boss
+    playBossSpawnSound();
 
-  }, [characterData]);
+  }, [characterData, playBossSpawnSound]);
   
   // Game loop
   const gameLoop = useCallback(() => {
     gameTimeRef.current++;
+    bossSpawnTimerRef.current++;
+
     if (!player || player.isDead) return;
 
     // Update player safe zone status
@@ -162,7 +266,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     updatedEnemies.forEach(e => e.update(gameContext));
 
     // Update projectiles
-    projectiles.forEach(p => p.update());
+    projectiles.forEach(p => {
+        p.update();
+    });
 
     // Update effects
     floatingTexts.forEach(ft => ft.update());
@@ -170,7 +276,71 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     groundEffects.forEach(ge => ge.update(updatedEnemies, gameContext));
     droppedItems.forEach(di => di.update(player));
 
-    // Spawn enemy packs
+    // --- SPAWN BOSS ZONE EFFECTS ---
+    // Spawn environmental particles for Boss Arenas regardless of boss status
+    BOSS_ZONES.forEach(zone => {
+        // Only spawn particles if the zone is on or near screen to save performance
+        if (isVisible({ x: zone.x, y: zone.y }, BOSS_CONFIG.ZONE_RADIUS)) {
+            // Spawn rate chance
+            if (Math.random() < 0.4) { // 40% chance per frame
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * BOSS_CONFIG.ZONE_RADIUS;
+                const pos = {
+                    x: zone.x + Math.cos(angle) * dist,
+                    y: zone.y + Math.sin(angle) * dist
+                };
+                
+                if (zone.id === 'boss_nw') { // Frozen Peak
+                    addVisualEffect(new VisualEffect(pos, 'snow', 3000, { radius: Math.random() * 2 + 2 }));
+                } else if (zone.id === 'boss_ne') { // Burning Steppe
+                    addVisualEffect(new VisualEffect(pos, 'ember', 2000, { color: '#ef4444' }));
+                } else if (zone.id === 'boss_sw') { // Toxic Bog
+                    addVisualEffect(new VisualEffect(pos, 'spore', 4000, { radius: Math.random() * 3 + 1, color: '#84cc16' }));
+                } else if (zone.id === 'boss_se') { // Crystal Cavern
+                    addVisualEffect(new VisualEffect(pos, 'shimmer', 1500, { radius: Math.random() * 5 + 3, color: '#d8b4fe' }));
+                }
+            }
+        }
+    });
+
+    // --- SPAWN BOSSES ---
+    // Check every 1 second (60 frames)
+    if (bossSpawnTimerRef.current >= 60) {
+        bossSpawnTimerRef.current = 0;
+        
+        const currentBossCount = updatedEnemies.filter(e => e.isBoss && !e.isDead).length;
+        const isUniversalCooldownReady = Date.now() > globalBossSpawnTimeRef.current;
+
+        // Only spawn if we haven't reached the boss cap AND the universal timer has passed
+        if (currentBossCount < BOSS_CONFIG.MAX_ACTIVE_BOSSES && isUniversalCooldownReady) {
+            
+            // Identify available zones (where a boss is NOT currently alive)
+            const occupiedZoneIds = updatedEnemies
+                .filter(e => e.isBoss && !e.isDead && e.bossZoneId)
+                .map(e => e.bossZoneId);
+                
+            const availableZones = BOSS_ZONES.filter(z => !occupiedZoneIds.includes(z.id));
+
+            if (availableZones.length > 0) {
+                // Pick a random available zone
+                const zone = availableZones[Math.floor(Math.random() * availableZones.length)];
+
+                // Spawn Boss
+                const boss = new Enemy({ x: zone.x, y: zone.y }, GAME_CONFIG.MAX_LEVEL, zone.id);
+                updatedEnemies.push(boss);
+                addFloatingText(new FloatingText(`⚠️ ${boss.name} has appeared!`, {x: zone.x, y: zone.y - 100}, '#ef4444', 30));
+                
+                // Play Roar
+                playBossSpawnSound();
+
+                // CRITICAL: Reset Timer Immediately
+                // Only 1 boss spawns per cycle. The timer gate closes now.
+                globalBossSpawnTimeRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+            }
+        }
+    }
+
+    // --- SPAWN NORMAL ENEMIES ---
     if (gameTimeRef.current > 200 && gameTimeRef.current % 300 === 0 && updatedEnemies.filter(e => !e.isDead).length < GAME_CONFIG.MAX_ENEMIES) {
         const packSize = Math.floor(Math.random() * (GAME_CONFIG.ENEMY_PACK_SIZE_MAX - GAME_CONFIG.ENEMY_PACK_SIZE_MIN + 1)) + GAME_CONFIG.ENEMY_PACK_SIZE_MIN;
         
@@ -190,7 +360,15 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             packCenterY = worldCenter.y + Math.sin(angle) * radius;
 
             if (getDistance({x: packCenterX, y: packCenterY}, player.position) > minSpawnDistance) {
-                validSpawn = true;
+                // Check Boss Zones
+                let inBossZone = false;
+                for (const zone of BOSS_ZONES) {
+                     if (getDistance({x: packCenterX, y: packCenterY}, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
+                         inBossZone = true;
+                         break;
+                     }
+                }
+                if (!inBossZone) validSpawn = true;
             }
             attempts++;
         }
@@ -203,12 +381,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             const availableRange = maxDistFromCenter - GAME_CONFIG.SAFE_ZONE_RADIUS;
             
             // Map distance to level 1-45
-            // 0 dist = Level 1
-            // Max dist = Level 45
             const distFactor = effectiveDist / availableRange;
             let zoneLevel = 1 + Math.floor(distFactor * (GAME_CONFIG.MAX_LEVEL - 1));
             
-            // Add some variance (+/- 2 levels), clamped
+            // Add variance
             zoneLevel = Math.max(1, Math.min(GAME_CONFIG.MAX_LEVEL, zoneLevel - 2 + Math.floor(Math.random() * 5)));
 
             for (let i = 0; i < packSize; i++) {
@@ -234,6 +410,11 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                     if (!p.piercing && p.bounces <= 0) p.expire();
                 }
             }
+        } else { // Enemy projectiles (e.g., Bosses)
+             if (getDistance(p.position, player.position) < p.radius + player.radius) {
+                 p.onHit(player, gameContext);
+                 if (!p.piercing) p.expire();
+             }
         }
     });
 
@@ -274,6 +455,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             player.gainXP(e.xpValue, addFloatingText, e.level);
             player.gainGold(e.goldValue, addFloatingText);
             player.kills++;
+
+            // Boss Death Logic - Start Universal Cooldown
+            if (e.isBoss) {
+                // Set universal cooldown to 3 minutes from now
+                globalBossSpawnTimeRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+                addFloatingText(new FloatingText(`${e.name} Defeated!`, e.position, '#a855f7', 40));
+            }
         }
         return e;
     }).filter(e => !e.isDead));
@@ -293,7 +481,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }));
     }
 
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints, camera, playBossSpawnSound]);
 
   useGameLoop(gameLoop);
 
@@ -311,15 +499,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
-
-    // Culling Helper
-    const cullingBuffer = 150;
-    const isVisible = (pos: Vector2D, radius: number = 0) => {
-        return pos.x + radius + cullingBuffer > camera.x &&
-               pos.x - radius - cullingBuffer < camera.x + canvas.width &&
-               pos.y + radius + cullingBuffer > camera.y &&
-               pos.y - radius - cullingBuffer < camera.y + canvas.height;
-    };
 
     // Draw world bounds/grid
     // Optimized Grid Drawing: Only draw lines visible on screen
@@ -345,7 +524,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         ctx.stroke();
     }
 
-    // Draw safe zone (if visible)
+    // Draw Safe Zone (if visible)
     if (isVisible({ x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.SAFE_ZONE_RADIUS)) {
         ctx.beginPath();
         ctx.arc(GAME_CONFIG.WORLD_WIDTH / 2, GAME_CONFIG.WORLD_HEIGHT / 2, GAME_CONFIG.SAFE_ZONE_RADIUS, 0, Math.PI * 2);
@@ -355,6 +534,31 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         ctx.lineWidth = 2;
         ctx.stroke();
     }
+
+    // Draw Boss Zones
+    BOSS_ZONES.forEach(zone => {
+        if (isVisible({x: zone.x, y: zone.y}, BOSS_CONFIG.ZONE_RADIUS)) {
+             ctx.beginPath();
+             ctx.arc(zone.x, zone.y, BOSS_CONFIG.ZONE_RADIUS, 0, Math.PI * 2);
+             // Subtle glowing red/purple ring
+             ctx.fillStyle = 'rgba(147, 51, 234, 0.05)';
+             ctx.fill();
+             ctx.strokeStyle = 'rgba(147, 51, 234, 0.3)';
+             ctx.lineWidth = 4;
+             ctx.setLineDash([20, 10]);
+             ctx.stroke();
+             ctx.setLineDash([]); // Reset
+             
+             // Skull icon in center of zone
+             ctx.fillStyle = 'rgba(147, 51, 234, 0.2)';
+             ctx.font = '40px sans-serif';
+             ctx.textAlign = 'center';
+             ctx.fillText('☠️', zone.x, zone.y);
+             ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+             ctx.font = 'bold 20px sans-serif';
+             ctx.fillText(zone.name, zone.x, zone.y + 30);
+        }
+    });
     
     // Draw entities with culling
     groundEffects.forEach(ge => {
@@ -373,12 +577,14 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         if(isVisible(di.position, 20)) di.draw(ctx);
     });
     
-    enemies.forEach(e => {
-        if(isVisible(e.position, e.radius)) e.draw(ctx);
-    });
-    
+    // Draw NPCs
     npcs.forEach(npc => {
         if(isVisible(npc.position, npc.radius)) npc.draw(ctx);
+    });
+
+    // Draw Enemies (Sort Bosses to top? No, draw order is fine)
+    enemies.forEach(e => {
+        if(isVisible(e.position, e.radius)) e.draw(ctx);
     });
     
     player.draw(ctx);
@@ -468,6 +674,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       }
   };
   
+  const handleInventoryMove = (fromIndex: number, toIndex: number) => {
+    if (player) {
+        player.moveItem(fromIndex, toIndex);
+        setPlayer(new Player(player.toCharacterData()));
+    }
+  };
+  
   const handleCraft = (recipe: Recipe) => {
       if (player?.craftItem(recipe)) {
           setPlayer(new Player(player.toCharacterData()));
@@ -478,6 +691,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
        if (player?.sellItem(inventoryIndex, sellFullStack)) {
             setPlayer(new Player(player.toCharacterData()));
        }
+  };
+  
+  const handleBuyItem = (item: Item, cost: number) => {
+      if (player?.buyItem(item, cost)) {
+          setPlayer(new Player(player.toCharacterData()));
+      }
   };
 
   const handleFastTravel = (destination: WaypointData) => {
@@ -518,6 +737,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             onItemEquip={handleItemEquip}
             onItemUnequip={handleItemUnequip}
             toggleInventory={toggleInventory}
+            onInventoryMove={handleInventoryMove}
         />
       )}
       {interactingNPC && player && (
@@ -528,6 +748,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             onClose={() => setInteractingNPC(null)}
             onCraft={handleCraft}
             onSell={handleSell}
+            onBuy={handleBuyItem}
         />
       )}
       {interactingWaypoint && player && (

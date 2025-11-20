@@ -1,8 +1,11 @@
+
 import React from 'react';
 import { NPC } from '../game/entities/NPC';
 import { NPCType, CharacterData, Recipe, Item } from '../game/types';
 import CraftingUI from './CraftingUI';
 import VendorUI from './VendorUI';
+import MaterialVendorUI from './MaterialVendorUI';
+import WorldTravelUI from './WorldTravelUI';
 
 interface NPCInteractionProps {
     npc: NPC;
@@ -11,9 +14,10 @@ interface NPCInteractionProps {
     onClose: () => void;
     onCraft: (recipe: Recipe) => void;
     onSell: (item: Item, inventoryIndex: number, sellFullStack: boolean) => void;
+    onBuy: (item: Item, cost: number) => void;
 }
 
-const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, characterData, recipes, onClose, onCraft, onSell }) => {
+const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, characterData, recipes, onClose, onCraft, onSell, onBuy }) => {
     
     const renderContent = () => {
         switch (npc.npcType) {
@@ -29,6 +33,21 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, characterData, rec
                     <VendorUI
                         characterData={characterData}
                         onSell={onSell}
+                        onBuy={onBuy}
+                        onClose={onClose}
+                    />
+                );
+            case NPCType.Seller:
+                return (
+                    <MaterialVendorUI 
+                        characterData={characterData}
+                        onBuy={onBuy}
+                        onClose={onClose}
+                    />
+                );
+            case NPCType.WorldTraveler:
+                return (
+                    <WorldTravelUI 
                         onClose={onClose}
                     />
                 );

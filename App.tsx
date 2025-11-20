@@ -7,7 +7,7 @@ import Game from './components/Game';
 import DeathScreen from './components/DeathScreen';
 import { authService, GoogleUser } from './services/auth';
 import { storageService } from './services/storage';
-import { CharacterData, CharacterClass, GameStats } from './game/types';
+import { CharacterData, CharacterClass, GameStats, ItemRarity } from './game/types';
 import { Player } from './game/entities/Player';
 import { MATERIALS_DB, ALL_EQUIPMENT } from './game/items';
 import { GAME_CONFIG, WAYPOINTS } from './game/constants';
@@ -74,14 +74,20 @@ const App: React.FC = () => {
             // Unlock all Waypoints
             devCharacter.discoveredWaypoints = WAYPOINTS.map(wp => wp.id);
 
-            // Spawn All Items
-            const allItems = [...Object.values(MATERIALS_DB), ...ALL_EQUIPMENT];
+            // Spawn Only Legendary Items
+            const legendaryEquipment = ALL_EQUIPMENT.filter(i => i.rarity === ItemRarity.Legendary);
+            
+            // Spawn ALL Materials (All Tiers)
+            const allMaterials = Object.values(MATERIALS_DB);
+            
+            const devItems = [...legendaryEquipment, ...allMaterials];
+
             // Expand inventory to fit everything + some buffer
-            const inventorySize = Math.max(20, allItems.length + 5);
+            const inventorySize = Math.max(GAME_CONFIG.DEFAULT_INVENTORY_SIZE, devItems.length + 5);
             devCharacter.inventory = Array(inventorySize).fill(null);
 
-            for (let i = 0; i < allItems.length; i++) {
-                const item = allItems[i];
+            for (let i = 0; i < devItems.length; i++) {
+                const item = devItems[i];
                 if (item.type === 'Material') {
                     devCharacter.inventory[i] = { ...item, quantity: 999 };
                 } else {

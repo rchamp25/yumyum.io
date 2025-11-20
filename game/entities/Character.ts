@@ -43,7 +43,7 @@ export abstract class Character {
         return Date.now() < this.invulnerableUntil;
     }
 
-    takeDamage(amount: number, source?: { name: string }): FloatingText | null {
+    takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
         if (this.isDead) return null;
         if (this.isInvulnerable()) return null;
 
@@ -126,9 +126,6 @@ export abstract class Character {
                 if(effect.type === 'shield' && effect.shieldHealth) {
                     // Only remove remaining shield, don't go negative if it was consumed
                     this.shield = Math.max(0, this.shield - effect.shieldHealth);
-                    // Actually, simpler logic: reset shield if it was purely from this effect? 
-                    // Since we don't track which shield points belong to which effect, 
-                    // a simple reduction is the best approximation, clamped to 0.
                 }
                  return false; // Effect expired
              }

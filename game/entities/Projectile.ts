@@ -1,3 +1,4 @@
+
 import { Vector2D, StatusEffect, GameContext, CharacterClass } from "../types";
 import { normalizeVector, getDistance, findNearestEnemy } from "../utils";
 import { Character } from "./Character";
@@ -16,6 +17,7 @@ export class Projectile {
   speed: number;
   ownerId: string | number;
   ownerName: string;
+  ownerLevel: number;
   color: string;
   piercing: boolean = false;
   bounces: number = 0;
@@ -27,6 +29,7 @@ export class Projectile {
   };
   range: number = 1000;
   distanceTraveled: number = 0;
+  bossDamageMultiplier: number;
 
 
   constructor(
@@ -36,7 +39,9 @@ export class Projectile {
     speed: number,
     ownerId: string | number,
     ownerName: string,
-    color: string = 'white'
+    ownerLevel: number,
+    color: string = 'white',
+    bossDamageMultiplier: number = 1
   ) {
     this.id = nextId++;
     this.position = { ...startPosition };
@@ -49,7 +54,9 @@ export class Projectile {
     this.speed = speed;
     this.ownerId = ownerId;
     this.ownerName = ownerName;
+    this.ownerLevel = ownerLevel;
     this.color = color;
+    this.bossDamageMultiplier = bossDamageMultiplier;
   }
 
   update() {
@@ -83,7 +90,13 @@ export class Projectile {
         game.player.enterCombat();
     }
 
-    const ft = target.takeDamage(this.damage, { name: this.ownerName });
+    let finalDamage = this.damage;
+    // Check if target is boss and apply multiplier
+    if ('isBoss' in target && (target as any).isBoss) {
+        finalDamage *= this.bossDamageMultiplier;
+    }
+
+    const ft = target.takeDamage(finalDamage, { name: this.ownerName, level: this.ownerLevel });
     if (ft) game.addFloatingText(ft);
     this.hitIds.push(target.id);
 
@@ -95,7 +108,11 @@ export class Projectile {
                 const targets = (target instanceof Player) ? [game.player] : game.enemies;
                 targets.forEach(enemy => {
                     if (enemy.id !== target.id && getDistance(this.position, enemy.position) < (this.onHitEffects!.radius || 80)) {
-                         const explosionFt = enemy.takeDamage(this.damage * 0.75, { name: `${this.ownerName}'s Explosion` });
+                         let explosionDamage = this.damage * 0.75;
+                         if ('isBoss' in enemy && (enemy as any).isBoss) {
+                             explosionDamage *= this.bossDamageMultiplier;
+                         }
+                         const explosionFt = enemy.takeDamage(explosionDamage, { name: `${this.ownerName}'s Explosion`, level: this.ownerLevel });
                          if(explosionFt) game.addFloatingText(explosionFt);
                     }
                 });

@@ -20,6 +20,7 @@ export const WEAPONS_DB: { [key: string]: Item } = {
     'w_rar_01': { id: 'w_rar_01', name: 'Elven Bow', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Rare, stats: { damage: 15 }, sellPrice: 100 },
     'w_epi_01': { id: 'w_epi_01', name: 'Archmage Staff', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Epic, stats: { damage: 25 }, sellPrice: 500 },
     'w_leg_01': { id: 'w_leg_01', name: 'Fallen King Blade', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Legendary, stats: { damage: 45, maxHealth: 50 }, description: "It thirsts for vengeance.", sellPrice: 2000 },
+    'w_myt_01': { id: 'w_myt_01', name: 'The Boss Hunter', type: 'Equipment', slot: ItemSlot.Weapon, rarity: ItemRarity.Mythic, stats: { damage: 80, maxHealth: 200, speed: 0.5, itemFind: 1.0, bossDamageMultiplier: 1.0 }, description: "Forged solely to slay gods. Deals double damage to bosses.", sellPrice: 10000 },
 };
 
 // --- ARMOR ---
@@ -74,6 +75,19 @@ export const CRAFTING_RECIPES: Recipe[] = [
     
     { id: 'craft_w_leg_01', result: WEAPONS_DB['w_leg_01'], ingredients: [{ materialId: 'mat_epi', quantity: 10 }, { materialId: 'mat_leg', quantity: 2 }] },
     { id: 'craft_bag_leg', result: BAGS_DB['bag_leg'], ingredients: [{ materialId: 'mat_epi', quantity: 20 }, { materialId: 'mat_leg', quantity: 5 }] },
+
+    // Mythic - Doubled Costs
+    { 
+        id: 'craft_w_myt_01', 
+        result: WEAPONS_DB['w_myt_01'], 
+        ingredients: [
+            { materialId: 'mat_leg', quantity: 30 }, 
+            { materialId: 'mat_epi', quantity: 60 },
+            { materialId: 'mat_rar', quantity: 100 },
+            { materialId: 'mat_unc', quantity: 200 },
+            { materialId: 'mat_com', quantity: 500 }
+        ] 
+    },
 ];
 
 export function getRandomItem(level: number, rarityModifier: number = 1): Item | null {

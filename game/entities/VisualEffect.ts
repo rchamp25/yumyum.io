@@ -3,7 +3,7 @@ import { Vector2D } from "../types";
 // FIX: Imported the missing 'getDistance' utility function.
 import { getDistance } from "../utils";
 
-type EffectType = 'dash_trail' | 'stomp_wave' | 'whirlwind' | 'slash_arc' | 'buff_aura' | 'teleport_in' | 'teleport_out' | 'explosion' | 'fire_explosion' | 'frost_nova' | 'rain_of_arrows' | 'loot_sparkle';
+type EffectType = 'dash_trail' | 'stomp_wave' | 'whirlwind' | 'slash_arc' | 'buff_aura' | 'teleport_in' | 'teleport_out' | 'explosion' | 'fire_explosion' | 'frost_nova' | 'rain_of_arrows' | 'loot_sparkle' | 'snow' | 'ember' | 'spore' | 'shimmer';
 
 interface EffectOptions {
     radius?: number;
@@ -14,6 +14,7 @@ interface EffectOptions {
 
 export class VisualEffect {
     position: Vector2D;
+    velocity: Vector2D = { x: 0, y: 0 }; // Added velocity for drifting particles
     type: EffectType;
     duration: number;
     startTime: number;
@@ -34,6 +35,24 @@ export class VisualEffect {
 
         this.maxLife = duration;
         this.life = duration;
+
+        // Initialize specific weather velocities
+        if (this.type === 'snow') {
+            this.velocity = { 
+                x: (Math.random() - 0.5) * 2, 
+                y: Math.random() * 2 + 1 
+            };
+        } else if (this.type === 'ember') {
+            this.velocity = { 
+                x: (Math.random() - 0.5) * 1, 
+                y: -(Math.random() * 1.5 + 0.5) 
+            };
+        } else if (this.type === 'spore') {
+            this.velocity = { 
+                x: (Math.random() - 0.5) * 0.5, 
+                y: (Math.random() - 0.5) * 0.5 
+            };
+        }
 
         if (this.type === 'fire_explosion') {
             for (let i = 0; i < 30; i++) {
@@ -65,6 +84,13 @@ export class VisualEffect {
 
     update() {
         this.life = this.maxLife - (Date.now() - this.startTime);
+        
+        // Apply velocity for single-particle effects
+        if (this.velocity.x !== 0 || this.velocity.y !== 0) {
+            this.position.x += this.velocity.x;
+            this.position.y += this.velocity.y;
+        }
+
         if (this.type === 'fire_explosion' || this.type === 'loot_sparkle') {
             this.particles.forEach(p => {
                 p.pos.x += p.vel.x;
@@ -85,6 +111,44 @@ export class VisualEffect {
         ctx.save();
         
         switch (this.type) {
+             case 'snow': {
+                 ctx.globalAlpha = Math.sin(progress * Math.PI); // Fade in and out
+                 ctx.fillStyle = 'white';
+                 ctx.beginPath();
+                 ctx.arc(this.position.x, this.position.y, this.options.radius || 3, 0, Math.PI * 2);
+                 ctx.fill();
+                 break;
+             }
+             case 'ember': {
+                 ctx.globalAlpha = 1 - progress;
+                 ctx.fillStyle = this.options.color || '#f97316';
+                 ctx.beginPath();
+                 // Draw small diamond/square
+                 ctx.rect(this.position.x - 2, this.position.y - 2, 4, 4);
+                 ctx.fill();
+                 break;
+             }
+             case 'spore': {
+                 ctx.globalAlpha = 0.6 + Math.sin(Date.now() / 200) * 0.2;
+                 ctx.fillStyle = this.options.color || '#84cc16';
+                 ctx.beginPath();
+                 ctx.arc(this.position.x, this.position.y, this.options.radius || 2, 0, Math.PI * 2);
+                 ctx.fill();
+                 break;
+             }
+             case 'shimmer': {
+                 ctx.globalAlpha = Math.abs(Math.sin(Date.now() / 300));
+                 ctx.fillStyle = this.options.color || '#a855f7';
+                 const size = this.options.radius || 4;
+                 ctx.beginPath();
+                 // Draw star/cross
+                 ctx.moveTo(this.position.x, this.position.y - size);
+                 ctx.lineTo(this.position.x + size/2, this.position.y);
+                 ctx.lineTo(this.position.x, this.position.y + size);
+                 ctx.lineTo(this.position.x - size/2, this.position.y);
+                 ctx.fill();
+                 break;
+             }
              case 'loot_sparkle':
              case 'fire_explosion': {
                 this.particles.forEach(p => {

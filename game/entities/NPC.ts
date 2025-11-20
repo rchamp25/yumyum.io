@@ -1,11 +1,6 @@
-import { Character } from './Character';
-import { Vector2D } from '../types';
 
-export enum NPCType {
-    QuestGiver,
-    Vendor,
-    Crafter,
-}
+import { Character } from './Character';
+import { Vector2D, NPCType } from '../types';
 
 export class NPC extends Character {
     npcType: NPCType;
@@ -24,11 +19,22 @@ export class NPC extends Character {
 
     draw(ctx: CanvasRenderingContext2D) {
         super.draw(ctx, false);
-        ctx.fillStyle = 'white';
+        
+        ctx.save();
         ctx.textAlign = 'center';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+
+        // Name (Below)
+        ctx.fillStyle = 'white';
         ctx.font = 'bold 12px sans-serif';
-        ctx.fillText(this.name, this.position.x, this.position.y - this.radius - 15);
+        ctx.fillText(this.name, this.position.x, this.position.y + this.radius + 22);
+        
+        // Type (Below Name)
+        ctx.fillStyle = '#e2e8f0'; // Light gray
         ctx.font = '10px sans-serif';
-        ctx.fillText(`(${NPCType[this.npcType]})`, this.position.x, this.position.y - this.radius - 5);
+        ctx.fillText(`(${NPCType[this.npcType]})`, this.position.x, this.position.y + this.radius + 34);
+        
+        ctx.restore();
     }
 }

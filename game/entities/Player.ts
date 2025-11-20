@@ -2,7 +2,7 @@
 import { Character } from './Character';
 import { CharacterData, Vector2D, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe } from '../types';
 import { normalizeVector, getDistance, findNearestEnemy } from '../utils';
-import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS } from '../constants';
+import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, BOSS_ZONES, BOSS_CONFIG } from '../constants';
 import { Projectile } from './Projectile';
 import { SKILLS_DB } from '../skills';
 import { ITEMS_DB, MATERIALS_DB } from '../items';
@@ -37,6 +37,7 @@ export class Player extends Character {
         // Handle backward compatibility for old character saves
         if (data.stats.healthRegen === undefined) data.stats.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
         if (data.stats.itemFind === undefined) data.stats.itemFind = GAME_CONFIG.PLAYER_ITEM_FIND;
+        if (data.stats.bossDamageMultiplier === undefined) data.stats.bossDamageMultiplier = 1;
 
         const finalStats = Player.calculateFinalStats(data.stats, data.equipment);
         super(data.position || { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.PLAYER_RADIUS, finalStats.maxHealth, '#4299e1', finalStats.damage, data.level);
@@ -69,6 +70,7 @@ export class Player extends Character {
         const final = { ...baseStats, maxInventorySlots: 0 };
         if (final.healthRegen === undefined) final.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
         if (final.itemFind === undefined) final.itemFind = GAME_CONFIG.PLAYER_ITEM_FIND;
+        if (final.bossDamageMultiplier === undefined) final.bossDamageMultiplier = 1;
 
         Object.values(equipment).forEach(item => {
             if (item && item.stats) {
@@ -78,13 +80,30 @@ export class Player extends Character {
                 final.healthRegen += item.stats.healthRegen || 0;
                 final.maxInventorySlots += item.stats.maxInventorySlots || 0;
                 final.itemFind += item.stats.itemFind || 0;
+                final.bossDamageMultiplier += item.stats.bossDamageMultiplier || 0;
             }
         });
         return final;
     }
 
     getFinalStats() {
-        return Player.calculateFinalStats(this.baseStats, this.equipment);
+        const stats = Player.calculateFinalStats(this.baseStats, this.equipment);
+        
+        // Check if in Boss Zone
+        let inBossZone = false;
+        for (const zone of BOSS_ZONES) {
+             if (getDistance(this.position, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
+                 inBossZone = true;
+                 break;
+             }
+        }
+
+        // Apply Boss Zone Item Find Multiplier (500% increase -> 6x multiplier)
+        if (inBossZone) {
+            stats.itemFind = (stats.itemFind || 0) * BOSS_CONFIG.BOSS_ITEM_FIND_MULTIPLIER;
+        }
+
+        return stats;
     }
 
     getMaxInventorySize(): number {
@@ -169,13 +188,31 @@ export class Player extends Character {
         this.position.x = Math.max(this.radius, Math.min(GAME_CONFIG.WORLD_WIDTH - this.radius, this.position.x));
         this.position.y = Math.max(this.radius, Math.min(GAME_CONFIG.WORLD_HEIGHT - this.radius, this.position.y));
         
-        if (this.hasStatus('whirlwind_active')) {
-            game.enemies.forEach(enemy => {
-                if (getDistance(this.position, enemy.position) < 120 + enemy.radius) {
-                    const ft = enemy.takeDamage(this.damage * 0.2, { name: this.name });
-                    if(ft) game.addFloatingText(ft);
-                }
-            });
+        // Whirlwind Logic
+        const whirlwindEffect = this.statusEffects.find(e => e.type === 'whirlwind_active');
+        if (whirlwindEffect) {
+            const now = Date.now();
+            // Initialize lastTick if undefined
+            if (!whirlwindEffect.lastTick) {
+                whirlwindEffect.lastTick = whirlwindEffect.startTime;
+            }
+
+            // Tick 4 times per second = every 250ms
+            if (now - whirlwindEffect.lastTick >= 250) {
+                whirlwindEffect.lastTick = now;
+                
+                game.enemies.forEach(enemy => {
+                    if (getDistance(this.position, enemy.position) < 120 + enemy.radius) {
+                        // 50% damage per tick. 12 ticks total = 600% Damage over 3s.
+                        let dmg = this.damage * 0.5;
+                        if (enemy.isBoss) {
+                            dmg *= stats.bossDamageMultiplier;
+                        }
+                        const ft = enemy.takeDamage(dmg, { name: this.name, level: this.level });
+                        if(ft) game.addFloatingText(ft);
+                    }
+                });
+            }
         }
 
         // Health Regeneration
@@ -269,6 +306,17 @@ export class Player extends Character {
         }
         return false;
     }
+    
+    buyItem(item: Item, cost: number): boolean {
+        if (this.gold >= cost) {
+            const qty = item.quantity || 1;
+            if (this.pickupItem({ ...item, quantity: qty })) {
+                this.gold -= cost;
+                return true;
+            }
+        }
+        return false;
+    }
 
     equipItem(inventoryIndex: number) {
         const item = this.inventory[inventoryIndex];
@@ -297,6 +345,28 @@ export class Player extends Character {
         this.recalculateStats();
         // Stat change might change inventory capacity (e.g. unequipping a bag)
         this.updateInventoryCapacity();
+    }
+
+    moveItem(fromIndex: number, toIndex: number) {
+        if (fromIndex === toIndex) return;
+        if (fromIndex < 0 || fromIndex >= this.inventory.length) return;
+        if (toIndex < 0 || toIndex >= this.inventory.length) return;
+
+        const itemA = this.inventory[fromIndex];
+        const itemB = this.inventory[toIndex];
+        
+        // Check if merging materials
+        if (itemA && itemB && itemA.id === itemB.id && itemA.type === 'Material') {
+            // Add A quantity to B
+            if (itemB.quantity && itemA.quantity) {
+                itemB.quantity += itemA.quantity;
+                this.inventory[fromIndex] = null;
+                return;
+            }
+        }
+
+        this.inventory[toIndex] = itemA;
+        this.inventory[fromIndex] = itemB;
     }
     
     craftItem(recipe: Recipe): boolean {
@@ -348,7 +418,7 @@ export class Player extends Character {
         this.health = this.maxHealth * healthPercentage;
     }
 
-    takeDamage(amount: number, source?: { name: string }): FloatingText | null {
+    takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
         const result = super.takeDamage(amount, source);
         if (result && source) {
             this.lastDamagedBy = source.name;

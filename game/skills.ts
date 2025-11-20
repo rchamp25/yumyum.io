@@ -33,7 +33,11 @@ const WarriorSkills: SkillDefinition[] = [
                 player.position.y = target.position.y - dir.y * 40;
 
                 // Damage and Stun
-                const ft = target.takeDamage(player.damage * 1.5, { name: player.name });
+                const stats = player.getFinalStats();
+                let damage = stats.damage * 1.5;
+                if (target.isBoss) damage *= stats.bossDamageMultiplier;
+
+                const ft = target.takeDamage(damage, { name: player.name, level: player.level });
                 if(ft) game.addFloatingText(ft);
                 target.addStatusEffect({ type: 'stun', duration: 1500 });
                 game.addVisualEffect(new VisualEffect(target.position, 'stomp_wave', 500, { radius: 50, color: 'white' }));
@@ -58,10 +62,14 @@ const WarriorSkills: SkillDefinition[] = [
         unlockLevel: 31,
         use: (player, game) => {
             game.addVisualEffect(new VisualEffect(player.position, 'stomp_wave', 800, { radius: 300, color: '#dc2626' }));
+            const stats = player.getFinalStats();
             game.enemies.forEach(enemy => {
                 if (getDistance(player.position, enemy.position) < 300) {
                      enemy.addStatusEffect({ type: 'stun', duration: 2000 });
-                     const ft = enemy.takeDamage(player.damage * 0.5, { name: player.name });
+                     let damage = stats.damage * 0.5;
+                     if (enemy.isBoss) damage *= stats.bossDamageMultiplier;
+
+                     const ft = enemy.takeDamage(damage, { name: player.name, level: player.level });
                      if(ft) game.addFloatingText(ft);
                 }
             });
@@ -92,7 +100,8 @@ const MageSkills: SkillDefinition[] = [
             if (nearestEnemy) {
                 direction = normalizeVector({ x: nearestEnemy.position.x - player.position.x, y: nearestEnemy.position.y - player.position.y });
             }
-            const p = new Projectile(player.position, direction, player.damage * 2.5, 8, player.id, player.name, '#f97316');
+            const stats = player.getFinalStats();
+            const p = new Projectile(player.position, direction, player.damage * 2.5, 8, player.id, player.name, player.level, '#f97316', stats.bossDamageMultiplier);
             p.onHitEffects = { type: 'explosion', radius: 100 };
             p.radius = 12;
             game.addProjectile(p);
@@ -105,10 +114,14 @@ const MageSkills: SkillDefinition[] = [
         unlockLevel: 11,
         use: (player, game) => {
             game.addVisualEffect(new VisualEffect(player.position, 'frost_nova', 800, { radius: 250, color: '#60a5fa' }));
+            const stats = player.getFinalStats();
             game.enemies.forEach(enemy => {
                 if (getDistance(player.position, enemy.position) < 250) {
                      enemy.addStatusEffect({ type: 'stun', duration: 2500 });
-                     const ft = enemy.takeDamage(player.damage, { name: player.name });
+                     let damage = stats.damage;
+                     if (enemy.isBoss) damage *= stats.bossDamageMultiplier;
+
+                     const ft = enemy.takeDamage(damage, { name: player.name, level: player.level });
                      if(ft) game.addFloatingText(ft);
                 }
             });
@@ -120,14 +133,6 @@ const MageSkills: SkillDefinition[] = [
         cooldown: 8000,
         unlockLevel: 21,
         use: (player, game) => {
-            // Determine direction from movement or default to right
-            // Since we don't have precise movement vector in context easily without refactor, 
-            // we check nearest enemy to blink AWAY or towards? Let's blink towards nearest enemy for aggression or 
-            // random if none?
-            // Better: Blink in the direction of the nearest enemy (chase) or just fixed direction?
-            // Let's try to find the nearest enemy and blink towards them if far, or away if close?
-            // Simple IO logic: Blink towards nearest enemy up to max range.
-            
             let blinkDir = { x: 0, y: 0 };
             const target = findNearestEnemy(player.position, game.enemies, 1000);
             
@@ -158,7 +163,8 @@ const MageSkills: SkillDefinition[] = [
             if (nearestEnemy) {
                 direction = normalizeVector({ x: nearestEnemy.position.x - player.position.x, y: nearestEnemy.position.y - player.position.y });
             }
-            const p = new Projectile(player.position, direction, player.damage * 3, 15, player.id, player.name, '#facc15');
+            const stats = player.getFinalStats();
+            const p = new Projectile(player.position, direction, player.damage * 3, 15, player.id, player.name, player.level, '#facc15', stats.bossDamageMultiplier);
             p.piercing = true;
             p.radius = 8;
             game.addProjectile(p);
@@ -170,10 +176,11 @@ const MageSkills: SkillDefinition[] = [
         cooldown: 18000,
         unlockLevel: 41,
         use: (player, game) => {
+             const stats = player.getFinalStats();
              for (let i = 0; i < 5; i++) {
                 const angle = (Math.PI * 2 / 5) * i;
                 const dir = { x: Math.cos(angle), y: Math.sin(angle) };
-                const p = new Projectile(player.position, dir, player.damage * 1.2, 7, player.id, player.name, '#d8b4fe');
+                const p = new Projectile(player.position, dir, player.damage * 1.2, 7, player.id, player.name, player.level, '#d8b4fe', stats.bossDamageMultiplier);
                 p.bounces = 1; // Simulate homing/seeking by bouncing
                 p.radius = 10;
                 game.addProjectile(p);
@@ -191,9 +198,10 @@ const ArcherSkills: SkillDefinition[] = [
         use: (player, game) => {
             const target = findNearestEnemy(player.position, game.enemies, 600);
             const targetPos = target ? target.position : { x: player.position.x + 100, y: player.position.y };
+            const stats = player.getFinalStats();
             
             game.addVisualEffect(new VisualEffect(targetPos, 'rain_of_arrows', 2000, { radius: 120 }));
-            game.addGroundEffect(new GroundEffect(targetPos, 120, 4000, '#22c55e', { type: 'dot', damagePerTick: player.damage * 0.8, duration: 4000 }, player.id, player.name, 'rain_of_arrows'));
+            game.addGroundEffect(new GroundEffect(targetPos, 120, 4000, '#22c55e', { type: 'dot', damagePerTick: player.damage * 0.8, duration: 4000 }, player.id, player.name, player.level, 'rain_of_arrows', stats.bossDamageMultiplier));
         }
     },
     {
@@ -207,11 +215,12 @@ const ArcherSkills: SkillDefinition[] = [
             if (nearestEnemy) {
                 baseAngle = Math.atan2(nearestEnemy.position.y - player.position.y, nearestEnemy.position.x - player.position.x);
             }
+            const stats = player.getFinalStats();
             
             const angles = [baseAngle - 0.3, baseAngle, baseAngle + 0.3];
             angles.forEach(angle => {
                 const dir = { x: Math.cos(angle), y: Math.sin(angle) };
-                game.addProjectile(new Projectile(player.position, dir, player.damage, 10, player.id, player.name, '#bef264'));
+                game.addProjectile(new Projectile(player.position, dir, player.damage, 10, player.id, player.name, player.level, '#bef264', stats.bossDamageMultiplier));
             });
         }
     },
@@ -236,7 +245,8 @@ const ArcherSkills: SkillDefinition[] = [
             if (nearestEnemy) {
                 direction = normalizeVector({ x: nearestEnemy.position.x - player.position.x, y: nearestEnemy.position.y - player.position.y });
             }
-            const p = new Projectile(player.position, direction, player.damage * 4, 18, player.id, player.name, '#f87171');
+            const stats = player.getFinalStats();
+            const p = new Projectile(player.position, direction, player.damage * 4, 18, player.id, player.name, player.level, '#f87171', stats.bossDamageMultiplier);
             p.piercing = true;
             p.radius = 10;
             game.addProjectile(p);
@@ -249,10 +259,11 @@ const ArcherSkills: SkillDefinition[] = [
         unlockLevel: 41,
         use: (player, game) => {
             const count = 12;
+            const stats = player.getFinalStats();
             for (let i = 0; i < count; i++) {
                 const angle = (Math.PI * 2 / count) * i;
                 const dir = { x: Math.cos(angle), y: Math.sin(angle) };
-                game.addProjectile(new Projectile(player.position, dir, player.damage, 10, player.id, player.name, '#a3e635'));
+                game.addProjectile(new Projectile(player.position, dir, player.damage, 10, player.id, player.name, player.level, '#a3e635', stats.bossDamageMultiplier));
             }
         }
     }

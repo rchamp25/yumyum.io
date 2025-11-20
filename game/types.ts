@@ -31,6 +31,7 @@ export enum ItemRarity {
   Rare,
   Epic,
   Legendary,
+  Mythic,
 }
 
 export interface ItemStats {
@@ -40,6 +41,7 @@ export interface ItemStats {
   healthRegen?: number;
   maxInventorySlots?: number;
   itemFind?: number; // Percentage as decimal (0.5 = 50%)
+  bossDamageMultiplier?: number; // Additional multiplier (1 = +100%)
 }
 
 export interface Item {
@@ -69,6 +71,7 @@ export interface CharacterData {
     speed: number;
     healthRegen: number;
     itemFind: number;
+    bossDamageMultiplier: number;
   };
   inventory: (Item | null)[];
   equipment: Record<ItemSlot, Item | null>;
@@ -134,6 +137,8 @@ export enum NPCType {
     QuestGiver,
     Vendor,
     Crafter,
+    Seller, // Renamed from MaterialVendor
+    WorldTraveler,
 }
 
 export interface WaypointData {

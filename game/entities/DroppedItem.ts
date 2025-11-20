@@ -49,6 +49,7 @@ export class DroppedItem {
                 [ItemRarity.Rare]: 20,
                 [ItemRarity.Epic]: 30,
                 [ItemRarity.Legendary]: 40,
+                [ItemRarity.Mythic]: 60,
             }[this.item.rarity] || 0;
             
             let pulse = 1;
@@ -96,7 +97,10 @@ export class DroppedItem {
 
         // --- Sparkle Effect for Rare+ ---
         if (this.item.rarity >= ItemRarity.Rare) {
-            const numSparkles = this.item.rarity === ItemRarity.Legendary ? 3 : (this.item.rarity === ItemRarity.Epic ? 2 : 1);
+            let numSparkles = 1;
+            if (this.item.rarity === ItemRarity.Epic) numSparkles = 2;
+            if (this.item.rarity === ItemRarity.Legendary) numSparkles = 3;
+            if (this.item.rarity === ItemRarity.Mythic) numSparkles = 5;
             
             for(let i=0; i<numSparkles; i++) {
                  // Generate pseudo-random but consistent motion based on time and index
@@ -117,7 +121,7 @@ export class DroppedItem {
                      ctx.rotate(t * 4); // Rotate sparkle
                      ctx.scale(scale, scale);
                      
-                     ctx.fillStyle = 'white';
+                     ctx.fillStyle = this.item.rarity === ItemRarity.Mythic ? '#ffe4e6' : 'white'; // Slight rose tint for Mythic stars
                      ctx.shadowColor = 'white';
                      ctx.shadowBlur = 6;
                      
@@ -142,6 +146,7 @@ export class DroppedItem {
             case ItemRarity.Rare: return '#3b82f6'; // blue-500
             case ItemRarity.Epic: return '#a855f7'; // purple-500
             case ItemRarity.Legendary: return '#f97316'; // orange-500
+            case ItemRarity.Mythic: return '#e11d48'; // rose-600
             case ItemRarity.Common:
             default:
                 return '#9ca3af'; // gray-400

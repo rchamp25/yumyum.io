@@ -11,7 +11,7 @@ export const GAME_CONFIG = {
     PLAYER_HEALTH_REGEN: 2, // HP per second
     PLAYER_ITEM_FIND: 0, // Base Item Find %
     PLAYER_RADIUS: 20,
-    DEFAULT_INVENTORY_SIZE: 30,
+    DEFAULT_INVENTORY_SIZE: 50,
     SAFE_ZONE_RADIUS: 250,
     MAX_ENEMIES: 350, // Increased for larger map
     ENEMY_SPAWN_BUFFER: 100, // Distance from safe zone edge
@@ -21,6 +21,21 @@ export const GAME_CONFIG = {
     ENEMY_AGGRO_RANGE: 180, // How far an enemy can see the player (Reduced)
     ENEMY_LEASH_RANGE: 600, // How far from spawn an enemy will chase
 };
+
+export const BOSS_CONFIG = {
+    ZONE_RADIUS: 600,
+    SPAWN_COOLDOWN: 180000, // 3 Minutes
+    MAX_ACTIVE_BOSSES: 2, // Only 2 bosses alive at once
+    BOSS_DROP_BONUS: 10, // Extra items dropped by bosses
+    BOSS_ITEM_FIND_MULTIPLIER: 6, // 6x multiplier (500% increase) when in boss zone
+};
+
+export const BOSS_ZONES = [
+    { id: 'boss_nw', x: 250, y: 250, name: "Frozen Peak" },
+    { id: 'boss_ne', x: GAME_CONFIG.WORLD_WIDTH - 250, y: 250, name: "Burning Steppe" },
+    { id: 'boss_sw', x: 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "Toxic Bog" },
+    { id: 'boss_se', x: GAME_CONFIG.WORLD_WIDTH - 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "Crystal Cavern" },
+];
 
 export const LOOT_CONFIG = {
     // Bonuses per player level
