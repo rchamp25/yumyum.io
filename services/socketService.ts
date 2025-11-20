@@ -1,15 +1,18 @@
 
 import { io, Socket } from "socket.io-client";
-import { CharacterData, ServerEnemy } from "../game/types";
+import { CharacterData, ServerEnemy, Item, Vector2D } from "../game/types";
 
-// The type for the game state object received from the server
-// Updated to include enemies
 interface GameStatePayload {
     players: Record<string, {
-        position: { x: number; y: number };
+        position: Vector2D;
         characterData: CharacterData;
     }>;
     enemies: ServerEnemy[];
+}
+
+interface LootDropPayload {
+    item: Item;
+    position: Vector2D;
 }
 
 let socket: Socket;
@@ -23,7 +26,6 @@ export const socketService = {
       return;
     }
     
-    // Use environment variable if available (Production), otherwise fallback to localhost (Dev)
     const serverUrl = (import.meta as any).env.VITE_SERVER_URL || 'http://localhost:3000';
     socket = io(serverUrl);
 
@@ -61,9 +63,16 @@ export const socketService = {
     }
   },
   
+  onLootDropped(callback: (drops: LootDropPayload[]) => void) {
+      if (socket) {
+          socket.on('loot_dropped', callback);
+      }
+  },
+  
   offGameState() {
       if(socket) {
           socket.off('game_state');
+          socket.off('loot_dropped');
       }
   },
 

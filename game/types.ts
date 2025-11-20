@@ -128,6 +128,7 @@ export interface GameContext {
     addVisualEffect: (effect: VisualEffect) => void;
     addGroundEffect: (effect: GroundEffect) => void;
     playSound: (type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => void;
+    isOnlineMode: boolean;
 }
 
 export interface Recipe {

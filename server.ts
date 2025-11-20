@@ -4,26 +4,22 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Vector2D, CharacterData, ServerEnemy } from './game/types';
+import { Vector2D, CharacterData, ServerEnemy, Item } from './game/types';
 import { GAME_CONFIG, ENEMY_TYPES, BOSS_TYPES, BOSS_ZONES, BOSS_CONFIG } from './game/constants';
+import { calculateFinalStats } from './game/stats';
+import { generateLoot } from './game/lootUtils';
+import { getDistance } from './game/math';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 interface ServerPlayer {
-    id: string; // Corresponds to socket.id
+    id: string;
     position: Vector2D;
     characterData: CharacterData;
     input: Set<string>;
     speed: number;
     radius: number;
-}
-
-// Helper
-function getDistance(p1: Vector2D, p2: Vector2D): number {
-  const dx = p1.x - p2.x;
-  const dy = p1.y - p2.y;
-  return Math.sqrt(dx * dx + dy * dy);
 }
 
 const app = express();
@@ -38,7 +34,6 @@ const io = new Server(server, {
 const players = new Map<string, ServerPlayer>();
 const enemies = new Map<string, ServerEnemy>();
 
-// --- SERVER ENEMY LOGIC ---
 let bossSpawnTimer = 0;
 let globalBossCooldown = 0;
 
@@ -46,9 +41,8 @@ function spawnEnemies() {
     const currentEnemyCount = enemies.size;
     if (currentEnemyCount >= GAME_CONFIG.MAX_ENEMIES) return;
 
-    // 1. Spawn Bosses
     bossSpawnTimer++;
-    if (bossSpawnTimer >= 60) { // 1 check per second (approx)
+    if (bossSpawnTimer >= 60) { 
         bossSpawnTimer = 0;
         const activeBosses = Array.from(enemies.values()).filter(e => e.isBoss);
         const isCooldownReady = Date.now() > globalBossCooldown;
@@ -65,7 +59,7 @@ function spawnEnemies() {
                     enemies.set(id, {
                         id,
                         position: { x: zone.x, y: zone.y },
-                        health: 20 * type.healthMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.2), // Simplified stat calc
+                        health: 20 * type.healthMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.2),
                         maxHealth: 20 * type.healthMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.2),
                         level: GAME_CONFIG.MAX_LEVEL,
                         isBoss: true,
@@ -78,19 +72,15 @@ function spawnEnemies() {
         }
     }
 
-    // 2. Spawn Mobs
-    // Simple pack spawn attempt
     if (currentEnemyCount < GAME_CONFIG.MAX_ENEMIES) {
         const packSize = Math.floor(Math.random() * 3) + 3;
         const worldCenter = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
         
-        // Try to find a spawn pos
         const angle = Math.random() * Math.PI * 2;
         const radius = GAME_CONFIG.SAFE_ZONE_RADIUS + 100 + Math.random() * (GAME_CONFIG.WORLD_WIDTH/2 - 400);
         const cx = worldCenter.x + Math.cos(angle) * radius;
         const cy = worldCenter.y + Math.sin(angle) * radius;
         
-        // Determine level
         const maxDist = Math.max(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2);
         const distFactor = (radius - GAME_CONFIG.SAFE_ZONE_RADIUS) / (maxDist - GAME_CONFIG.SAFE_ZONE_RADIUS);
         let zoneLevel = 1 + Math.floor(distFactor * (GAME_CONFIG.MAX_LEVEL - 1));
@@ -118,10 +108,8 @@ function spawnEnemies() {
     }
 }
 
-// Serve static files from the root directory
 app.use('/', express.static(__dirname) as any);
 
-// Serve index.html for any other request
 app.get('*', (_req: Request, res: Response) => {
     (res as any).sendFile(path.resolve(__dirname, 'index.html'));
 });
@@ -130,26 +118,28 @@ io.on('connection', (socket: Socket) => {
     console.log(`Player connected: ${socket.id}`);
 
     socket.on('join_game', (characterData: CharacterData) => {
-        console.log(`Player ${socket.id} (${characterData.name}) is joining the game.`);
         const startPosition = characterData.position || { 
             x: GAME_CONFIG.WORLD_WIDTH / 2, 
             y: GAME_CONFIG.WORLD_HEIGHT / 2 
         };
+
+        // Calculate initial stats to get speed
+        const stats = calculateFinalStats(characterData.stats, characterData.equipment);
 
         players.set(socket.id, {
             id: socket.id,
             characterData,
             position: startPosition,
             input: new Set<string>(),
-            speed: characterData.stats.speed, // This might need client updates if equipment changes
+            speed: stats.speed,
             radius: GAME_CONFIG.PLAYER_RADIUS,
         });
+        console.log(`Player ${characterData.name} (${socket.id}) joined.`);
     });
 
     socket.on('player_input', (inputKeys: string[]) => {
         const player = players.get(socket.id);
         if (player) {
-            // Ensure inputKeys is an array before creating Set
             const keys = Array.isArray(inputKeys) ? inputKeys : [];
             player.input = new Set(keys);
         }
@@ -157,12 +147,40 @@ io.on('connection', (socket: Socket) => {
     
     socket.on('hit_enemy', (payload: { enemyId: string, damage: number }) => {
         const enemy = enemies.get(payload.enemyId);
-        if (enemy) {
+        const attacker = players.get(socket.id);
+        
+        if (enemy && attacker) {
             enemy.health -= payload.damage;
             if (enemy.health <= 0) {
                 enemies.delete(payload.enemyId);
+                
+                // Boss Logic
                 if (enemy.isBoss) {
                      globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+                }
+
+                // Loot Generation (Instanced)
+                // 1. Get fresh stats for item find
+                const killerStats = calculateFinalStats(
+                    attacker.characterData.stats, 
+                    attacker.characterData.equipment, 
+                    attacker.position
+                );
+
+                // 2. Generate Drops
+                const drops = generateLoot(
+                    enemy.level, 
+                    enemy.position, 
+                    enemy.isBoss, 
+                    killerStats.itemFind || 0
+                );
+
+                // 3. Send drops ONLY to the killer
+                if (drops.length > 0) {
+                    socket.emit('loot_dropped', drops.map(item => ({
+                        item,
+                        position: enemy.position
+                    })));
                 }
             }
         }
@@ -174,7 +192,6 @@ io.on('connection', (socket: Socket) => {
     });
 });
 
-// Server-side game loop (60 TPS)
 setInterval(() => {
     // 1. Update Players
     for (const player of players.values()) {
@@ -190,7 +207,6 @@ setInterval(() => {
             player.position.x += (moveX / length) * player.speed;
             player.position.y += (moveY / length) * player.speed;
 
-            // World bounds clamping
             player.position.x = Math.max(player.radius, Math.min(GAME_CONFIG.WORLD_WIDTH - player.radius, player.position.x));
             player.position.y = Math.max(player.radius, Math.min(GAME_CONFIG.WORLD_HEIGHT - player.radius, player.position.y));
         }
@@ -201,7 +217,6 @@ setInterval(() => {
     
     const playerList = Array.from(players.values());
     for (const enemy of enemies.values()) {
-        // Simple AI: Move to nearest player
         let nearestDist = 99999;
         let nearestPlayer: ServerPlayer | null = null;
         
@@ -213,9 +228,8 @@ setInterval(() => {
             }
         }
         
-        // Chase Logic
         const chaseRange = enemy.isBoss ? BOSS_CONFIG.ZONE_RADIUS : GAME_CONFIG.ENEMY_AGGRO_RANGE;
-        const attackRange = 30; // Simplified
+        const attackRange = 30; 
         const type = enemy.isBoss ? BOSS_TYPES[enemy.typeId] : ENEMY_TYPES[enemy.typeId];
         const speed = type ? type.speed : 2;
 
@@ -231,17 +245,20 @@ setInterval(() => {
     }
 
     // 3. Broadcast State
-    const gameState: any = {};
-    for (const [id, player] of players.entries()) {
-        gameState[id] = {
-            position: player.position,
-            characterData: player.characterData,
+    // Ensure we convert Map to object properly
+    const playersObj: any = {};
+    players.forEach((p, id) => {
+        playersObj[id] = {
+            position: p.position,
+            characterData: p.characterData
         };
-    }
-    
-    const enemiesState = Array.from(enemies.values());
+    });
 
-    io.emit('game_state', { players: gameState, enemies: enemiesState });
+    io.emit('game_state', { 
+        players: playersObj, 
+        enemies: Array.from(enemies.values()) 
+    });
+
 }, 1000 / 60);
 
 const PORT = process.env.PORT || 3000;

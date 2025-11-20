@@ -1,10 +1,11 @@
 
 import { Character } from './Character';
 import { CharacterData, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity } from '../types';
-import { normalizeVector, getDistance } from '../utils';
+import { normalizeVector, getDistance } from '../math';
 import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, BOSS_ZONES, BOSS_CONFIG } from '../constants';
 import { SKILLS_DB } from '../skills';
 import { FloatingText } from './FloatingText';
+import { calculateFinalStats } from '../stats';
 
 export class Player extends Character {
     name: string;
@@ -17,10 +18,10 @@ export class Player extends Character {
     baseStats: CharacterData['stats'];
     skills: SkillState[];
     discoveredWaypoints: string[];
-    hasClaimedDevRewards: boolean; // Tracks if dev rewards were granted
+    hasClaimedDevRewards: boolean; 
     
     lastAttackTime: number = 0;
-    attackCooldown: number = 500; // ms
+    attackCooldown: number = 500;
     lastDamagedBy: string | null = null;
     totalDamageTaken: number = 0;
     deathLog: DeathLogEvent[] = [];
@@ -29,16 +30,16 @@ export class Player extends Character {
     lastRegenTime: number = 0;
     isInSafeZone: boolean = false;
     
-    // Temporary storage for items that fall out of inventory when bag is removed
     overflowItems: Item[] = [];
 
     constructor(data: CharacterData) {
-        // Handle backward compatibility for old character saves
         if (data.stats.healthRegen === undefined) data.stats.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
         if (data.stats.itemFind === undefined) data.stats.itemFind = GAME_CONFIG.PLAYER_ITEM_FIND;
         if (data.stats.bossDamageMultiplier === undefined) data.stats.bossDamageMultiplier = 1;
 
-        const finalStats = Player.calculateFinalStats(data.stats, data.equipment);
+        // Use shared calculation, passing undefined for position initially (no boss zone bonus in constructor)
+        const finalStats = calculateFinalStats(data.stats, data.equipment);
+        
         super(data.position || { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.PLAYER_RADIUS, finalStats.maxHealth, '#4299e1', finalStats.damage, data.level);
 
         this.id = data.id;
@@ -49,8 +50,16 @@ export class Player extends Character {
         this.kills = data.kills;
         this.inventory = [...data.inventory];
         this.equipment = { ...data.equipment };
+        
+        // IMPORTANT: We must ensure we separate base stats from final stats
+        // If data.stats already includes equipment bonuses (from a previous buggy save), 
+        // we might want to strip them here or just accept them as the new base.
+        // For safety, we trust data.stats is the base, and we recalculate final.
         this.baseStats = { ...data.stats };
-        this.health = Math.min(data.stats.health, finalStats.maxHealth);
+        
+        // Current Health Check
+        this.health = Math.min(this.health, finalStats.maxHealth);
+        
         this.discoveredWaypoints = data.discoveredWaypoints || ['wp_spawn'];
         this.hasClaimedDevRewards = data.hasClaimedDevRewards || false;
 
@@ -59,64 +68,12 @@ export class Player extends Character {
             lastUsed: 0,
         }));
 
-        // Invulnerability on login/spawn
         this.setInvulnerable(3000);
-        
-        // Ensure inventory matches current capacity on load
         this.updateInventoryCapacity();
     }
 
-    private static calculateFinalStats(baseStats: CharacterData['stats'], equipment: Record<ItemSlot, Item | null>): CharacterData['stats'] & { maxInventorySlots: number } {
-        const final = { ...baseStats, maxInventorySlots: 0 };
-        if (final.healthRegen === undefined) final.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
-        if (final.itemFind === undefined) final.itemFind = GAME_CONFIG.PLAYER_ITEM_FIND;
-        if (final.bossDamageMultiplier === undefined) final.bossDamageMultiplier = 1;
-
-        Object.values(equipment).forEach(item => {
-            if (item && item.stats) {
-                final.maxHealth += item.stats.maxHealth || 0;
-                final.damage += item.stats.damage || 0;
-                final.speed += item.stats.speed || 0;
-                final.healthRegen += item.stats.healthRegen || 0;
-                final.maxInventorySlots += item.stats.maxInventorySlots || 0;
-                final.itemFind += item.stats.itemFind || 0;
-                final.bossDamageMultiplier += item.stats.bossDamageMultiplier || 0;
-            }
-        });
-
-        // SET BONUS CHECK: Mythic Accessory + Mythic Bag
-        const hasMythicAccessory = equipment[ItemSlot.Accessory]?.rarity === ItemRarity.Mythic;
-        const hasMythicBag = equipment[ItemSlot.Bag]?.rarity === ItemRarity.Mythic;
-        
-        if (hasMythicAccessory && hasMythicBag) {
-            final.damage = Math.floor(final.damage * 1.5);
-        }
-
-        return final;
-    }
-
     getFinalStats() {
-        const stats = Player.calculateFinalStats(this.baseStats, this.equipment);
-        
-        // Check if in Boss Zone
-        let inBossZone = false;
-        for (const zone of BOSS_ZONES) {
-             if (getDistance(this.position, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
-                 inBossZone = true;
-                 break;
-             }
-        }
-
-        // Apply Boss Zone Item Find Bonus (Flat amount)
-        if (inBossZone) {
-            stats.itemFind = (stats.itemFind || 0) + BOSS_CONFIG.BOSS_ITEM_FIND_BONUS;
-            // Cap at 1000%
-            if (stats.itemFind > 10.0) {
-                stats.itemFind = 10.0;
-            }
-        }
-
-        return stats;
+        return calculateFinalStats(this.baseStats, this.equipment, this.position);
     }
 
     getMaxInventorySize(): number {
@@ -126,19 +83,15 @@ export class Player extends Character {
     updateInventoryCapacity() {
         const maxSlots = this.getMaxInventorySize();
         
-        // If expanding
         if (maxSlots > this.inventory.length) {
             const slotsToAdd = maxSlots - this.inventory.length;
             for(let i=0; i<slotsToAdd; i++) {
                 this.inventory.push(null);
             }
         } 
-        // If shrinking
         else if (maxSlots < this.inventory.length) {
             const removedItems = this.inventory.slice(maxSlots);
             this.inventory = this.inventory.slice(0, maxSlots);
-            
-            // Collect non-null items that were cut off
             removedItems.forEach(item => {
                 if (item) this.overflowItems.push(item);
             });
@@ -161,7 +114,6 @@ export class Player extends Character {
 
         const stats = this.getFinalStats();
         
-        // Apply Haste Buff / Slow Debuff
         let currentSpeed = stats.speed;
         if (this.hasStatus('slow')) {
             const factor = this.statusEffects.find(e => e.type === 'slow')?.slowFactor || 0.5;
@@ -172,7 +124,6 @@ export class Player extends Character {
             currentSpeed *= factor;
         }
 
-        // Apply Empowered Buff (Update damage property for skills to use)
         let currentDamage = stats.damage;
         if (this.hasStatus('empowered')) {
             const factor = this.statusEffects.find(e => e.type === 'empowered')?.damageMultiplier || 1.5;
@@ -187,7 +138,6 @@ export class Player extends Character {
         if (pressedKeys.has('a')) moveX -= 1;
         if (pressedKeys.has('d')) moveX += 1;
         
-        // Update moving status for animation
         this.isMoving = (moveX !== 0 || moveY !== 0);
         this.updateAnimation();
 
@@ -197,40 +147,39 @@ export class Player extends Character {
             this.position.y += normalized.y * currentSpeed;
         }
 
-        // World bounds
         this.position.x = Math.max(this.radius, Math.min(GAME_CONFIG.WORLD_WIDTH - this.radius, this.position.x));
         this.position.y = Math.max(this.radius, Math.min(GAME_CONFIG.WORLD_HEIGHT - this.radius, this.position.y));
         
-        // Whirlwind Logic
+        // Whirlwind
         const whirlwindEffect = this.statusEffects.find(e => e.type === 'whirlwind_active');
         if (whirlwindEffect) {
             const now = Date.now();
-            // Initialize lastTick if undefined
             if (!whirlwindEffect.lastTick) {
                 whirlwindEffect.lastTick = whirlwindEffect.startTime;
             }
 
-            // Tick 4 times per second = every 250ms
             if (now - whirlwindEffect.lastTick >= 250) {
                 whirlwindEffect.lastTick = now;
                 let hitAny = false;
                 
                 game.enemies.forEach(enemy => {
                     if (getDistance(this.position, enemy.position) < 120 + enemy.radius) {
-                        // 50% damage per tick. 12 ticks total = 600% Damage over 3s.
                         let dmg = this.damage * 0.5;
                         if (enemy.isBoss) {
                             dmg *= stats.bossDamageMultiplier;
                         }
                         const ft = enemy.takeDamage(dmg, { name: this.name, level: this.level });
                         
-                        // Only trigger hits locally here if offline or specific visual logic needed
-                        // In Online mode, whirlwind damage needs to be synced via socket too, but Projectile logic is handled elsewhere.
-                        // For simplicity, keep local effect for now, but in full implementation this would send 'hit_area' event.
-                        
                         if(ft) {
                             game.addFloatingText(ft);
                             hitAny = true;
+                        }
+                        // In Online Mode, we also need to tell the server we hit them with AoE
+                        if (game.isOnlineMode) {
+                             // This requires socketService to be available or passed in context.
+                             // For now, we assume main Game loop handles projectile hits, 
+                             // but AoE is trickier. 
+                             // Ideally: context.onHit(enemyId, damage)
                         }
                     }
                 });
@@ -241,11 +190,9 @@ export class Player extends Character {
             }
         }
 
-        // Health Regeneration
         const now = Date.now();
         if (now - this.lastRegenTime >= 1000) {
             this.lastRegenTime = now;
-            // Use fresh stats variable for regen calc
             const regenStats = this.getFinalStats(); 
             if (this.health < regenStats.maxHealth && !this.isDead && regenStats.healthRegen > 0) {
                 this.health = Math.min(regenStats.maxHealth, this.health + regenStats.healthRegen);
@@ -262,7 +209,6 @@ export class Player extends Character {
         if (skill && this.level >= skill.definition.unlockLevel && Date.now() - skill.lastUsed > skill.definition.cooldown) {
             skill.definition.use(this, game);
             skill.lastUsed = Date.now();
-            // Trigger attack animation
             this.attackAnimationTimer = 15;
         }
     }
@@ -275,18 +221,15 @@ export class Player extends Character {
     gainXP(amount: number, addFloatingText: (ft: FloatingText) => void, enemyLevel: number) {
         if (this.level >= GAME_CONFIG.MAX_LEVEL) return;
 
-        // Calculate XP Penalty for high level gap
         let finalXP = amount;
         const levelDiff = enemyLevel - this.level;
         
         if (levelDiff > 5) {
             const penaltySteps = levelDiff - 5;
-            // 6 levels up = 50%, 7 levels = 25%, 8 levels = 12.5%
             const multiplier = Math.pow(0.5, penaltySteps);
             finalXP = Math.floor(amount * multiplier);
         }
 
-        // Minimum 1 XP if we killed something valid (unless penalty effectively zeroes it, but let's keep 1)
         if (finalXP < 1) finalXP = 1;
 
         this.xp += finalXP;
@@ -311,12 +254,10 @@ export class Player extends Character {
         this.level++;
         this.baseStats.maxHealth += 10;
         this.baseStats.damage += 2;
-        this.health = this.getFinalStats().maxHealth;
-        this.maxHealth = this.health;
+        this.recalculateStats();
     }
     
     pickupItem(item: Item): boolean {
-        // Handle materials stacking
         if (item.type === 'Material') {
             const existingStack = this.inventory.find(i => i && i.id === item.id);
             if (existingStack && existingStack.quantity) {
@@ -357,9 +298,8 @@ export class Player extends Character {
         
         const currentItem = this.equipment[item.slot];
         this.equipment[item.slot] = item;
-        this.inventory[inventoryIndex] = currentItem; // Swap
+        this.inventory[inventoryIndex] = currentItem;
         this.recalculateStats();
-        // Stat change might change inventory capacity
         this.updateInventoryCapacity();
     }
 
@@ -368,15 +308,11 @@ export class Player extends Character {
         if (!item) return;
 
         const emptySlotIndex = this.inventory.findIndex(s => s === null);
-        if (emptySlotIndex === -1) {
-            // No space, cannot unequip
-            return;
-        }
+        if (emptySlotIndex === -1) return;
 
         this.inventory[emptySlotIndex] = item;
         this.equipment[slot] = null;
         this.recalculateStats();
-        // Stat change might change inventory capacity (e.g. unequipping a bag)
         this.updateInventoryCapacity();
     }
 
@@ -388,9 +324,7 @@ export class Player extends Character {
         const itemA = this.inventory[fromIndex];
         const itemB = this.inventory[toIndex];
         
-        // Check if merging materials
         if (itemA && itemB && itemA.id === itemB.id && itemA.type === 'Material') {
-            // Add A quantity to B
             if (itemB.quantity && itemA.quantity) {
                 itemB.quantity += itemA.quantity;
                 this.inventory[fromIndex] = null;
@@ -403,9 +337,7 @@ export class Player extends Character {
     }
     
     craftItem(recipe: Recipe): boolean {
-        // Check for inventory space
         if (!this.inventory.some(slot => !slot)) return false;
-        // Check and consume ingredients
         for (const ing of recipe.ingredients) {
             const mat = this.inventory.find(i => i?.id === ing.materialId);
             if (!mat || !mat.quantity || mat.quantity < ing.quantity) return false;
@@ -440,7 +372,6 @@ export class Player extends Character {
         let goldGained = 0;
         for (let i = 0; i < this.inventory.length; i++) {
             const item = this.inventory[i];
-            // Only sell equipment of the specified rarity that is unlocked
             if (item && item.type === 'Equipment' && item.rarity === rarity && !item.locked) {
                 const value = item.sellPrice * (item.quantity || 1);
                 goldGained += value;
@@ -461,10 +392,13 @@ export class Player extends Character {
     
     recalculateStats() {
         const finalStats = this.getFinalStats();
-        const healthPercentage = this.health / this.maxHealth;
+        // Preserve health percentage
+        const healthPercentage = this.maxHealth > 0 ? this.health / this.maxHealth : 1;
+        
         this.maxHealth = finalStats.maxHealth;
         this.damage = finalStats.damage;
-        this.health = this.maxHealth * healthPercentage;
+        // Update current health based on new max
+        this.health = Math.floor(this.maxHealth * healthPercentage);
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
@@ -480,9 +414,10 @@ export class Player extends Character {
     }
     
     respawn() {
-        this.gold = Math.floor(this.gold * 0.9); // Lose 10% gold
+        this.gold = Math.floor(this.gold * 0.9);
         this.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
         this.isDead = false;
+        this.recalculateStats();
         this.health = this.maxHealth;
         this.totalDamageTaken = 0;
         this.deathLog = [];
@@ -491,8 +426,6 @@ export class Player extends Character {
 
     draw(ctx: CanvasRenderingContext2D) {
         super.draw(ctx);
-        
-        // Draw name below player
         ctx.save();
         ctx.translate(this.position.x, this.position.y);
         ctx.fillStyle = 'white';
@@ -505,13 +438,13 @@ export class Player extends Character {
     }
 
     toCharacterData(): CharacterData {
-        // Before saving, clamp health to maxHealth
-        const finalStats = this.getFinalStats();
-        const clampedHealth = Math.min(this.health, finalStats.maxHealth);
+        // Re-run final calc just to be safe, but we really want to export BASE stats
+        const finalStats = calculateFinalStats(this.baseStats, this.equipment, this.position);
         
-        // Ensure derived stats like speed are included in the stats object sent to server
-        const statsForExport = { ...this.baseStats, ...finalStats, health: clampedHealth };
-
+        // We export THIS.BASESTATS. This is critical.
+        // The server or game reload will re-apply equipment bonuses.
+        // We do NOT export 'finalStats' into the 'stats' field, or we get double-stats bug.
+        
         return {
             id: this.id as string,
             name: this.name,
@@ -520,12 +453,12 @@ export class Player extends Character {
             xp: this.xp,
             gold: this.gold,
             kills: this.kills,
-            stats: statsForExport,
+            stats: this.baseStats, // <--- FIXED
             inventory: this.inventory,
             equipment: this.equipment,
             position: this.position,
             discoveredWaypoints: this.discoveredWaypoints,
-            hasClaimedDevRewards: this.hasClaimedDevRewards // Persist the flag
+            hasClaimedDevRewards: this.hasClaimedDevRewards
         };
     }
 }

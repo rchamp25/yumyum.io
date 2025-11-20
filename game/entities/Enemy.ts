@@ -1,15 +1,15 @@
 
 import { Character } from './Character';
-import { Vector2D, GameContext, Item, ItemRarity, ServerEnemy } from '../types';
-import { normalizeVector, getDistance } from '../utils';
+import { Vector2D, GameContext, ServerEnemy } from '../types';
+import { normalizeVector, getDistance } from '../math';
 import { DroppedItem } from './DroppedItem';
-import { MATERIALS_DB, ALL_EQUIPMENT, ALL_MYTHICS } from '../items';
-import { GAME_CONFIG, LOOT_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES, EnemyType } from '../constants';
+import { GAME_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES, EnemyType } from '../constants';
 import { Projectile } from './Projectile';
 import { FloatingText } from './FloatingText';
 import { Player } from './Player';
 import { VisualEffect } from './VisualEffect';
 import { GroundEffect } from './GroundEffect';
+import { generateLoot } from '../lootUtils';
 
 export class Enemy extends Character {
     name: string;
@@ -25,12 +25,8 @@ export class Enemy extends Character {
     private lastAttackTime: number = 0;
     private attackRange: number;
     private speed: number;
-
-    // AI State properties
     private wanderTarget: Vector2D | null = null;
     private nextWanderTime: number = 0;
-    
-    // Boss Logic
     private specialAttackCooldown: number = 0;
 
     constructor(position: Vector2D, level: number, bossZoneId?: string, id?: string) {
@@ -46,7 +42,6 @@ export class Enemy extends Character {
         }
 
         const maxHealth = Math.floor(20 * type.healthMultiplier * (1 + level * 0.2));
-        // Reduced damage to 1/4th of previous value (factor 0.75 replaces 3)
         const damage = Math.floor(0.75 * type.damageMultiplier * (1 + level * 0.15));
 
         super(position, type.radius, maxHealth, type.color, damage, level);
@@ -59,44 +54,36 @@ export class Enemy extends Character {
         this.isBoss = isBoss;
         this.bossZoneId = bossZoneId;
         
-        // XP Scaling
         let xpBase = 15 * level + Math.pow(level, 2.1);
-        if (isBoss) xpBase *= 10; // Bosses give way more XP
+        if (isBoss) xpBase *= 10;
         this.xpValue = Math.floor(xpBase);
         
         this.goldValue = Math.floor(Math.random() * level + 1) * (isBoss ? 20 : 1);
         this.spawnPosition = { ...position };
         this.nextWanderTime = Date.now() + Math.random() * 2000;
 
-        // Spawn invulnerability
         this.setInvulnerable(3000);
     }
 
-    // New method to sync with server state in online mode
     sync(data: ServerEnemy) {
         this.position = data.position;
         this.health = data.health;
         this.maxHealth = data.maxHealth;
         this.level = data.level;
-        // Smooth transition or snap? Snap is better for now to avoid desync
     }
 
-    // Override takeDamage to trigger aggro and apply level gap penalty
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
-        // Check for Immunity if not a boss and inside Boss Zone
         if (!this.isBoss) {
             const inBossZone = BOSS_ZONES.some(z => getDistance(this.position, z) < BOSS_CONFIG.ZONE_RADIUS);
-            if (inBossZone) return null; // Normal mobs are immune in boss zones to prevent farming them with the buff
+            if (inBossZone) return null;
         }
 
         let finalAmount = amount;
         
-        // Apply Damage Reduction if Mob is much higher level than attacker
         if (source && source.level !== undefined) {
             const levelDiff = this.level - source.level;
             if (levelDiff > 5) {
                 const penaltySteps = levelDiff - 5;
-                // 6 levels higher = 50% damage, 7 levels = 25%, 8 levels = 12.5%
                 const multiplier = Math.pow(0.5, penaltySteps);
                 finalAmount = Math.max(1, Math.floor(amount * multiplier));
             }
@@ -104,7 +91,6 @@ export class Enemy extends Character {
 
         const ft = super.takeDamage(finalAmount, source);
         
-        // If we are idle and take damage, we get aggroed
         if (!this.isDead && (this.state === 'idle' || this.state === 'returning')) {
             this.state = 'chasing';
             this.wanderTarget = null;
@@ -124,16 +110,12 @@ export class Enemy extends Character {
         const { player } = game;
         const distToPlayer = getDistance(this.position, player.position);
         const distToSpawn = getDistance(this.position, this.spawnPosition);
-        
-        // Bosses have a strict leash to their arena
         const leashRange = this.isBoss ? BOSS_CONFIG.ZONE_RADIUS : GAME_CONFIG.ENEMY_LEASH_RANGE;
 
-        // Priority 1: Returning Logic (Leash / Safe Zone / Boss Zone De-aggro)
         if (this.state !== 'returning') {
              const playerInSafeZone = player.isInSafeZone;
              const outsideLeash = distToSpawn > leashRange;
              
-             // Check if Player entered Boss Zone and we are NOT a boss
              let shouldDeAggro = false;
              if (!this.isBoss) {
                  const inBossZone = BOSS_ZONES.some(z => getDistance(player.position, z) < BOSS_CONFIG.ZONE_RADIUS);
@@ -146,9 +128,7 @@ export class Enemy extends Character {
             }
         }
 
-        // Priority 2: State Transitions
         if (this.state === 'idle') {
-            // Bosses are always aggressive inside their zone
             const aggroRange = this.isBoss ? BOSS_CONFIG.ZONE_RADIUS : GAME_CONFIG.ENEMY_AGGRO_RANGE;
             if (distToPlayer <= aggroRange) {
                 this.state = 'chasing';
@@ -157,8 +137,6 @@ export class Enemy extends Character {
         } else if (this.state === 'chasing') {
              if (distToPlayer <= this.attackRange) {
                  this.state = 'attacking';
-             } else if (distToPlayer > GAME_CONFIG.ENEMY_AGGRO_RANGE * 1.5 && !this.isBoss) {
-                 // Soft reset for normal mobs
              }
         } else if (this.state === 'attacking') {
             if (distToPlayer > this.attackRange) {
@@ -168,7 +146,6 @@ export class Enemy extends Character {
 
         const currentSpeed = this.speed * (this.hasStatus('slow') ? (1 - (this.statusEffects.find(e=>e.type==='slow')?.slowFactor || 0.5)) : 1);
 
-        // Priority 3: Execute State Action
         this.isMoving = false;
 
         switch(this.state) {
@@ -201,9 +178,8 @@ export class Enemy extends Character {
                 
             case 'returning':
                 if (distToSpawn < 10) {
-                    // Arrived at spawn
                     this.position = { ...this.spawnPosition };
-                    this.health = this.maxHealth; // Heal up
+                    this.health = this.maxHealth;
                     this.state = 'idle';
                     this.wanderTarget = null;
                     this.nextWanderTime = Date.now() + 1000;
@@ -212,7 +188,6 @@ export class Enemy extends Character {
                         x: this.spawnPosition.x - this.position.x,
                         y: this.spawnPosition.y - this.position.y
                     });
-                    // Return faster than normal speed
                     this.position.x += returnDir.x * (currentSpeed * 1.5);
                     this.position.y += returnDir.y * (currentSpeed * 1.5);
                     this.isMoving = true;
@@ -228,7 +203,6 @@ export class Enemy extends Character {
         if (this.wanderTarget) {
             const dist = getDistance(this.position, this.wanderTarget);
             if (dist < 5) {
-                // Reached target
                 this.wanderTarget = null;
                 this.nextWanderTime = now + 1500 + Math.random() * 3000;
             } else {
@@ -236,12 +210,11 @@ export class Enemy extends Character {
                     x: this.wanderTarget.x - this.position.x,
                     y: this.wanderTarget.y - this.position.y
                 });
-                this.position.x += dir.x * (speed * 0.4); // Wander slowly
+                this.position.x += dir.x * (speed * 0.4);
                 this.position.y += dir.y * (speed * 0.4);
             }
         } else {
             if (now > this.nextWanderTime) {
-                // Pick a random point near spawn
                 const angle = Math.random() * Math.PI * 2;
                 const wanderRadius = this.isBoss ? 200 : 100;
                 const radius = Math.random() * wanderRadius;
@@ -254,7 +227,6 @@ export class Enemy extends Character {
     }
     
     attack(player: Character, game: GameContext) {
-        // Trigger attack animation
         this.attackAnimationTimer = 15;
 
         if (this.type.attackType === 'melee') {
@@ -267,35 +239,28 @@ export class Enemy extends Character {
                     }
                 }
             }
-        } else { // Ranged
+        } else {
             const direction = normalizeVector({
                 x: player.position.x - this.position.x,
                 y: player.position.y - this.position.y
             });
-            // Bosses should always be able to hit players with ranged attacks
-            // Pass isHostile = true
             game.addProjectile(new Projectile(this.position, direction, this.damage, 6, this.id, this.name, this.level, '#a1a1aa', 1, true));
         }
     }
 
     private performBossAttack(player: Character, game: GameContext) {
         const now = Date.now();
-        // 30% chance to do special attack if cooldown is up
         if (now > this.specialAttackCooldown && Math.random() < 0.3) {
-            this.specialAttackCooldown = now + 5000; // 5s CD on special
+            this.specialAttackCooldown = now + 5000;
             this.attackAnimationTimer = 30;
-
-            // Special Attack Logic
             game.addFloatingText(new FloatingText("! SPECIAL !", {x: this.position.x, y: this.position.y - 80}, '#ef4444', 24));
             
-            if (this.bossZoneId === 'boss_nw') { // Titan (Stomp)
+            if (this.bossZoneId === 'boss_nw') {
                 game.addVisualEffect(new VisualEffect(this.position, 'stomp_wave', 2000, { radius: 200, color: '#0ea5e9' }));
-                // Delayed massive damage
                 game.addGroundEffect(new GroundEffect(this.position, 200, 1500, 'rgba(14, 165, 233, 0.3)', { 
-                    type: 'dot', damagePerTick: this.damage * 2, duration: 500 // Burst
+                    type: 'dot', damagePerTick: this.damage * 2, duration: 500
                 }, this.id, this.name, this.level));
-            } else if (this.bossZoneId === 'boss_ne') { // Infernal (Firestorm)
-                // Spawn 3 random explosions near player
+            } else if (this.bossZoneId === 'boss_ne') {
                 for(let i=0; i<3; i++) {
                     const offset = { x: (Math.random()-0.5)*300, y: (Math.random()-0.5)*300 };
                     const pos = { x: player.position.x + offset.x, y: player.position.y + offset.y };
@@ -303,18 +268,17 @@ export class Enemy extends Character {
                         type: 'dot', damagePerTick: this.damage * 1.5, duration: 500
                     }, this.id, this.name, this.level));
                 }
-            } else if (this.bossZoneId === 'boss_sw') { // Broodmother (Poison Puddle)
+            } else if (this.bossZoneId === 'boss_sw') {
                 game.addGroundEffect(new GroundEffect(player.position, 120, 5000, 'rgba(163, 230, 53, 0.4)', {
                     type: 'dot', damagePerTick: this.damage * 0.5, duration: 5000
                 }, this.id, this.name, this.level));
-            } else if (this.bossZoneId === 'boss_se') { // Void Weaver (Void Blast)
+            } else if (this.bossZoneId === 'boss_se') {
                  game.addGroundEffect(new GroundEffect(player.position, 150, 2000, 'rgba(124, 58, 237, 0.4)', {
                     type: 'dot', damagePerTick: this.damage * 2.5, duration: 200
                 }, this.id, this.name, this.level));
             }
 
         } else {
-            // Normal Attack
             this.attack(player, game);
         }
     }
@@ -323,159 +287,53 @@ export class Enemy extends Character {
         if (this.lootDropped) return [];
         this.lootDropped = true;
         
-        const drops: DroppedItem[] = [];
-        const playerLevel = player.level;
+        const finalStats = player.getFinalStats();
+        const itemFind = finalStats.itemFind || 0;
         
-        // Item Find Calculation
-        // We use player stats directly now as Player.ts applies the massive zone bonus
-        const baseItemFind = player.getFinalStats().itemFind || 0;
-        const itemFindMultiplier = 1 + baseItemFind;
-
-        const rarityBonus = playerLevel * LOOT_CONFIG.LEVEL_RARITY_BONUS;
+        const items = generateLoot(this.level, this.position, this.isBoss, itemFind);
         
-        // Drop materials
-        // Item Find increases drop rate
-        const matDropChance = (LOOT_CONFIG.MATERIAL_DROP_RATE + (playerLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
-
-        if (Math.random() < matDropChance) {
-             const numMaterials = Math.floor(Math.random() * (LOOT_CONFIG.MATERIAL_QUANTITY_MAX - LOOT_CONFIG.MATERIAL_QUANTITY_MIN + 1)) + LOOT_CONFIG.MATERIAL_QUANTITY_MIN;
-             for (let i = 0; i < numMaterials; i++) {
-                 const matRoll = Math.random();
-                 
-                 // Calculate adjusted probability thresholds based on item find
-                 const legThresh = Math.min(1, (LOOT_CONFIG.MATERIAL_RARITY_THRESHOLDS.LEGENDARY + rarityBonus) * itemFindMultiplier);
-                 const epiThresh = Math.min(1, (LOOT_CONFIG.MATERIAL_RARITY_THRESHOLDS.EPIC + rarityBonus) * itemFindMultiplier);
-                 const rareThresh = Math.min(1, (LOOT_CONFIG.MATERIAL_RARITY_THRESHOLDS.RARE + rarityBonus) * itemFindMultiplier);
-                 const uncThresh = Math.min(1, (LOOT_CONFIG.MATERIAL_RARITY_THRESHOLDS.UNCOMMON + rarityBonus) * itemFindMultiplier);
-
-                 let material: Item | null = null;
-                 
-                 if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Legendary] && matRoll < legThresh) {
-                     material = MATERIALS_DB['mat_leg'];
-                 } else if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Epic] && matRoll < epiThresh) {
-                     material = MATERIALS_DB['mat_epi'];
-                 } else if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Rare] && matRoll < rareThresh) {
-                     material = MATERIALS_DB['mat_rar'];
-                 } else if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Uncommon] && matRoll < uncThresh) {
-                     material = MATERIALS_DB['mat_unc'];
-                 } else {
-                     material = MATERIALS_DB['mat_com'];
-                 }
-                 
-                 if (material) {
-                    drops.push(new DroppedItem(this.position, {...material, quantity: 1}));
-                 }
-             }
-        }
-
-        // Boss Specific Mythic Drop
-        if (this.isBoss) {
-             const mythicChance = 0.01 * itemFindMultiplier; // 1% base chance scaled by item find
-             if (Math.random() < mythicChance) {
-                 // Pick a random mythic from the pool
-                 if (ALL_MYTHICS.length > 0) {
-                     const randomMythic = ALL_MYTHICS[Math.floor(Math.random() * ALL_MYTHICS.length)];
-                     drops.push(new DroppedItem(this.position, { ...randomMythic }));
-                 }
-             }
-        }
-
-        // Drop equipment
-        // Bosses drop BOSS_DROP_BONUS (10) + 1 items
-        const dropLoopCount = this.isBoss ? (BOSS_CONFIG.BOSS_DROP_BONUS + 1) : 1;
-
-        for(let i=0; i<dropLoopCount; i++) {
-            const equipDropChance = (LOOT_CONFIG.EQUIPMENT_DROP_RATE + (playerLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
-            
-            // Bosses guarantee at least one check pass if it's their bonus loops
-            const shouldDrop = i > 0 || Math.random() < equipDropChance;
-
-            if (shouldDrop) {
-                const item = this.getRandomItemWithGating(playerLevel, itemFindMultiplier);
-                if (item) {
-                    drops.push(new DroppedItem(this.position, item));
-                }
-            }
-        }
-
-        return drops;
-    }
-
-    // Local helper to handle Rarity Gating + Item Find
-    private getRandomItemWithGating(playerLevel: number, itemFindMultiplier: number): Item | null {
-        const roll = Math.random();
-        let chosenRarity: ItemRarity = ItemRarity.Common;
-        const levelBonus = playerLevel * LOOT_CONFIG.LEVEL_RARITY_BONUS;
-
-        const legChance = (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Legendary] + levelBonus) * itemFindMultiplier;
-        const epiChance = (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Epic] + levelBonus) * itemFindMultiplier;
-        const rareChance = (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Rare] + levelBonus) * itemFindMultiplier;
-        const uncChance = (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Uncommon] + levelBonus) * itemFindMultiplier;
-
-        if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Legendary] && roll < legChance) {
-            chosenRarity = ItemRarity.Legendary;
-        } else if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Epic] && roll < epiChance) {
-            chosenRarity = ItemRarity.Epic;
-        } else if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Rare] && roll < rareChance) {
-            chosenRarity = ItemRarity.Rare;
-        } else if (this.level >= LOOT_CONFIG.RARITY_LEVEL_REQUIREMENTS[ItemRarity.Uncommon] && roll < uncChance) {
-            chosenRarity = ItemRarity.Uncommon;
-        }
-
-        const possibleItems = ALL_EQUIPMENT.filter(item => item.rarity === chosenRarity);
-        if (possibleItems.length > 0) {
-            const item = possibleItems[Math.floor(Math.random() * possibleItems.length)];
-            return { ...item }; // Return a copy
-        }
-
-        return null;
+        return items.map(item => new DroppedItem(this.position, item));
     }
 
     draw(ctx: CanvasRenderingContext2D) {
-        // State visuals
         if (this.state === 'returning') {
-            ctx.globalAlpha = 0.6; // Ghostly when returning
+            ctx.globalAlpha = 0.6;
         }
 
-        super.draw(ctx, false); // Don't draw standard health bar yet
+        super.draw(ctx, false);
         
-        ctx.globalAlpha = 1.0; // Reset alpha
+        ctx.globalAlpha = 1.0;
 
-        // Draw Aggro/State Indicator
         if (!this.isDead) {
             if (this.state === 'chasing' || this.state === 'attacking') {
-                ctx.fillStyle = '#ef4444'; // Red
+                ctx.fillStyle = '#ef4444';
                 ctx.font = 'bold 16px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText('!', this.position.x, this.position.y - this.radius - 25);
             } else if (this.state === 'returning') {
-                ctx.fillStyle = '#3b82f6'; // Blue
+                ctx.fillStyle = '#3b82f6';
                 ctx.font = 'bold 16px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillText('?', this.position.x, this.position.y - this.radius - 25);
             }
 
-            // Draw Attack Cooldown Bar
             const timeSinceAttack = Date.now() - this.lastAttackTime;
             if (timeSinceAttack < this.type.attackCooldown) {
                 const barWidth = this.isBoss ? 40 : 24;
                 const barHeight = 4;
                 const x = this.position.x - barWidth / 2;
-                const y = this.position.y + this.radius + 10; // Below feet
+                const y = this.position.y + this.radius + 10;
                 
-                // Background
                 ctx.fillStyle = 'rgba(0,0,0,0.6)';
                 ctx.fillRect(x, y, barWidth, barHeight);
                 
-                // Progress
                 const progress = timeSinceAttack / this.type.attackCooldown;
-                ctx.fillStyle = '#facc15'; // Yellow charging bar
+                ctx.fillStyle = '#facc15';
                 ctx.fillRect(x, y, barWidth * progress, barHeight);
             }
         }
         
-        // Name text
-        ctx.fillStyle = this.isBoss ? '#fbbf24' : 'white'; // Gold for bosses
+        ctx.fillStyle = this.isBoss ? '#fbbf24' : 'white';
         if (this.isBoss) ctx.font = 'bold 14px sans-serif';
         else ctx.font = '10px sans-serif';
         
@@ -485,7 +343,6 @@ export class Enemy extends Character {
         ctx.fillText(this.name, this.position.x, this.position.y + this.radius + 22);
         ctx.shadowBlur = 0;
 
-        // Draw Health Bar (Custom for Bosses)
         if (!this.isDead && this.health < this.maxHealth) {
             const barWidth = this.isBoss ? this.radius * 2.5 : this.radius * 2;
             const barHeight = this.isBoss ? 8 : 5;
@@ -496,10 +353,9 @@ export class Enemy extends Character {
             ctx.fillRect(barX, barY, barWidth, barHeight);
 
             const healthPercentage = this.health > 0 ? this.health / this.maxHealth : 0;
-            ctx.fillStyle = this.isBoss ? '#9333ea' : '#dc2626'; // Purple for bosses, Red for normal
+            ctx.fillStyle = this.isBoss ? '#9333ea' : '#dc2626';
             ctx.fillRect(barX, barY, barWidth * healthPercentage, barHeight);
             
-            // Border
             ctx.strokeStyle = 'black';
             ctx.lineWidth = 1;
             ctx.strokeRect(barX, barY, barWidth, barHeight);
