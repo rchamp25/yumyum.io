@@ -20,6 +20,7 @@ import HUD from './HUD';
 import Inventory from './Inventory';
 import NPCInteraction from './NPCInteraction';
 import FastTravelUI from './FastTravelUI';
+import { socketService } from '../services/socketService';
 
 interface GameProps {
   characterData: CharacterData;
@@ -218,6 +219,14 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     setPlayer(newPlayer);
     setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
 
+    // Socket Connection for Online Mode
+    if (isOnlineMode) {
+        socketService.connect(() => {
+            console.log("Connected to game server!");
+            socketService.joinGame(characterData);
+        });
+    }
+
     // Spawn initial NPCs
     const cx = GAME_CONFIG.WORLD_WIDTH / 2;
     const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
@@ -297,7 +306,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     setEnemies(initialEnemies);
     playSound('boss_spawn');
 
-  }, [characterData, playSound]);
+    return () => {
+        if (isOnlineMode) {
+            socketService.disconnect();
+        }
+    };
+
+  }, [characterData, playSound, isOnlineMode]);
   
   // Game loop
   const gameLoop = useCallback(() => {

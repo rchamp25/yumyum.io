@@ -66,14 +66,12 @@ const App: React.FC = () => {
     };
     
     const handleSelectCharacter = async (character: CharacterData) => {
-        if (isOnlineMode) {
-            alert("Error: Online servers are currently unavailable.");
-            return;
-        }
+        // Logic for Online Mode validation can go here later if needed
+        // For now, we allow the connection to proceed so the Game component can initiate the socket.
 
         let finalCharacterData = character;
 
-        // Dev Mode Logic
+        // Dev Mode Logic - Only apply if NOT checking online mode integrity logic (simplified for now)
         if (isDevMode && !character.hasClaimedDevRewards) {
             const devCharacter = JSON.parse(JSON.stringify(character)) as CharacterData;
             
