@@ -6,6 +6,7 @@ import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS } from '../constants';
 import { SKILLS_DB } from '../skills';
 import { FloatingText } from './FloatingText';
 import { calculateFinalStats } from '../stats';
+import { socketService } from '../../services/socketService';
 
 export class Player extends Character {
     name: string;
@@ -33,12 +34,20 @@ export class Player extends Character {
     overflowItems: Item[] = [];
 
     constructor(data: CharacterData) {
-        if (data.stats.healthRegen === undefined) data.stats.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
-        if (data.stats.itemFind === undefined) data.stats.itemFind = GAME_CONFIG.PLAYER_ITEM_FIND;
-        if (data.stats.bossDamageMultiplier === undefined) data.stats.bossDamageMultiplier = 1;
+        // SANITIZATION: Recalculate base stats from level to fix any DB corruption / exploits.
+        // This ensures base stats are always "Clean" (Level 1 Base + Level Ups), ignoring any previous bad saves.
+        const cleanBaseStats = {
+            maxHealth: GAME_CONFIG.PLAYER_HEALTH + (data.level - 1) * 10,
+            health: GAME_CONFIG.PLAYER_HEALTH + (data.level - 1) * 10, // Placeholder for max calculation
+            damage: GAME_CONFIG.PLAYER_DAMAGE + (data.level - 1) * 2,
+            speed: GAME_CONFIG.PLAYER_SPEED,
+            healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
+            itemFind: GAME_CONFIG.PLAYER_ITEM_FIND,
+            bossDamageMultiplier: 1,
+        };
 
-        // Use shared calculation, passing undefined for position initially (no boss zone bonus in constructor)
-        const finalStats = calculateFinalStats(data.stats, data.equipment);
+        // Use shared calculation with the clean base stats to get Final Stats (Base + Gear)
+        const finalStats = calculateFinalStats(cleanBaseStats, data.equipment);
         
         super(data.position || { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.PLAYER_RADIUS, finalStats.maxHealth, '#4299e1', finalStats.damage, data.level);
 
@@ -51,14 +60,18 @@ export class Player extends Character {
         this.inventory = [...data.inventory];
         this.equipment = { ...data.equipment };
         
-        // IMPORTANT: We must ensure we separate base stats from final stats
-        // If data.stats already includes equipment bonuses (from a previous buggy save), 
-        // we might want to strip them here or just accept them as the new base.
-        // For safety, we trust data.stats is the base, and we recalculate final.
-        this.baseStats = { ...data.stats };
+        // Set the sanitized base stats to property
+        this.baseStats = cleanBaseStats;
         
-        // Current Health Check
-        this.health = Math.min(this.health, finalStats.maxHealth);
+        // Current Health Logic:
+        // Respect the saved current health if valid, but clamp it to the new valid max health.
+        // If saved health is invalid/missing/zero, default to full max health.
+        const savedHealth = data.stats.health;
+        if (typeof savedHealth === 'number' && savedHealth > 0) {
+            this.health = Math.min(savedHealth, finalStats.maxHealth);
+        } else {
+            this.health = finalStats.maxHealth;
+        }
         
         this.discoveredWaypoints = data.discoveredWaypoints || ['wp_spawn'];
         this.hasClaimedDevRewards = data.hasClaimedDevRewards || false;
@@ -176,10 +189,7 @@ export class Player extends Character {
                         }
                         // In Online Mode, we also need to tell the server we hit them with AoE
                         if (game.isOnlineMode) {
-                             // This requires socketService to be available or passed in context.
-                             // For now, we assume main Game loop handles projectile hits, 
-                             // but AoE is trickier. 
-                             // Ideally: context.onHit(enemyId, damage)
+                             socketService.damageEnemy(enemy.id as string, dmg);
                         }
                     }
                 });
@@ -450,7 +460,7 @@ export class Player extends Character {
             xp: this.xp,
             gold: this.gold,
             kills: this.kills,
-            stats: this.baseStats, // <--- FIXED
+            stats: this.baseStats, // <--- FIXED: Export clean base stats only
             inventory: this.inventory,
             equipment: this.equipment,
             position: this.position,
