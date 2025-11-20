@@ -30,7 +30,7 @@ interface GameProps {
   isOnlineMode: boolean;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isDevMode, isOnlineMode }) => {
+const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const bossSpawnTimerRef = useRef(0);

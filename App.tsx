@@ -7,7 +7,7 @@ import Game from './components/Game';
 import DeathScreen from './components/DeathScreen';
 import { authService, GoogleUser } from './services/auth';
 import { storageService } from './services/storage';
-import { CharacterData, CharacterClass, GameStats, ItemRarity, Item } from './game/types';
+import { CharacterData, CharacterClass, GameStats, Item } from './game/types';
 import { Player } from './game/entities/Player';
 import { MATERIALS_DB, ALL_EQUIPMENT } from './game/items';
 import { GAME_CONFIG, WAYPOINTS } from './game/constants';

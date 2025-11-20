@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { Recipe, CharacterData, Item } from '../game/types';
+import { Recipe, CharacterData } from '../game/types';
 import { MATERIALS_DB } from '../game/items';
 import { ItemSlotComponent } from './Inventory';
 
