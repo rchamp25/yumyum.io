@@ -22,6 +22,7 @@ interface HUDProps {
   party: Party | null;
   onOpenParty: () => void;
   onRequestTrade: (targetId: string) => void;
+  otherPlayers: any[]; // New prop for multiplayer
 }
 
 const StatBar: React.FC<{ value: number; maxValue: number; color: string; label: string }> = ({ value, maxValue, color, label }) => {
@@ -72,7 +73,7 @@ const BossHealthBar: React.FC<{ boss: Enemy }> = ({ boss }) => {
     );
 };
 
-const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[]; party: Party | null }> = ({ player, enemies, npcs, waypoints, party }) => {
+const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[]; party: Party | null; otherPlayers: any[] }> = ({ player, enemies, npcs, waypoints, party, otherPlayers }) => {
     const mapSize = 200;
     const scale = mapSize / Math.max(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
 
@@ -108,6 +109,27 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
                 className="absolute w-2 h-2 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-20 shadow-[0_0_5px_white]"
                 style={{ left: `${playerX}px`, top: `${playerY}px` }}
             ></div>
+
+            {/* Other Players Dot */}
+            {otherPlayers.map((op, idx) => {
+                const isPartyMember = party?.members.some(m => m.id === op.characterData.id);
+                const color = isPartyMember ? '#4ade80' : '#ffffff'; // Green vs White
+                const size = isPartyMember ? 'w-1.5 h-1.5' : 'w-1 h-1';
+                const zIndex = isPartyMember ? 'z-15' : 'z-10';
+
+                return (
+                    <div
+                        key={idx}
+                        className={`absolute ${size} rounded-full -translate-x-1/2 -translate-y-1/2 ${zIndex}`}
+                        style={{ 
+                            left: `${op.position.x * scale}px`, 
+                            top: `${op.position.y * scale}px`,
+                            backgroundColor: color
+                        }}
+                    ></div>
+                );
+            })}
+
             {/* Enemy Dots */}
             {enemies.map(enemy => (
                  <div 
@@ -163,7 +185,7 @@ const PartyFrame: React.FC<{ member: Party['members'][0], currentUserId: string,
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, onUseSkill, toggleInventory, isInventoryOpen, party, onOpenParty, onRequestTrade }) => {
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, onUseSkill, toggleInventory, isInventoryOpen, party, onOpenParty, onRequestTrade, otherPlayers }) => {
   if (!player) return null;
 
   const xpToNext = player.getXpToNextLevel();
@@ -232,7 +254,7 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
               Item Find: <span className="font-bold text-purple-300">+{Math.round((player.getFinalStats().itemFind || 0) * 100)}%</span>
             </div>
         </div>
-        <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} party={party} />
+        <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} party={party} otherPlayers={otherPlayers} />
       </div>
 
       {/* Center - Interaction Prompt */}

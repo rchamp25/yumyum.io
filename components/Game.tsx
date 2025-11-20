@@ -32,7 +32,7 @@ interface GameProps {
   isDevMode: boolean;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode }) => {
+const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, isDevMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const bossSpawnTimerRef = useRef(0);
@@ -430,7 +430,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }));
     }
 
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints, camera, playSound, isOnlineMode, updateServerCharacter]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers]);
 
   useGameLoop(gameLoop);
   
@@ -691,6 +691,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         party={party}
         onOpenParty={() => setPartyUIOpen(true)}
         onRequestTrade={(targetId) => socketService.requestTrade(targetId)}
+        otherPlayers={otherPlayers} // Pass other players to HUD
       />
       
       {/* Invites */}

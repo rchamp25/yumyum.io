@@ -4,7 +4,7 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Vector2D, CharacterData, ServerEnemy, Party, PartyMember, TradeSession, TradeOffer } from './game/types';
+import { Vector2D, CharacterData, ServerEnemy, Party, TradeSession } from './game/types';
 import { GAME_CONFIG, ENEMY_TYPES, BOSS_TYPES, BOSS_ZONES, BOSS_CONFIG } from './game/constants';
 import { calculateFinalStats } from './game/stats';
 import { generateLoot } from './game/lootUtils';
