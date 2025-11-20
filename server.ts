@@ -123,7 +123,6 @@ io.on('connection', (socket: Socket) => {
             y: GAME_CONFIG.WORLD_HEIGHT / 2 
         };
 
-        // Calculate initial stats to get speed
         const stats = calculateFinalStats(characterData.stats, characterData.equipment);
 
         players.set(socket.id, {
@@ -135,6 +134,19 @@ io.on('connection', (socket: Socket) => {
             radius: GAME_CONFIG.PLAYER_RADIUS,
         });
         console.log(`Player ${characterData.name} (${socket.id}) joined.`);
+    });
+    
+    socket.on('update_character', (characterData: CharacterData) => {
+        const player = players.get(socket.id);
+        if (player) {
+            // Update the server's copy of character data (equipment, level, etc.)
+            player.characterData = characterData;
+            
+            // Recalculate server-side stats (Speed, Item Find) using the shared utility
+            const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position);
+            player.speed = stats.speed;
+            // Note: itemFind is calculated on the fly during loot generation
+        }
     });
 
     socket.on('player_input', (inputKeys: string[]) => {
@@ -154,20 +166,31 @@ io.on('connection', (socket: Socket) => {
             if (enemy.health <= 0) {
                 enemies.delete(payload.enemyId);
                 
+                // Reward Logic
+                let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
+                if (enemy.isBoss) xpValue *= 10;
+                const xpReward = Math.floor(xpValue);
+                const goldReward = Math.floor(Math.random() * enemy.level + 1) * (enemy.isBoss ? 20 : 1);
+
+                socket.emit('enemy_killed', {
+                    enemyId: payload.enemyId,
+                    xp: xpReward,
+                    gold: goldReward,
+                    enemyLevel: enemy.level
+                });
+                
                 // Boss Logic
                 if (enemy.isBoss) {
                      globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
 
                 // Loot Generation (Instanced)
-                // 1. Get fresh stats for item find
                 const killerStats = calculateFinalStats(
                     attacker.characterData.stats, 
                     attacker.characterData.equipment, 
                     attacker.position
                 );
 
-                // 2. Generate Drops
                 const drops = generateLoot(
                     enemy.level, 
                     enemy.position, 
@@ -175,7 +198,6 @@ io.on('connection', (socket: Socket) => {
                     killerStats.itemFind || 0
                 );
 
-                // 3. Send drops ONLY to the killer
                 if (drops.length > 0) {
                     socket.emit('loot_dropped', drops.map(item => ({
                         item,
@@ -245,7 +267,6 @@ setInterval(() => {
     }
 
     // 3. Broadcast State
-    // Ensure we convert Map to object properly
     const playersObj: any = {};
     players.forEach((p, id) => {
         playersObj[id] = {

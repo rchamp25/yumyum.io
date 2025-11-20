@@ -15,6 +15,13 @@ interface LootDropPayload {
     position: Vector2D;
 }
 
+interface EnemyKillPayload {
+    enemyId: string;
+    xp: number;
+    gold: number;
+    enemyLevel: number;
+}
+
 let socket: Socket;
 
 export const socketService = {
@@ -44,6 +51,12 @@ export const socketService = {
       socket.emit('join_game', characterData);
     }
   },
+  
+  updateCharacter(characterData: CharacterData) {
+      if (socket) {
+          socket.emit('update_character', characterData);
+      }
+  },
 
   sendInput(keys: string[]) {
     if (socket) {
@@ -69,10 +82,17 @@ export const socketService = {
       }
   },
   
+  onEnemyKilled(callback: (data: EnemyKillPayload) => void) {
+      if (socket) {
+          socket.on('enemy_killed', callback);
+      }
+  },
+  
   offGameState() {
       if(socket) {
           socket.off('game_state');
           socket.off('loot_dropped');
+          socket.off('enemy_killed');
       }
   },
 

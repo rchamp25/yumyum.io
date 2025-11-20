@@ -30,7 +30,7 @@ interface GameProps {
   isDevMode: boolean;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, isDevMode }) => {
+const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const bossSpawnTimerRef = useRef(0);
@@ -157,6 +157,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
              pos.y - radius - buffer < camera.y + cvsHeight;
   };
 
+  // Helper to broadcast updates to server
+  const updateServerCharacter = useCallback((p: Player) => {
+      if (isOnlineMode) {
+          socketService.updateCharacter(p.toCharacterData());
+      }
+  }, [isOnlineMode]);
+
   // Initialize game
   useEffect(() => {
     const newPlayer = new Player(characterData);
@@ -200,10 +207,28 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         });
 
         socketService.onLootDropped((drops) => {
-            console.log("Loot received from server", drops);
             drops.forEach(drop => {
-                // Randomize position slightly around drop center so they don't stack perfectly
                 addDroppedItem(new DroppedItem(drop.position, drop.item));
+            });
+        });
+
+        socketService.onEnemyKilled((data) => {
+            setPlayer(prev => {
+                if (!prev) return null;
+                const updatedPlayer = new Player(prev.toCharacterData());
+                const oldLevel = updatedPlayer.level;
+                
+                updatedPlayer.gainXP(data.xp, addFloatingText, data.enemyLevel);
+                if (updatedPlayer.level > oldLevel) {
+                    playSound('level_up');
+                    // Broadcast new level/stats to server
+                    socketService.updateCharacter(updatedPlayer.toCharacterData());
+                }
+                
+                updatedPlayer.gainGold(data.gold, addFloatingText);
+                updatedPlayer.kills++;
+                
+                return updatedPlayer;
             });
         });
     }
@@ -251,7 +276,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     };
 
-  }, [characterData, playSound, isOnlineMode, addDroppedItem]);
+  }, [characterData, playSound, isOnlineMode, addDroppedItem, addFloatingText]);
   
   const gameLoop = useCallback(() => {
     gameTimeRef.current++;
@@ -274,6 +299,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             if (player.discoverWaypoint(wp.data.id)) {
                  addFloatingText(new FloatingText("Waypoint Discovered!", { x: player.position.x, y: player.position.y - 50 }, '#22d3ee', 20));
                  addVisualEffect(new VisualEffect(wp.data.position, 'buff_aura', 2000, { color: '#22d3ee', radius: 60 }));
+                 updateServerCharacter(player);
             }
         }
     });
@@ -282,12 +308,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     if (!isOnlineMode) {
         updatedEnemies.forEach(e => e.update(gameContext));
         
-        // Offline Spawn Logic (Simplified for brevity)
+        // Offline Spawn Logic
         bossSpawnTimerRef.current++;
-        if (bossSpawnTimerRef.current > 300 && updatedEnemies.length < GAME_CONFIG.MAX_ENEMIES) {
-            bossSpawnTimerRef.current = 0;
-             // spawn logic...
-        }
+        // ... existing offline spawn logic would go here ...
     }
 
     projectiles.forEach(p => p.update());
@@ -303,6 +326,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                 if (enemy.isDead) continue;
                 if (getDistance(p.position, enemy.position) < p.radius + enemy.radius) {
                     if (isOnlineMode) {
+                        // Optimistic visual feedback
                         const ft = new FloatingText(Math.round(p.damage).toString(), { x: enemy.position.x, y: enemy.position.y - enemy.radius }, '#fff');
                         addFloatingText(ft);
                         playSound('hit');
@@ -326,6 +350,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         if(getDistance(di.position, player.position) < player.radius) {
             if (player.pickupItem(di.item)) {
                  addFloatingText(new FloatingText(`+ ${di.item.name}`, player.position, '#ffd700'));
+                 updateServerCharacter(player); // Inventory changed
             } else {
                  addFloatingText(new FloatingText(`Inventory Full!`, player.position, '#ff4d4d'));
                  remainingItems.push(di);
@@ -361,10 +386,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             }
             return e;
         }).filter(e => !e.isDead));
-    } else {
-        // Online Mode: We just update stats/XP if server sends confirmation? 
-        // For now, simplified: if enemy disappears from list, we assume it died.
-        // Ideally, we'd listen to 'enemy_death' socket event to award XP.
     }
 
     setProjectiles(prev => prev.filter(p => !p.isExpired()));
@@ -382,7 +403,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }));
     }
 
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints, camera, playSound, isOnlineMode]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, pressedKeys, onDeath, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, addDroppedItem, waypoints, camera, playSound, isOnlineMode, updateServerCharacter]);
 
   useGameLoop(gameLoop);
 
@@ -524,7 +545,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           player.equipItem(itemIndex);
           const dropped = player.flushOverflowItems();
           dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
-          setPlayer(new Player(player.toCharacterData()));
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
       }
   };
   const handleItemUnequip = (itemSlot: ItemSlot) => {
@@ -532,41 +555,61 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           player.unequipItem(itemSlot);
           const dropped = player.flushOverflowItems();
           dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
-          setPlayer(new Player(player.toCharacterData()));
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
       }
   };
   
   const handleToggleItemLock = (itemIndex: number) => {
       if (player) {
           player.toggleItemLock(itemIndex);
-          setPlayer(new Player(player.toCharacterData()));
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
       }
   }
 
   const handleInventoryMove = (fromIndex: number, toIndex: number) => {
     if (player) {
         player.moveItem(fromIndex, toIndex);
-        setPlayer(new Player(player.toCharacterData()));
+        const updatedPlayer = new Player(player.toCharacterData());
+        setPlayer(updatedPlayer);
+        updateServerCharacter(updatedPlayer);
     }
   };
   
   const handleCraft = (recipe: Recipe) => {
-      if (player?.craftItem(recipe)) setPlayer(new Player(player.toCharacterData()));
+      if (player?.craftItem(recipe)) {
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
   };
   
   const handleSell = (_item: Item, inventoryIndex: number, sellFullStack: boolean) => {
-       if (player?.sellItem(inventoryIndex, sellFullStack)) setPlayer(new Player(player.toCharacterData()));
+       if (player?.sellItem(inventoryIndex, sellFullStack)) {
+           const updatedPlayer = new Player(player.toCharacterData());
+           setPlayer(updatedPlayer);
+           updateServerCharacter(updatedPlayer);
+       }
   };
   
   const handleSellByRarity = (rarity: ItemRarity) => {
       if (player) {
           player.sellUnlockedItemsByRarity(rarity);
-          setPlayer(new Player(player.toCharacterData()));
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
       }
   }
   
   const handleBuyItem = (item: Item, cost: number) => {
-      if (player?.buyItem(item, cost)) setPlayer(new Player(player.toCharacterData()));
+      if (player?.buyItem(item, cost)) {
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
   };
 
   const handleFastTravel = (destination: WaypointData) => {
@@ -576,6 +619,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           addVisualEffect(new VisualEffect(destination.position, 'teleport_in', 1000, { radius: 40, endPos: destination.position }));
           addFloatingText(new FloatingText("Fast Travelled", destination.position, '#22d3ee'));
           setInteractingWaypoint(null);
+          updateServerCharacter(player); // Update position
       }
   };
 
