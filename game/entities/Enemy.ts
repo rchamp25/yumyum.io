@@ -1,121 +1,15 @@
 
 import { Character } from './Character';
-import { Vector2D, GameContext, Item, ItemRarity } from '../types';
+import { Vector2D, GameContext, Item, ItemRarity, ServerEnemy } from '../types';
 import { normalizeVector, getDistance } from '../utils';
 import { DroppedItem } from './DroppedItem';
 import { MATERIALS_DB, ALL_EQUIPMENT, ALL_MYTHICS } from '../items';
-import { GAME_CONFIG, LOOT_CONFIG, BOSS_CONFIG, BOSS_ZONES } from '../constants';
+import { GAME_CONFIG, LOOT_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES, EnemyType } from '../constants';
 import { Projectile } from './Projectile';
 import { FloatingText } from './FloatingText';
 import { Player } from './Player';
 import { VisualEffect } from './VisualEffect';
 import { GroundEffect } from './GroundEffect';
-
-interface EnemyType {
-    name: string;
-    radius: number;
-    healthMultiplier: number;
-    damageMultiplier: number;
-    speed: number;
-    color: string;
-    attackRange: number;
-    attackCooldown: number;
-    attackType: 'melee' | 'ranged';
-}
-
-const ENEMY_TYPES: { [key: string]: EnemyType } = {
-    'slime': { 
-        name: 'Slime', 
-        radius: 15, 
-        healthMultiplier: 0.8, 
-        damageMultiplier: 0.8, 
-        speed: 2, 
-        color: '#4ade80', // Light Green
-        attackRange: 20, 
-        attackCooldown: 1500, 
-        attackType: 'melee' 
-    },
-    'goblin': { 
-        name: 'Goblin', 
-        radius: 16, 
-        healthMultiplier: 0.7, 
-        damageMultiplier: 0.9, 
-        speed: 3.5, // Very Fast
-        color: '#84cc16', // Lime
-        attackRange: 22, 
-        attackCooldown: 800, // Fast attacks
-        attackType: 'melee' 
-    },
-    'orc': { 
-        name: 'Orc', 
-        radius: 28, 
-        healthMultiplier: 2.5, // Tanky
-        damageMultiplier: 1.8, // High Damage
-        speed: 1.8, // Slow
-        color: '#14532d', // Dark Green
-        attackRange: 45, 
-        attackCooldown: 2500, // Slow attacks
-        attackType: 'melee' 
-    },
-    'skeleton': { 
-        name: 'Skeleton', 
-        radius: 20, 
-        healthMultiplier: 1.2, 
-        damageMultiplier: 1.2, 
-        speed: 2.6, 
-        color: '#e5e7eb', // Gray/Bone
-        attackRange: 25, 
-        attackCooldown: 1400, 
-        attackType: 'melee' 
-    },
-};
-
-const BOSS_TYPES: { [key: string]: EnemyType } = {
-    'boss_nw': { // Frozen Peak
-        name: 'Titan of the Deep',
-        radius: 70,
-        healthMultiplier: 80, 
-        damageMultiplier: 4.5, // Buffed from 3.0
-        speed: 2.5,
-        color: '#0ea5e9', // Sky Blue
-        attackRange: 90,
-        attackCooldown: 2000,
-        attackType: 'melee'
-    },
-    'boss_ne': { // Burning Steppe
-        name: 'Infernal Warlord',
-        radius: 60,
-        healthMultiplier: 70,
-        damageMultiplier: 6.0, // Buffed from 4.0
-        speed: 3.0,
-        color: '#dc2626', // Red
-        attackRange: 80,
-        attackCooldown: 1500,
-        attackType: 'melee'
-    },
-    'boss_sw': { // Toxic Bog
-        name: 'Broodmother',
-        radius: 65,
-        healthMultiplier: 60,
-        damageMultiplier: 3.75, // Buffed from 2.5
-        speed: 3.5,
-        color: '#a3e635', // Lime
-        attackRange: 400,
-        attackCooldown: 1200,
-        attackType: 'ranged'
-    },
-    'boss_se': { // Crystal Cavern
-        name: 'Void Weaver',
-        radius: 55,
-        healthMultiplier: 65,
-        damageMultiplier: 7.5, // Buffed from 5.0
-        speed: 2.0,
-        color: '#7c3aed', // Violet
-        attackRange: 500,
-        attackCooldown: 2000,
-        attackType: 'ranged'
-    }
-};
 
 export class Enemy extends Character {
     name: string;
@@ -139,7 +33,7 @@ export class Enemy extends Character {
     // Boss Logic
     private specialAttackCooldown: number = 0;
 
-    constructor(position: Vector2D, level: number, bossZoneId?: string) {
+    constructor(position: Vector2D, level: number, bossZoneId?: string, id?: string) {
         let type: EnemyType;
         let isBoss = false;
 
@@ -157,7 +51,7 @@ export class Enemy extends Character {
 
         super(position, type.radius, maxHealth, type.color, damage, level);
         
-        this.id = `enemy_${Math.random()}`;
+        this.id = id || `enemy_${Math.random()}`;
         this.name = type.name;
         this.type = type;
         this.speed = type.speed;
@@ -176,6 +70,15 @@ export class Enemy extends Character {
 
         // Spawn invulnerability
         this.setInvulnerable(3000);
+    }
+
+    // New method to sync with server state in online mode
+    sync(data: ServerEnemy) {
+        this.position = data.position;
+        this.health = data.health;
+        this.maxHealth = data.maxHealth;
+        this.level = data.level;
+        // Smooth transition or snap? Snap is better for now to avoid desync
     }
 
     // Override takeDamage to trigger aggro and apply level gap penalty

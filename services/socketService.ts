@@ -1,13 +1,16 @@
 
 import { io, Socket } from "socket.io-client";
-import { CharacterData } from "../game/types";
+import { CharacterData, ServerEnemy } from "../game/types";
 
 // The type for the game state object received from the server
-type GameStatePayload = Record<string, {
-  position: { x: number; y: number };
-  characterData: CharacterData;
-}>;
-
+// Updated to include enemies
+interface GameStatePayload {
+    players: Record<string, {
+        position: { x: number; y: number };
+        characterData: CharacterData;
+    }>;
+    enemies: ServerEnemy[];
+}
 
 let socket: Socket;
 
@@ -44,6 +47,12 @@ export const socketService = {
     if (socket) {
       socket.emit('player_input', keys);
     }
+  },
+  
+  damageEnemy(enemyId: string, damage: number) {
+      if (socket) {
+          socket.emit('hit_enemy', { enemyId, damage });
+      }
   },
 
   onGameState(callback: (gameState: GameStatePayload) => void) {

@@ -223,6 +223,11 @@ export class Player extends Character {
                             dmg *= stats.bossDamageMultiplier;
                         }
                         const ft = enemy.takeDamage(dmg, { name: this.name, level: this.level });
+                        
+                        // Only trigger hits locally here if offline or specific visual logic needed
+                        // In Online mode, whirlwind damage needs to be synced via socket too, but Projectile logic is handled elsewhere.
+                        // For simplicity, keep local effect for now, but in full implementation this would send 'hit_area' event.
+                        
                         if(ft) {
                             game.addFloatingText(ft);
                             hitAny = true;
@@ -503,6 +508,9 @@ export class Player extends Character {
         // Before saving, clamp health to maxHealth
         const finalStats = this.getFinalStats();
         const clampedHealth = Math.min(this.health, finalStats.maxHealth);
+        
+        // Ensure derived stats like speed are included in the stats object sent to server
+        const statsForExport = { ...this.baseStats, ...finalStats, health: clampedHealth };
 
         return {
             id: this.id as string,
@@ -512,7 +520,7 @@ export class Player extends Character {
             xp: this.xp,
             gold: this.gold,
             kills: this.kills,
-            stats: { ...this.baseStats, health: clampedHealth },
+            stats: statsForExport,
             inventory: this.inventory,
             equipment: this.equipment,
             position: this.position,

@@ -149,3 +149,14 @@ export interface WaypointData {
     name: string;
     position: Vector2D;
 }
+
+export interface ServerEnemy {
+    id: string;
+    position: Vector2D;
+    health: number;
+    maxHealth: number;
+    level: number;
+    isBoss: boolean;
+    bossZoneId?: string;
+    typeId: string; // Key for ENEMY_TYPES or BOSS_TYPES
+}
