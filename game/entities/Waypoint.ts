@@ -1,5 +1,5 @@
 
-import { Vector2D, WaypointData } from '../types';
+import { WaypointData } from '../types';
 
 export class Waypoint {
     data: WaypointData;

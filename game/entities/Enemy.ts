@@ -3,7 +3,7 @@ import { Character } from './Character';
 import { Vector2D, GameContext, Item, ItemRarity } from '../types';
 import { normalizeVector, getDistance } from '../utils';
 import { DroppedItem } from './DroppedItem';
-import { MATERIALS_DB, getRandomItem, ALL_EQUIPMENT, ALL_MYTHICS } from '../items';
+import { MATERIALS_DB, ALL_EQUIPMENT, ALL_MYTHICS } from '../items';
 import { GAME_CONFIG, LOOT_CONFIG, BOSS_CONFIG, BOSS_ZONES } from '../constants';
 import { Projectile } from './Projectile';
 import { FloatingText } from './FloatingText';

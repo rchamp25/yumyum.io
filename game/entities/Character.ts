@@ -43,7 +43,7 @@ export abstract class Character {
         return Date.now() < this.invulnerableUntil;
     }
 
-    takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
+    takeDamage(amount: number, _source?: { name: string, level?: number }): FloatingText | null {
         if (this.isDead) return null;
         if (this.isInvulnerable()) return null;
 

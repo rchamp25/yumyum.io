@@ -8,13 +8,12 @@ interface StartScreenProps {
 }
 
 const ClassCard: React.FC<{
-  charClass: CharacterClass;
   Icon: React.FC<{ className?: string }>;
   title: string;
   description: string;
   color: string;
   onClick: () => void;
-}> = ({ charClass, Icon, title, description, color, onClick }) => (
+}> = ({ Icon, title, description, color, onClick }) => (
   <button
     onClick={onClick}
     className={`bg-gray-800 border-2 border-gray-700 rounded-lg p-6 text-center transform hover:-translate-y-2 transition-transform duration-300 ease-in-out hover:border-${color}-500 hover:shadow-2xl hover:shadow-${color}-500/20 w-full`}
@@ -32,7 +31,6 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame }) => {
       <p className="text-gray-400 mb-8 text-lg">Select a class to begin your adventure.</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <ClassCard
-          charClass={CharacterClass.Warrior}
           Icon={WarriorIcon}
           title="Warrior"
           description="A sturdy melee fighter who excels at close-quarters combat."
@@ -40,7 +38,6 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame }) => {
           onClick={() => onStartGame(CharacterClass.Warrior)}
         />
         <ClassCard
-          charClass={CharacterClass.Mage}
           Icon={MageIcon}
           title="Mage"
           description="A powerful spellcaster who vanquishes foes from a distance."
@@ -48,7 +45,6 @@ const StartScreen: React.FC<StartScreenProps> = ({ onStartGame }) => {
           onClick={() => onStartGame(CharacterClass.Mage)}
         />
         <ClassCard
-          charClass={CharacterClass.Archer}
           Icon={ArcherIcon}
           title="Archer"
           description="A swift marksman who rains arrows upon unsuspecting enemies."

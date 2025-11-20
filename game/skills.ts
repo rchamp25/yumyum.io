@@ -1,5 +1,5 @@
 
-import { SkillDefinition, CharacterClass, GameContext } from './types';
+import { SkillDefinition, CharacterClass } from './types';
 import { findNearestEnemy, getDistance, normalizeVector } from './utils';
 import { Projectile } from './entities/Projectile';
 import { VisualEffect } from './entities/VisualEffect';
@@ -24,7 +24,6 @@ const WarriorSkills: SkillDefinition[] = [
         use: (player, game) => {
             const target = findNearestEnemy(player.position, game.enemies, 400);
             if (target) {
-                const dist = getDistance(player.position, target.position);
                 const dir = normalizeVector({ x: target.position.x - player.position.x, y: target.position.y - player.position.y });
                 
                 // Teleport player close to enemy (Dash effect)

@@ -674,8 +674,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       handleUseSkillRef.current = handleUseSkill;
   });
 
-  const nearbyNPC = player ? npcs.find(npc => getDistance(player.position, npc.position) < npc.interactionRadius) : null;
-  const nearbyWaypoint = player ? waypoints.find(wp => getDistance(player.position, wp.data.position) < wp.interactionRadius && player.discoveredWaypoints.includes(wp.data.id)) : null;
+  const nearbyNPC = player ? (npcs.find(npc => getDistance(player.position, npc.position) < npc.interactionRadius) || null) : null;
+  const nearbyWaypoint = player ? (waypoints.find(wp => getDistance(player.position, wp.data.position) < wp.interactionRadius && player.discoveredWaypoints.includes(wp.data.id)) || null) : null;
   
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -739,7 +739,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       }
   };
   
-  const handleSell = (item: Item, inventoryIndex: number, sellFullStack: boolean) => {
+  // Renamed item to _item to fix unused variable error
+  const handleSell = (_item: Item, inventoryIndex: number, sellFullStack: boolean) => {
        if (player?.sellItem(inventoryIndex, sellFullStack)) {
             setPlayer(new Player(player.toCharacterData()));
        }

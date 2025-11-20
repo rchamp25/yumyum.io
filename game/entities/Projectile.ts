@@ -1,9 +1,8 @@
 
-import { Vector2D, StatusEffect, GameContext, CharacterClass } from "../types";
+import { Vector2D, StatusEffect, GameContext } from "../types";
 import { normalizeVector, getDistance, findNearestEnemy } from "../utils";
 import { Character } from "./Character";
 import { Player } from "./Player";
-import { Enemy } from "./Enemy";
 import { VisualEffect } from "./VisualEffect";
 
 let nextId = 0;

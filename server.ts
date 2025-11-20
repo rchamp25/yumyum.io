@@ -34,7 +34,7 @@ const players = new Map<string, ServerPlayer>();
 app.use('/', express.static(__dirname) as any);
 
 // Serve index.html for any other request
-app.get('*', (req: Request, res: Response) => {
+app.get('*', (_req: Request, res: Response) => {
     (res as any).sendFile(path.resolve(__dirname, 'index.html'));
 });
 
@@ -73,7 +73,7 @@ io.on('connection', (socket: Socket) => {
 
 // Server-side game loop
 setInterval(() => {
-    for (const [id, player] of players.entries()) {
+    for (const player of players.values()) {
         let moveX = 0;
         let moveY = 0;
         if (player.input.has('w')) moveY -= 1;

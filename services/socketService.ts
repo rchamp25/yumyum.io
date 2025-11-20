@@ -26,7 +26,7 @@ export const socketService = {
 
     socket.on('connect', () => {
       console.log('Connected to server with id:', socket.id);
-      callback(socket.id);
+      callback(socket.id || '');
     });
   },
 

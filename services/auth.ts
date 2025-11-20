@@ -38,7 +38,7 @@ class AuthService {
         return () => subscription.unsubscribe();
     }
     
-    async signInWithGoogle(email: string): Promise<void> {
+    async signInWithGoogle(_email: string): Promise<void> {
         // Note: The 'email' arg is unused here because we redirect to Google directly.
         // In a real app, the user picks their account on the Google page.
         const { error } = await supabase.auth.signInWithOAuth({

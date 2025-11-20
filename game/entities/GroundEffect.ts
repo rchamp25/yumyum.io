@@ -2,7 +2,6 @@
 import { Vector2D, StatusEffect, GameContext } from "../types";
 import { Enemy } from "./Enemy";
 import { getDistance } from "../utils";
-import { FloatingText } from "./FloatingText";
 
 export class GroundEffect {
     position: Vector2D;

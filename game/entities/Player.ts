@@ -1,11 +1,9 @@
 
 import { Character } from './Character';
-import { CharacterData, Vector2D, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity } from '../types';
-import { normalizeVector, getDistance, findNearestEnemy } from '../utils';
+import { CharacterData, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity } from '../types';
+import { normalizeVector, getDistance } from '../utils';
 import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, BOSS_ZONES, BOSS_CONFIG } from '../constants';
-import { Projectile } from './Projectile';
 import { SKILLS_DB } from '../skills';
-import { ITEMS_DB, MATERIALS_DB } from '../items';
 import { FloatingText } from './FloatingText';
 
 export class Player extends Character {
