@@ -90,6 +90,25 @@ class StorageService {
     }
   }
 
+  async checkCharacterNameExists(name: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('characters')
+        .select('id')
+        .ilike('name', name)
+        .limit(1);
+
+      if (error) {
+        console.error("Error checking name uniqueness:", error);
+        return false; // Don't block creation on API error, but ideally should handle better
+      }
+      return data && data.length > 0;
+    } catch (err) {
+      console.error("Failed to check name", err);
+      return false;
+    }
+  }
+
   async createCharacter(userId: string, name: string, characterClass: CharacterClass): Promise<CharacterData | null> {
     const characters = await this.getCharacters(userId);
     if (characters.length >= 3) {
