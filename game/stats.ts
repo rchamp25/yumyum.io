@@ -59,14 +59,21 @@ export function calculateFinalStats(
 
             // World 2 Overrides
             if (currentWorldId === WORLD_IDS.WORLD_2) {
-                const w2Config = WORLD_CONFIGS[WORLD_IDS.WORLD_2];
+                // Cast to any to bypass strict property checks on the union type of configs
+                const w2Config = WORLD_CONFIGS[WORLD_IDS.WORLD_2] as any;
                 if (w2Config) {
-                    bonus = w2Config.bossItemFindValue;
-                    cap = w2Config.itemFindCap;
+                    // Safely access properties with fallback to ensure they are numbers
+                    if (typeof w2Config.bossItemFindValue === 'number') {
+                        bonus = w2Config.bossItemFindValue;
+                    }
+                    if (typeof w2Config.itemFindCap === 'number') {
+                        cap = w2Config.itemFindCap;
+                    }
                 }
             }
 
-            final.itemFind = (final.itemFind ?? 0) + bonus;
+            const currentItemFind = final.itemFind ?? 0;
+            final.itemFind = currentItemFind + bonus;
             
             if (final.itemFind > cap) {
                 final.itemFind = cap;
