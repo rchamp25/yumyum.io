@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, Party, TradeSession, NPCType, ServerEnemy, Recipe } from '../game/types';
+import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -10,6 +10,7 @@ import { GroundEffect } from '../game/entities/GroundEffect';
 import { DroppedItem } from '../game/entities/DroppedItem';
 import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
+import { NPCType } from '../game/types';
 import useGameLoop from '../hooks/useGameLoop';
 import useKeyboardInput from '../hooks/useKeyboardInput';
 import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG } from '../game/constants';
@@ -18,6 +19,7 @@ import { CRAFTING_RECIPES } from '../game/items';
 import HUD from './HUD';
 import Inventory from './Inventory';
 import NPCInteraction from './NPCInteraction';
+import FastTravelUI from './FastTravelUI';
 import PartyUI from './PartyUI';
 import TradeUI from './TradeUI';
 import { socketService } from '../services/socketService';
@@ -29,13 +31,14 @@ interface GameProps {
   onReturnToSelect: (finalCharacterData: CharacterData) => void;
   isOnlineMode: boolean;
   isDevMode: boolean;
-  userId: string;
+  userId: string; // Added userId for Bank access
 }
 
 const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const bossSpawnTimerRef = useRef(0);
+  const globalBossSpawnTimeRef = useRef(0);
   
   const [player, setPlayer] = useState<Player | null>(null);
   const [enemies, setEnemies] = useState<Enemy[]>([]);
@@ -51,22 +54,26 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   
   const [isInventoryOpen, setInventoryOpen] = useState(false);
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
+  const [interactingWaypoint, setInteractingWaypoint] = useState<Waypoint | null>(null);
   
   // Bank State
   const [bankItems, setBankItems] = useState<(Item | null)[]>([]);
-  const [isBankLoaded, setBankLoaded] = useState(false);
 
   // Multiplayer State
   const [party, setParty] = useState<Party | null>(null);
   const [isPartyUIOpen, setPartyUIOpen] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState<{type: 'party'|'trade', fromId: string, fromName: string}[]>([]);
   const [activeTradeSession, setActiveTradeSession] = useState<TradeSession | null>(null);
 
   const pressedKeys = useKeyboardInput();
+  const playerIdRef = useRef<string>('');
+  const prevHealthRef = useRef<number>(0);
 
   const addProjectile = useCallback((p: Projectile) => setProjectiles(prev => [...prev, p]), []);
   const addFloatingText = useCallback((ft: FloatingText) => setFloatingTexts(prev => [...prev, ft]), []);
   const addVisualEffect = useCallback((ve: VisualEffect) => setVisualEffects(prev => [...prev, ve]), []);
   const addGroundEffect = useCallback((ge: GroundEffect) => setGroundEffects(prev => [...prev, ge]), []);
+  const addDroppedItem = useCallback((di: DroppedItem) => setDroppedItems(prev => [...prev, di]), []);
 
   const playSound = useCallback((type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => {
     try {
@@ -128,636 +135,753 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             const noise = ctx.createBufferSource();
             noise.buffer = buffer;
             const gain = ctx.createGain();
-            gain.gain.setValueAtTime(0.1, t);
-            gain.gain.linearRampToValueAtTime(0.001, t + 0.1);
+            gain.gain.setValueAtTime(0.15, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
             noise.connect(gain);
             gain.connect(masterGain);
             noise.start();
-        } else if (type === 'level_up') {
-            const osc = ctx.createOscillator();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(440, t);
-            osc.frequency.setValueAtTime(554, t + 0.2);
-            osc.frequency.setValueAtTime(659, t + 0.4);
-            const gain = ctx.createGain();
-            gain.gain.setValueAtTime(0.1, t);
-            gain.gain.linearRampToValueAtTime(0.1, t + 0.6);
-            gain.gain.linearRampToValueAtTime(0, t + 1);
-            osc.connect(gain);
-            gain.connect(masterGain);
-            osc.start();
-            osc.stop(t + 1);
+        }
+        else if (type === 'level_up') {
+             const notes = [440, 554.37, 659.25, 880];
+             notes.forEach((freq, i) => {
+                 const o = ctx.createOscillator();
+                 o.type = 'sine';
+                 o.frequency.value = freq;
+                 const g = ctx.createGain();
+                 g.gain.setValueAtTime(0, t);
+                 g.gain.linearRampToValueAtTime(0.1, t + 0.1 + (i * 0.05));
+                 g.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+                 o.connect(g);
+                 g.connect(masterGain);
+                 o.start(t + (i * 0.05));
+                 o.stop(t + 2);
+             });
         }
     } catch (e) {
-        // Ignore audio errors
+        console.error("Audio playback failed", e);
     }
   }, []);
 
-  // --- Initialization ---
+  const isVisible = (pos: Vector2D, radius: number = 0, buffer: number = 250) => {
+      const cvsWidth = window.innerWidth;
+      const cvsHeight = window.innerHeight;
+      return pos.x + radius + buffer > camera.x &&
+             pos.x - radius - buffer < camera.x + cvsWidth &&
+             pos.y + radius + buffer > camera.y &&
+             pos.y - radius - buffer < camera.y + cvsHeight;
+  };
+
+  const updateServerCharacter = useCallback((p: Player) => {
+      if (isOnlineMode) {
+          socketService.updateCharacter(p.toCharacterData());
+      }
+  }, [isOnlineMode]);
+
+  // Initialize game
   useEffect(() => {
-    // 1. Init Player
     const newPlayer = new Player(characterData);
     setPlayer(newPlayer);
+    prevHealthRef.current = newPlayer.health;
+    setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
 
-    // 2. Init NPCs
-    const initialNPCs = [
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2 - 100, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, "Thomas", NPCType.Crafter),
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2 + 100, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, "Trevor", NPCType.Vendor),
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 - 100 }, "Jackson", NPCType.Seller),
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2 + 150, y: GAME_CONFIG.WORLD_HEIGHT / 2 + 50 }, "Rory", NPCType.WorldTraveler),
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2 - 150, y: GAME_CONFIG.WORLD_HEIGHT / 2 + 50 }, "Arthur", NPCType.Banker),
-        new NPC({ x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 + 120 }, "Eldric", NPCType.QuestGiver),
-    ];
-    setNpcs(initialNPCs);
-
-    // 3. Init Waypoints
-    setWaypoints(WAYPOINTS.map(data => new Waypoint(data)));
-
-    // 4. Init Bank
-    const loadBank = async () => {
-        if (!userId) return;
-        try {
-            const items = await storageService.getBank(userId);
-            // Pad bank to 100 slots
-            const paddedBank = [...items];
-            while (paddedBank.length < 100) paddedBank.push(null);
-            setBankItems(paddedBank);
-            setBankLoaded(true);
-        } catch (err) {
-            console.error("Failed to load bank", err);
-        }
-    };
-    loadBank();
-
-    // 5. Online Mode Setup
     if (isOnlineMode) {
         socketService.connect((id) => {
-            if (newPlayer) newPlayer.id = id;
+            playerIdRef.current = id;
+            console.log("Connected to game server!", id);
+            socketService.joinGame(newPlayer.toCharacterData());
         });
-        socketService.joinGame(characterData);
 
-        socketService.onGameState((gameState) => {
+        socketService.onGameState((payload) => {
             const others: any[] = [];
-            Object.entries(gameState.players).forEach(([id, pData]) => {
-                if (id !== socketService.id) {
-                    others.push(pData);
+            Object.entries(payload.players).forEach(([id, data]) => {
+                if (id !== playerIdRef.current) {
+                    others.push(data);
                 }
             });
             setOtherPlayers(others);
             
-            // Sync enemies
-            setEnemies(prevEnemies => {
-                const updatedEnemies = [...prevEnemies];
-                
-                // Add new enemies
-                gameState.enemies.forEach(serverEnemy => {
-                    const existingIndex = updatedEnemies.findIndex(e => e.id === serverEnemy.id);
-                    if (existingIndex === -1) {
-                        // Create new enemy locally
-                        const newEnemy = new Enemy(serverEnemy.position, serverEnemy.level, serverEnemy.bossZoneId, serverEnemy.id);
-                        newEnemy.sync(serverEnemy);
-                        updatedEnemies.push(newEnemy);
-                        if (serverEnemy.isBoss) playSound('boss_spawn');
-                    } else {
-                        // Sync existing
-                        updatedEnemies[existingIndex].sync(serverEnemy);
-                    }
+            if (payload.enemies) {
+                setEnemies(prevEnemies => {
+                    const newEnemyList = [...prevEnemies];
+                    const serverIds = new Set(payload.enemies.map(e => e.id));
+                    
+                    payload.enemies.forEach(serverEnemy => {
+                        const existing = newEnemyList.find(e => e.id === serverEnemy.id);
+                        if (existing) {
+                            existing.sync(serverEnemy);
+                        } else {
+                            const newEnemy = new Enemy(serverEnemy.position, serverEnemy.level, serverEnemy.bossZoneId, serverEnemy.id);
+                            newEnemy.sync(serverEnemy);
+                            newEnemyList.push(newEnemy);
+                        }
+                    });
+                    return newEnemyList.filter(e => serverIds.has(e.id as string));
                 });
-
-                // Remove enemies not in server state
-                const serverEnemyIds = gameState.enemies.map(e => e.id);
-                return updatedEnemies.filter(e => {
-                     if (serverEnemyIds.includes(e.id)) return true;
-                     // Keep dead animation/bodies for a bit? No, for now instant remove
-                     return false; 
-                });
-            });
+            }
         });
 
         socketService.onLootDropped((drops) => {
             drops.forEach(drop => {
-                setDroppedItems(prev => [...prev, new DroppedItem(drop.position, drop.item)]);
+                addDroppedItem(new DroppedItem(drop.position, drop.item));
             });
         });
 
         socketService.onEnemyKilled((data) => {
-            if (newPlayer) {
-                newPlayer.gainXP(data.xp, addFloatingText, data.enemyLevel);
-                newPlayer.gainGold(data.gold, addFloatingText);
-            }
+            setPlayer(prev => {
+                if (!prev) return null;
+                const updatedPlayer = new Player(prev.toCharacterData());
+                const oldLevel = updatedPlayer.level;
+                
+                updatedPlayer.gainXP(data.xp, addFloatingText, data.enemyLevel);
+                if (updatedPlayer.level > oldLevel) {
+                    playSound('level_up');
+                    socketService.updateCharacter(updatedPlayer.toCharacterData());
+                }
+                
+                updatedPlayer.gainGold(data.gold, addFloatingText);
+                updatedPlayer.kills++;
+                
+                return updatedPlayer;
+            });
+        });
+        
+        socketService.onPartyUpdate((p) => {
+            setParty(p);
         });
 
         socketService.onInviteReceived((invite) => {
-            // Auto accept for now or show UI? 
-            // Showing simple alert for POC
-            if (window.confirm(`${invite.fromName} invited you to ${invite.type}. Accept?`)) {
-                if (invite.type === 'party') socketService.acceptPartyInvite(invite.fromId);
-                if (invite.type === 'trade') socketService.acceptTradeRequest(invite.fromId);
-            }
+            setPendingInvites(prev => [...prev, { type: invite.type, fromId: invite.fromId, fromName: invite.fromName }]);
         });
         
-        socketService.onPartyUpdate((partyData) => {
-            setParty(partyData);
-        });
-
         socketService.onTradeUpdate((session) => {
             setActiveTradeSession(session);
-            if (!session) {
-                 // Trade ended
-            }
+            // If trade completed successfully (session becomes null but we need feedback), handled by separate event
         });
-
+        
         socketService.onTradeCompleted((success) => {
-            if(success) {
-                addFloatingText(new FloatingText("Trade Successful!", {x: newPlayer.position.x, y: newPlayer.position.y - 40}, '#4ade80', 20));
+            if (success) {
+                addFloatingText(new FloatingText("Trade Successful!", player!.position, '#4ade80', 24));
+                // Force update player data as trade modified inventory/gold directly on server
+                // Ideally server sends update_character right before this, which we handle
+            } else {
+                addFloatingText(new FloatingText("Trade Failed", player!.position, '#ef4444', 24));
             }
+            setActiveTradeSession(null);
         });
+    }
 
-        socketService.onCharacterUpdate((data) => {
-            // Server updated our character (e.g. after trade)
-            if (newPlayer) {
-                newPlayer.gold = data.gold;
-                newPlayer.inventory = data.inventory;
-                // Re-equip check?
-                // Simplest is just update references
+    const cx = GAME_CONFIG.WORLD_WIDTH / 2;
+    const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
+    const dist = 150;
+    setNpcs([
+        new NPC({ x: cx + dist, y: cy }, 'Thomas', NPCType.Crafter),
+        new NPC({ x: cx - dist, y: cy }, 'Trevor', NPCType.Vendor),
+        new NPC({ x: cx, y: cy - dist }, 'Jackson', NPCType.Seller),
+        new NPC({ x: cx, y: cy + dist }, 'Rory', NPCType.WorldTraveler),
+        new NPC({ x: cx - dist, y: cy + dist }, 'Vault Master', NPCType.Banker), // Added Banker
+    ]);
+    setWaypoints(WAYPOINTS.map(data => new Waypoint(data)));
+
+    if (!isOnlineMode) {
+        const initialEnemies: Enemy[] = [];
+        const targetInitialPopulation = Math.floor(GAME_CONFIG.MAX_ENEMIES * 0.8);
+        const worldCenter = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
+        
+        const initialBossZone = BOSS_ZONES[Math.floor(Math.random() * BOSS_ZONES.length)];
+        const initialBoss = new Enemy({ x: initialBossZone.x, y: initialBossZone.y }, GAME_CONFIG.MAX_LEVEL, initialBossZone.id);
+        initialEnemies.push(initialBoss);
+        globalBossSpawnTimeRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+
+        let attempts = 0;
+        // Spawn in packs logic
+        while (initialEnemies.length < targetInitialPopulation && attempts < 2000) {
+            attempts++;
+            
+            const angle = Math.random() * Math.PI * 2;
+            // Minimum distance: Safe Zone + 500 buffer
+            const minRadius = GAME_CONFIG.SAFE_ZONE_RADIUS + 500;
+            const maxRadius = Math.min(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT) / 2 - 100;
+            
+            const radius = minRadius + Math.random() * (maxRadius - minRadius);
+            const packX = worldCenter.x + Math.cos(angle) * radius;
+            const packY = worldCenter.y + Math.sin(angle) * radius;
+
+            if (packX > 100 && packX < GAME_CONFIG.WORLD_WIDTH - 100 && packY > 100 && packY < GAME_CONFIG.WORLD_HEIGHT - 100) {
+                
+                // Zone scaling
+                const distFactor = (radius - minRadius) / (maxRadius - minRadius);
+                let zoneLevel = 1 + Math.floor(distFactor * (GAME_CONFIG.MAX_LEVEL - 1));
+                zoneLevel = Math.max(1, Math.min(GAME_CONFIG.MAX_LEVEL, zoneLevel));
+
+                // Pack size 5-6
+                const packSize = 5 + Math.floor(Math.random() * 2);
+                
+                for(let i=0; i<packSize; i++) {
+                    if (initialEnemies.length >= targetInitialPopulation) break;
+                    
+                    // Scatter slightly around pack center
+                    const ex = packX + (Math.random() - 0.5) * 150;
+                    const ey = packY + (Math.random() - 0.5) * 150;
+                    
+                    if (ex > 50 && ex < GAME_CONFIG.WORLD_WIDTH - 50 && ey > 50 && ey < GAME_CONFIG.WORLD_HEIGHT - 50) {
+                        initialEnemies.push(new Enemy({ x: ex, y: ey }, zoneLevel));
+                    }
+                }
             }
-        });
+        }
+        setEnemies(initialEnemies);
     }
 
     return () => {
         if (isOnlineMode) {
             socketService.disconnect();
+            socketService.offGameState();
         }
     };
-  }, [isOnlineMode, userId, addFloatingText, characterData, playSound]);
 
-  // --- Game Loop ---
-  useGameLoop(() => {
-    if (!player || player.isDead) return;
+  }, [characterData, playSound, isOnlineMode, addDroppedItem, addFloatingText]);
+  
+  const gameLoop = useCallback(() => {
     gameTimeRef.current++;
+    
+    if (!player || player.isDead) return;
 
-    // 1. Update Player
-    player.update(pressedKeys, { 
-        player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode 
-    });
-
-    // Send input to server
     if (isOnlineMode) {
-        const keysArray = Array.from(pressedKeys);
-        socketService.sendInput(keysArray);
-    }
-
-    // Check Safe Zone
-    const distToCenter = getDistance(player.position, { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 });
-    player.isInSafeZone = distToCenter < GAME_CONFIG.SAFE_ZONE_RADIUS;
-
-    // 2. Update Projectiles
-    setProjectiles(prev => {
-      const next: Projectile[] = [];
-      prev.forEach(p => {
-        p.update();
-        let hit = false;
+        socketService.sendInput(Array.from(pressedKeys));
         
-        // Player projectile hitting enemies
-        if (!p.isHostile) {
-            for (const enemy of enemies) {
-                if (!enemy.isDead && getDistance(p.position, enemy.position) < p.radius + enemy.radius) {
-                    p.onHit(enemy, { player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode });
-                    hit = true;
-                    if (isOnlineMode && !enemy.isDead) { // Sync hit to server
-                        socketService.damageEnemy(String(enemy.id), p.damage);
-                    }
-                    if (!p.piercing) break;
-                }
-            }
-        } 
-        // Hostile projectile hitting player
-        else {
-            if (getDistance(p.position, player.position) < p.radius + player.radius) {
-                 p.onHit(player, { player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode });
-                 hit = true;
-            }
-        }
-
-        if (!p.isExpired() && (!hit || p.piercing)) {
-            next.push(p);
-        }
-      });
-      return next;
-    });
-
-    // 3. Update Enemies (Local Mode Only logic + Shared Animation logic)
-    setEnemies(prev => {
-        prev.forEach(enemy => {
-            // Only run AI logic if offline (Online logic handled by server sync + simple interpolation)
-            if (!isOnlineMode) {
-                enemy.update({ player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode });
-                if (enemy.isDead && !enemy.lootDropped) {
-                     const drops = enemy.dropLoot(player);
-                     drops.forEach(d => setDroppedItems(curr => [...curr, d]));
-                     if (player.level < GAME_CONFIG.MAX_LEVEL) {
-                        player.gainXP(enemy.xpValue, addFloatingText, enemy.level);
-                     }
-                     player.gainGold(enemy.goldValue, addFloatingText);
-                }
-            } else {
-                // Just update animations
-                enemy.updateAnimation();
-            }
-        });
-        return isOnlineMode ? prev : prev.filter(e => !e.isDead || Date.now() - (e as any).deathTime < 1000); // Keep dead briefly? No, simpler to remove
-    });
-
-    // 3b. Spawn Enemies (Local Mode)
-    if (!isOnlineMode) {
-        const aliveEnemies = enemies.filter(e => !e.isDead);
-        if (aliveEnemies.length < GAME_CONFIG.MAX_ENEMIES) {
-            // Logic to spawn new enemies
-            const spawnX = Math.random() * GAME_CONFIG.WORLD_WIDTH;
-            const spawnY = Math.random() * GAME_CONFIG.WORLD_HEIGHT;
-            if (getDistance({x: spawnX, y: spawnY}, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) > GAME_CONFIG.SAFE_ZONE_RADIUS + 100) {
-                // Calculate level based on distance from center
-                const dist = getDistance({x: spawnX, y: spawnY}, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2});
-                const maxDist = Math.max(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT) / 2;
-                const level = Math.floor(1 + (dist / maxDist) * (GAME_CONFIG.MAX_LEVEL - 1));
-                
-                const newEnemy = new Enemy({x: spawnX, y: spawnY}, Math.max(1, level));
-                setEnemies(prev => [...prev, newEnemy]);
-            }
-        }
-
-        // Spawn Bosses (Local)
-        bossSpawnTimerRef.current++;
-        if (bossSpawnTimerRef.current > 600) { // Check every ~10s
-             bossSpawnTimerRef.current = 0;
-             const activeBosses = enemies.filter(e => e.isBoss);
-             if (activeBosses.length < BOSS_CONFIG.MAX_ACTIVE_BOSSES) {
-                  // Try spawn boss
-                  BOSS_ZONES.forEach(zone => {
-                       if (!activeBosses.find(b => b.bossZoneId === zone.id) && Math.random() < 0.3) {
-                            // Spawn
-                            const boss = new Enemy({x: zone.x, y: zone.y}, GAME_CONFIG.MAX_LEVEL, zone.id);
-                            setEnemies(prev => [...prev, boss]);
-                            playSound('boss_spawn');
-                            addFloatingText(new FloatingText(`${boss.name} has spawned!`, {x: player.position.x, y: player.position.y - 100}, '#ef4444', 24));
-                       }
-                  });
-             }
+        // Check for damage taken and sync to server if significant change
+        if (Math.abs(player.health - prevHealthRef.current) > 1) {
+            updateServerCharacter(player);
+            prevHealthRef.current = player.health;
         }
     }
 
-    // 4. Update Items & Interactions
-    setDroppedItems(prev => {
-        const next: DroppedItem[] = [];
-        prev.forEach(item => {
-            item.update(player);
-            if (getDistance(item.position, player.position) < player.radius + 10) {
-                if (player.pickupItem(item.item)) {
-                    playSound('hit'); // Pickup sound
-                    addFloatingText(new FloatingText(`+${item.item.name}`, player.position, '#4ade80'));
-                } else {
-                    next.push(item); // Inventory full
-                }
-            } else {
-                next.push(item);
-            }
-        });
-        return next;
-    });
+    const playerDistFromCenter = getDistance(player.position, {x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2});
+    player.isInSafeZone = playerDistFromCenter <= GAME_CONFIG.SAFE_ZONE_RADIUS;
+    
+    const gameContext = { player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode };
+    
+    player.update(pressedKeys, gameContext);
 
-    // 5. Update Effects
-    setFloatingTexts(prev => {
-        const next: FloatingText[] = [];
-        prev.forEach(ft => {
-            ft.update();
-            if (!ft.isExpired()) next.push(ft);
-        });
-        return next;
-    });
-    setVisualEffects(prev => {
-        const next: VisualEffect[] = [];
-        prev.forEach(ve => {
-            ve.update();
-            if (!ve.isExpired()) next.push(ve);
-        });
-        return next;
-    });
-    setGroundEffects(prev => {
-        const next: GroundEffect[] = [];
-        prev.forEach(ge => {
-            ge.update(enemies, { player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode });
-            if (!ge.isExpired()) next.push(ge);
-        });
-        return next;
-    });
-
-    // 6. Update Camera
-    const targetCamX = player.position.x - window.innerWidth / 2;
-    const targetCamY = player.position.y - window.innerHeight / 2;
-    setCamera(prev => ({
-        x: prev.x + (targetCamX - prev.x) * 0.1,
-        y: prev.y + (targetCamY - prev.y) * 0.1
-    }));
-
-    // 7. Check Interaction
-    let nearby: NPC | null = null;
-    let minDist = 999;
-    npcs.forEach(npc => {
-        const d = getDistance(player.position, npc.position);
-        if (d < npc.interactionRadius + player.radius && d < minDist) {
-            minDist = d;
-            nearby = npc;
-        }
-    });
-    setInteractingNPC(nearby);
-
-    // Waypoint Discovery
     waypoints.forEach(wp => {
         if (getDistance(player.position, wp.data.position) < wp.unlockRadius) {
             if (player.discoverWaypoint(wp.data.id)) {
-                addFloatingText(new FloatingText("Waypoint Discovered!", {x: player.position.x, y: player.position.y - 50}, '#22d3ee', 20));
-                playSound('level_up');
+                 addFloatingText(new FloatingText("Waypoint Discovered!", { x: player.position.x, y: player.position.y - 50 }, '#22d3ee', 20));
+                 addVisualEffect(new VisualEffect(wp.data.position, 'buff_aura', 2000, { color: '#22d3ee', radius: 60 }));
+                 updateServerCharacter(player);
             }
         }
     });
 
-    // Death Check
-    if (player.health <= 0 && !player.isDead) {
+    const updatedEnemies = [...enemies]; 
+    
+    // IMPORTANT: Always run update for enemies so animations/attacks trigger.
+    // In online mode, the Enemy.update method handles skipping position updates.
+    updatedEnemies.forEach(e => e.update(gameContext));
+
+    if (!isOnlineMode) {
+        bossSpawnTimerRef.current++;
+    }
+
+    projectiles.forEach(p => p.update());
+    floatingTexts.forEach(ft => ft.update());
+    visualEffects.forEach(ve => ve.update());
+    groundEffects.forEach(ge => ge.update(updatedEnemies, gameContext));
+    droppedItems.forEach(di => di.update(player));
+    
+    // Collisions
+    projectiles.forEach(p => {
+        if (p.ownerId === player.id || !p.isHostile) { 
+            for (const enemy of updatedEnemies) {
+                if (enemy.isDead) continue;
+                if (getDistance(p.position, enemy.position) < p.radius + enemy.radius) {
+                    if (isOnlineMode) {
+                        // Optimistic visual feedback
+                        const ft = new FloatingText(Math.round(p.damage).toString(), { x: enemy.position.x, y: enemy.position.y - enemy.radius }, '#fff');
+                        addFloatingText(ft);
+                        playSound('hit');
+                        socketService.damageEnemy(enemy.id as string, p.damage);
+                    } else {
+                        p.onHit(enemy, gameContext);
+                    }
+                    if (!p.piercing && p.bounces <= 0) p.expire();
+                }
+            }
+        } else if (p.isHostile) {
+             if (getDistance(p.position, player.position) < p.radius + player.radius) {
+                 p.onHit(player, gameContext);
+                 if (!p.piercing) p.expire();
+             }
+        }
+    });
+
+    const remainingItems: DroppedItem[] = [];
+    droppedItems.forEach(di => {
+        if(getDistance(di.position, player.position) < player.radius) {
+            if (player.pickupItem(di.item)) {
+                 addFloatingText(new FloatingText(`+ ${di.item.name}`, player.position, '#ffd700'));
+                 updateServerCharacter(player);
+            } else {
+                 addFloatingText(new FloatingText(`Inventory Full!`, player.position, '#ff4d4d'));
+                 remainingItems.push(di);
+            }
+        } else {
+            remainingItems.push(di);
+        }
+    });
+    setDroppedItems(remainingItems);
+
+    if (player.health <= 0) {
         const stats: GameStats = {
-            killerName: player.lastDamagedBy || "Unknown",
+            killerName: player.lastDamagedBy || 'themselves',
             level: player.level,
             kills: player.kills,
             gold: player.gold,
             totalDamageTaken: player.totalDamageTaken,
-            deathLog: player.deathLog
+            deathLog: player.deathLog,
         };
         onDeath(stats, player.toCharacterData());
+        return;
     }
-  });
+    
+    if (!isOnlineMode) {
+        setEnemies(updatedEnemies.map(e => {
+            if (e.isDead && !e.lootDropped) {
+                e.dropLoot(player).forEach(addDroppedItem);
+                const oldLevel = player.level;
+                player.gainXP(e.xpValue, addFloatingText, e.level);
+                if (player.level > oldLevel) playSound('level_up');
+                player.gainGold(e.goldValue, addFloatingText);
+                player.kills++;
+            }
+            return e;
+        }).filter(e => !e.isDead));
+    }
 
-  // --- Render Loop ---
-  useEffect(() => {
+    setProjectiles(prev => prev.filter(p => !p.isExpired()));
+    setFloatingTexts(prev => prev.filter(ft => !ft.isExpired()));
+    setVisualEffects(prev => prev.filter(ve => !ve.isExpired()));
+    setGroundEffects(prev => prev.filter(ge => !ge.isExpired()));
+    
     const canvas = canvasRef.current;
-    if (!canvas || !player) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (canvas) {
+        const targetX = player.position.x - canvas.width / 2;
+        const targetY = player.position.y - canvas.height / 2;
+        setCamera(prev => ({
+            x: prev.x + (targetX - prev.x) * 0.1,
+            y: prev.y + (targetY - prev.y) * 0.1,
+        }));
+    }
 
-    // Resize
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers]);
 
-    // Clear
-    ctx.fillStyle = '#1a202c'; // bg-gray-900
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.save();
-    ctx.translate(-camera.x, -camera.y);
-
-    // Draw World Border
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 5;
-    ctx.strokeRect(0, 0, GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
-
-    // Draw Safe Zone
-    ctx.beginPath();
-    ctx.arc(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2, GAME_CONFIG.SAFE_ZONE_RADIUS, 0, Math.PI*2);
-    ctx.fillStyle = 'rgba(74, 222, 128, 0.1)';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(74, 222, 128, 0.3)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Draw Ground Effects
-    groundEffects.forEach(ge => ge.draw(ctx));
-
-    // Draw Dropped Items
-    droppedItems.forEach(item => item.draw(ctx));
-
-    // Draw Waypoints
-    waypoints.forEach(wp => wp.draw(ctx, player.discoveredWaypoints.includes(wp.data.id)));
-
-    // Draw NPCs
-    npcs.forEach(npc => npc.draw(ctx));
-
-    // Draw Enemies
-    enemies.forEach(enemy => enemy.draw(ctx));
-
-    // Draw Other Players
-    otherPlayers.forEach(op => {
-        const isParty = party?.members.some(m => m.id === op.id);
-        
-        // Simple draw for other players
-        ctx.save();
-        ctx.translate(op.position.x, op.position.y);
-        
-        // Shadow
-        ctx.beginPath();
-        ctx.ellipse(0, 20, 20, 10, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.fill();
-
-        // Body
-        ctx.beginPath();
-        ctx.arc(0, 0, 20, 0, Math.PI * 2);
-        ctx.fillStyle = isParty ? '#4ade80' : '#60a5fa'; // Green if party, blue if not
-        ctx.fill();
-        
-        // Name
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.font = '12px sans-serif';
-        ctx.fillText(op.characterData.name, 0, 35);
-        ctx.restore();
-    });
-
-    // Draw Player
-    player.draw(ctx);
-
-    // Draw Projectiles
-    projectiles.forEach(p => p.draw(ctx));
-
-    // Draw Visual Effects
-    visualEffects.forEach(ve => ve.draw(ctx));
-
-    // Draw Floating Text
-    floatingTexts.forEach(ft => ft.draw(ctx));
-
-    ctx.restore();
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, waypoints, camera, otherPlayers, party]);
-
-  // --- Handlers ---
-  const handleUseSkill = (index: number) => {
-      if (player) player.useSkill(index, { player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode });
+  useGameLoop(gameLoop);
+  
+  // Invite Handlers
+  const handleAcceptInvite = (invite: {type: 'party'|'trade', fromId: string}) => {
+      if (invite.type === 'party') {
+          socketService.acceptPartyInvite(invite.fromId);
+      } else {
+          socketService.acceptTradeRequest(invite.fromId);
+      }
+      setPendingInvites(prev => prev.filter(i => i.fromId !== invite.fromId));
+  };
+  
+  const handleDeclineInvite = (fromId: string) => {
+       setPendingInvites(prev => prev.filter(i => i.fromId !== fromId));
   };
 
-  const toggleInventory = () => setInventoryOpen(!isInventoryOpen);
+  // Bank Logic
+  useEffect(() => {
+      if (interactingNPC?.npcType === NPCType.Banker) {
+          storageService.getBank(userId).then(items => {
+              setBankItems(items);
+          });
+      }
+  }, [interactingNPC, userId]);
 
-  // --- Bank Handlers ---
-  const handleDeposit = async (inventoryIndex: number) => {
-      if (!player || !isBankLoaded) return;
+  const handleDeposit = (inventoryIndex: number) => {
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
       const item = player.inventory[inventoryIndex];
       if (!item) return;
 
-      // Find empty slot in bank
-      const emptySlot = bankItems.findIndex(s => s === null);
+      const newBank = [...bankItems];
+      // Ensure bank is initialized with slots
+      while(newBank.length < 100) newBank.push(null);
+
+      const emptySlot = newBank.findIndex(s => s === null);
       if (emptySlot !== -1) {
-          const newBank = [...bankItems];
+          // Move
+          player.inventory[inventoryIndex] = null;
           newBank[emptySlot] = item;
           
-          player.inventory[inventoryIndex] = null; // Remove from player
-          
+          // Update states and save
           setBankItems(newBank);
-          await storageService.saveBank(userId, newBank);
-          // Note: Player inventory save is handled by periodic save or exit, 
-          // but for robustness we could force a save here.
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+          
+          storageService.saveBank(userId, newBank);
+          storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
       } else {
-          addFloatingText(new FloatingText("Bank is full!", player.position, '#ef4444'));
+          addFloatingText(new FloatingText("Bank Full!", player.position, '#ef4444'));
       }
   };
 
-  const handleWithdraw = async (bankIndex: number) => {
-      if (!player || !isBankLoaded) return;
+  const handleWithdraw = (bankIndex: number) => {
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
       const item = bankItems[bankIndex];
       if (!item) return;
 
-      // Check player space
-      if (player.pickupItem(item)) {
-           const newBank = [...bankItems];
-           newBank[bankIndex] = null;
-           setBankItems(newBank);
-           await storageService.saveBank(userId, newBank);
+      const emptySlot = player.inventory.findIndex(s => s === null);
+      if (emptySlot !== -1) {
+          // Move
+          const newBank = [...bankItems];
+          newBank[bankIndex] = null;
+          player.inventory[emptySlot] = item;
+
+          // Update states and save
+          setBankItems(newBank);
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+
+          storageService.saveBank(userId, newBank);
+          storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
       } else {
-          addFloatingText(new FloatingText("Inventory full!", player.position, '#ef4444'));
+          addFloatingText(new FloatingText("Inventory Full!", player.position, '#ef4444'));
       }
-  };
+  }
 
-  const handleCraft = (recipe: Recipe) => {
-      if (player && player.craftItem(recipe)) {
-          playSound('level_up'); // Craft sound
-          addFloatingText(new FloatingText(`Crafted ${recipe.result.name}`, player.position, '#facc15'));
-      }
-  };
-  
-  const handleSell = (item: Item, index: number, sellFullStack: boolean) => {
-      if (player && player.sellItem(index, sellFullStack)) {
-          playSound('hit'); // Sell sound (coins)
-      }
-  };
-
-  const handleBuy = (item: Item, cost: number) => {
-      if (player && player.buyItem(item, cost)) {
-           playSound('hit');
-      }
-  };
-  
-  const handleSellByRarity = (rarity: number) => {
-      if (player) {
-           const gain = player.sellUnlockedItemsByRarity(rarity);
-           if (gain > 0) playSound('hit');
-      }
-  };
-
-  const handleEquip = (index: number) => {
-      if (player) player.equipItem(index);
-  };
-  const handleUnequip = (slot: any) => {
-      if (player) player.unequipItem(slot);
-  };
-  const handleMoveItem = (from: number, to: number) => {
-      if (player) player.moveItem(from, to);
-  };
-  const handleToggleLock = (index: number) => {
-      if (player) player.toggleItemLock(index);
-  };
-
-  // Key Listeners
+  // Render
   useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-          if (e.key === 'i' || e.key === 'c') toggleInventory();
-          if (e.key === 'e' && interactingNPC) {
-              // Open Interaction
-          }
-          if (player) {
-              if (e.key === '1') handleUseSkill(0);
-              if (e.key === '2') handleUseSkill(1);
-              if (e.key === '3') handleUseSkill(2);
-              if (e.key === '4') handleUseSkill(3);
-              if (e.key === '5') handleUseSkill(4);
-          }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isInventoryOpen, interactingNPC, player]);
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!ctx || !canvas || !player) return;
 
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-  if (!player) return <div>Loading Game...</div>;
+    ctx.fillStyle = '#1a202c';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.translate(-camera.x, -camera.y);
+
+    ctx.strokeStyle = '#2d3748';
+    ctx.lineWidth = 1;
+    const gridStep = 50;
+    const startX = Math.max(0, Math.floor(camera.x / gridStep) * gridStep);
+    const endX = Math.min(GAME_CONFIG.WORLD_WIDTH, camera.x + canvas.width);
+    const startY = Math.max(0, Math.floor(camera.y / gridStep) * gridStep);
+    const endY = Math.min(GAME_CONFIG.WORLD_HEIGHT, camera.y + canvas.height);
+
+    for(let x = startX; x <= endX; x += gridStep) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, GAME_CONFIG.WORLD_HEIGHT); ctx.stroke();
+    }
+    for(let y = startY; y <= endY; y += gridStep) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME_CONFIG.WORLD_WIDTH, y); ctx.stroke();
+    }
+
+    if (isVisible({ x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.SAFE_ZONE_RADIUS)) {
+        ctx.beginPath();
+        ctx.arc(GAME_CONFIG.WORLD_WIDTH / 2, GAME_CONFIG.WORLD_HEIGHT / 2, GAME_CONFIG.SAFE_ZONE_RADIUS, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 255, 150, 0.05)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0, 255, 150, 0.2)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    BOSS_ZONES.forEach(zone => {
+        if (isVisible({x: zone.x, y: zone.y}, BOSS_CONFIG.ZONE_RADIUS)) {
+             ctx.beginPath();
+             ctx.arc(zone.x, zone.y, BOSS_CONFIG.ZONE_RADIUS, 0, Math.PI * 2);
+             ctx.fillStyle = 'rgba(147, 51, 234, 0.05)';
+             ctx.fill();
+             ctx.strokeStyle = 'rgba(147, 51, 234, 0.3)';
+             ctx.lineWidth = 4;
+             ctx.setLineDash([20, 10]);
+             ctx.stroke();
+             ctx.setLineDash([]);
+        }
+    });
+    
+    groundEffects.forEach(ge => { if(isVisible(ge.position, ge.radius)) ge.draw(ctx); });
+    waypoints.forEach(wp => { if(isVisible(wp.data.position, wp.radius)) wp.draw(ctx, player.discoveredWaypoints.includes(wp.data.id)); });
+    droppedItems.forEach(di => { if(isVisible(di.position, 20)) di.draw(ctx); });
+    npcs.forEach(npc => { if(isVisible(npc.position, npc.radius)) npc.draw(ctx); });
+    enemies.forEach(e => { if(isVisible(e.position, e.radius)) e.draw(ctx); });
+
+    // Draw Other Players
+    otherPlayers.forEach(op => {
+        if (!isVisible(op.position, GAME_CONFIG.PLAYER_RADIUS)) return;
+        ctx.save();
+        ctx.translate(op.position.x, op.position.y);
+        ctx.beginPath();
+        ctx.ellipse(0, GAME_CONFIG.PLAYER_RADIUS, GAME_CONFIG.PLAYER_RADIUS, GAME_CONFIG.PLAYER_RADIUS / 2, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(0, 0, GAME_CONFIG.PLAYER_RADIUS, 0, Math.PI * 2);
+        const colors = ['#ef4444', '#3b82f6', '#22c55e']; 
+        ctx.fillStyle = colors[op.characterData.characterClass] || '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.fillText(op.characterData.name, 0, GAME_CONFIG.PLAYER_RADIUS + 22);
+        ctx.font = 'bold 10px sans-serif';
+        ctx.fillText(`Lv. ${op.characterData.level}`, 0, -GAME_CONFIG.PLAYER_RADIUS - 8);
+        ctx.restore();
+    });
+    
+    player.draw(ctx);
+    projectiles.forEach(p => { if(isVisible(p.position, p.radius)) p.draw(ctx); });
+    visualEffects.forEach(ve => { if(isVisible(ve.position, 100)) ve.draw(ctx); });
+    floatingTexts.forEach(ft => { if(isVisible(ft.position, 50)) ft.draw(ctx); });
+
+    ctx.restore();
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers]);
+
+  const toggleInventory = useCallback(() => {
+    if (interactingNPC || interactingWaypoint || activeTradeSession) return;
+    setInventoryOpen(prev => !prev);
+  }, [interactingNPC, interactingWaypoint, activeTradeSession]);
+
+  const handleUseSkill = (index: number) => {
+      if(!player) return;
+      playSound('attack');
+      player.useSkill(index, { player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode });
+  };
+
+  const handleUseSkillRef = useRef(handleUseSkill);
+  useEffect(() => { handleUseSkillRef.current = handleUseSkill; });
+
+  const nearbyNPC = player ? (npcs.find(npc => getDistance(player.position, npc.position) < npc.interactionRadius) || null) : null;
+  const nearbyWaypoint = player ? (waypoints.find(wp => getDistance(player.position, wp.data.position) < wp.interactionRadius && player.discoveredWaypoints.includes(wp.data.id)) || null) : null;
+  
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+        const key = e.key.toLowerCase();
+        if (key === 'escape') {
+            setInventoryOpen(false);
+            setPartyUIOpen(false);
+            setInteractingNPC(null);
+            setInteractingWaypoint(null);
+            if (activeTradeSession) socketService.cancelTrade();
+            return;
+        }
+        
+        if (key === 'i' || key === 'c') toggleInventory();
+        
+        if (key === 'e') {
+            if (nearbyNPC) {
+                setInteractingNPC(nearbyNPC);
+                setInventoryOpen(false);
+                setInteractingWaypoint(null);
+            } else if (nearbyWaypoint) {
+                setInteractingWaypoint(nearbyWaypoint);
+                setInventoryOpen(false);
+                setInteractingNPC(null);
+            }
+        }
+        if (['1', '2', '3', '4', '5'].includes(key)) handleUseSkillRef.current(parseInt(key) - 1);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [toggleInventory, nearbyNPC, nearbyWaypoint, activeTradeSession]);
+  
+  // ... inventory handlers ...
+  const handleItemEquip = (itemIndex: number) => {
+      if (player) {
+          player.equipItem(itemIndex);
+          const dropped = player.flushOverflowItems();
+          dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
+  };
+  const handleItemUnequip = (itemSlot: ItemSlot) => {
+      if (player) {
+          player.unequipItem(itemSlot);
+          const dropped = player.flushOverflowItems();
+          dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
+  };
+  
+  const handleToggleItemLock = (itemIndex: number) => {
+      if (player) {
+          player.toggleItemLock(itemIndex);
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
+  }
+
+  const handleInventoryMove = (fromIndex: number, toIndex: number) => {
+    if (player) {
+        player.moveItem(fromIndex, toIndex);
+        const updatedPlayer = new Player(player.toCharacterData());
+        setPlayer(updatedPlayer);
+        updateServerCharacter(updatedPlayer);
+    }
+  };
+  
+  const handleCraft = (recipe: Recipe) => {
+      if (player?.craftItem(recipe)) {
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
+  };
+  
+  const handleSell = (_item: Item, inventoryIndex: number, sellFullStack: boolean) => {
+       if (player?.sellItem(inventoryIndex, sellFullStack)) {
+           const updatedPlayer = new Player(player.toCharacterData());
+           setPlayer(updatedPlayer);
+           updateServerCharacter(updatedPlayer);
+       }
+  };
+  
+  const handleSellByRarity = (rarity: ItemRarity) => {
+      if (player) {
+          player.sellUnlockedItemsByRarity(rarity);
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
+  }
+  
+  const handleBuyItem = (item: Item, cost: number) => {
+      if (player?.buyItem(item, cost)) {
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+      }
+  };
+
+  const handleFastTravel = (destination: WaypointData) => {
+      if (player) {
+          player.position = { ...destination.position };
+          setCamera({ x: player.position.x, y: player.position.y });
+          addVisualEffect(new VisualEffect(destination.position, 'teleport_in', 1000, { radius: 40, endPos: destination.position }));
+          addFloatingText(new FloatingText("Fast Travelled", destination.position, '#22d3ee'));
+          setInteractingWaypoint(null);
+          updateServerCharacter(player); // Update position
+      }
+  };
 
   return (
-    <>
-        <canvas ref={canvasRef} className="block" />
-        <HUD 
-            player={player} 
-            enemies={enemies} 
-            npcs={npcs}
-            waypoints={waypoints}
-            nearbyNPC={interactingNPC}
-            onUseSkill={handleUseSkill}
+    <div className="w-screen h-screen relative">
+      <canvas ref={canvasRef} className="w-full h-full" />
+      <HUD 
+        player={player} 
+        enemies={enemies} 
+        npcs={npcs}
+        waypoints={waypoints}
+        nearbyNPC={!interactingNPC && !interactingWaypoint ? nearbyNPC : null}
+        onUseSkill={handleUseSkill}
+        toggleInventory={toggleInventory}
+        isInventoryOpen={isInventoryOpen}
+        party={party}
+        onOpenParty={() => setPartyUIOpen(true)}
+        onRequestTrade={(targetId) => socketService.requestTrade(targetId)}
+        otherPlayers={otherPlayers} // Pass other players to HUD
+      />
+      
+      {/* Invites */}
+      {pendingInvites.length > 0 && (
+           <div className="absolute top-20 center-x flex flex-col space-y-2 items-center z-50 w-full pointer-events-none">
+                {pendingInvites.map((invite, i) => (
+                    <div key={i} className="bg-gray-900/90 border border-teal-500 p-4 rounded-lg shadow-xl pointer-events-auto flex items-center space-x-4">
+                        <div className="text-white">
+                            <span className="font-bold text-teal-400">{invite.fromName}</span> invited you to {invite.type === 'party' ? 'a party' : 'trade'}.
+                        </div>
+                        <button onClick={() => handleAcceptInvite(invite)} className="bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded font-bold text-sm">Accept</button>
+                        <button onClick={() => handleDeclineInvite(invite.fromId)} className="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded font-bold text-sm">Decline</button>
+                    </div>
+                ))}
+           </div>
+      )}
+
+      {!interactingNPC && !interactingWaypoint && nearbyWaypoint && (
+         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-24 bg-cyan-900/80 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-cyan-500">
+            <p className="font-bold text-lg text-cyan-100">Press [E] to Fast Travel ({nearbyWaypoint.data.name})</p>
+        </div>
+      )}
+      
+      {isInventoryOpen && player && (
+        <Inventory 
+            characterData={player.toCharacterData()}
+            onItemEquip={handleItemEquip}
+            onItemUnequip={handleItemUnequip}
             toggleInventory={toggleInventory}
-            isInventoryOpen={isInventoryOpen}
-            party={party}
-            onOpenParty={() => setPartyUIOpen(true)}
-            onRequestTrade={(tid) => socketService.requestTrade(tid)}
-            otherPlayers={otherPlayers}
+            onInventoryMove={handleInventoryMove}
+            onToggleLock={handleToggleItemLock}
         />
-        
-        {isInventoryOpen && (
-            <Inventory 
-                characterData={player.toCharacterData()} // Helper to get data view
-                onItemEquip={handleEquip}
-                onItemUnequip={handleUnequip}
-                toggleInventory={toggleInventory}
-                onInventoryMove={handleMoveItem}
-                onToggleLock={handleToggleLock}
-            />
-        )}
+      )}
+      
+      {isPartyUIOpen && player && (
+          <PartyUI 
+            party={party}
+            onClose={() => setPartyUIOpen(false)}
+            onInvite={(name) => socketService.inviteToParty(name)}
+            onLeave={() => socketService.leaveParty()}
+          />
+      )}
+      
+      {activeTradeSession && player && (
+          <TradeUI 
+             session={activeTradeSession}
+             currentUserId={player.id as string}
+             inventory={player.inventory}
+             onUpdateOffer={(gold, items) => socketService.updateTradeOffer(gold, items)}
+             onLockOffer={(locked) => socketService.lockTrade(locked)}
+             onCancel={() => socketService.cancelTrade()}
+          />
+      )}
 
-        {interactingNPC && (pressedKeys.has('e') || activeTradeSession) && (
-             <NPCInteraction 
-                npc={interactingNPC}
-                characterData={player.toCharacterData()}
-                recipes={CRAFTING_RECIPES}
-                onClose={() => setInteractingNPC(null)}
-                onCraft={handleCraft}
-                onSell={handleSell}
-                onBuy={handleBuy}
-                onSellByRarity={handleSellByRarity}
-                bankItems={bankItems}
-                onDeposit={handleDeposit}
-                onWithdraw={handleWithdraw}
-             />
-        )}
-
-        {/* Interactions that persist even if walking away slightly, or modal-based */}
-        {isPartyUIOpen && (
-            <PartyUI 
-                party={party}
-                onClose={() => setPartyUIOpen(false)}
-                onInvite={(name) => socketService.inviteToParty(name)}
-                onLeave={() => socketService.leaveParty()}
-            />
-        )}
-
-        {activeTradeSession && (
-             <TradeUI 
-                session={activeTradeSession}
-                currentUserId={socketService.id || ''}
-                inventory={player.inventory}
-                onUpdateOffer={(g, i) => socketService.updateTradeOffer(g, i)}
-                onLockOffer={(l) => socketService.lockTrade(l)}
-                onCancel={() => socketService.cancelTrade()}
-             />
-        )}
-    </>
+      {interactingNPC && player && (
+        <NPCInteraction 
+            npc={interactingNPC}
+            characterData={player.toCharacterData()}
+            recipes={CRAFTING_RECIPES}
+            onClose={() => setInteractingNPC(null)}
+            onCraft={handleCraft}
+            onSell={handleSell}
+            onBuy={handleBuyItem}
+            onSellByRarity={handleSellByRarity}
+            bankItems={bankItems}
+            onDeposit={handleDeposit}
+            onWithdraw={handleWithdraw}
+        />
+      )}
+      {interactingWaypoint && player && (
+          <FastTravelUI 
+            discoveredWaypointIds={player.discoveredWaypoints}
+            currentWaypointId={interactingWaypoint.data.id}
+            onTravel={handleFastTravel}
+            onClose={() => setInteractingWaypoint(null)}
+          />
+      )}
+      <button 
+        onClick={() => onReturnToSelect(player!.toCharacterData())}
+        className="absolute top-4 right-[220px] bg-gray-800/80 p-2 rounded-lg pointer-events-auto hover:bg-gray-700/80 text-white"
+      >
+        Return to Menu
+      </button>
+      <div id="tooltip-root" className="absolute" />
+    </div>
   );
 };
 

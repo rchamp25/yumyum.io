@@ -139,22 +139,21 @@ class StorageService {
   // --- BANK METHODS ---
   async getBank(userId: string): Promise<(Item | null)[]> {
       try {
-          // Ensure we select using the correct filter
           const { data, error } = await supabase
               .from('banks')
               .select('items')
               .eq('user_id', userId)
-              .maybeSingle();
+              .single();
           
-          if (error) {
+          if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
               console.error("Supabase Bank Fetch Error:", error);
               return [];
           }
           
           // If no bank exists, return empty array (will be created on save)
-          if (!data || !data.items) return [];
+          if (!data) return [];
           
-          return data.items as (Item | null)[];
+          return data.items || [];
       } catch (error) {
           console.error("Failed to fetch bank", error);
           return [];
@@ -163,13 +162,9 @@ class StorageService {
 
   async saveBank(userId: string, items: (Item | null)[]): Promise<void> {
       try {
-          // Upsert requires a unique constraint on user_id in the database
           const { error } = await supabase
               .from('banks')
-              .upsert(
-                  { user_id: userId, items: items }, 
-                  { onConflict: 'user_id' }
-              );
+              .upsert({ user_id: userId, items });
           
           if (error) console.error("Supabase Bank Save Error:", error);
       } catch (error) {

@@ -133,10 +133,6 @@ export const socketService = {
   onTradeCompleted(callback: (success: boolean) => void) {
       if(socket) socket.on('trade_completed', callback);
   },
-
-  onCharacterUpdate(callback: (data: CharacterData) => void) {
-      if(socket) socket.on('update_character', callback);
-  },
   
   offGameState() {
       if(socket) {
@@ -147,7 +143,6 @@ export const socketService = {
           socket.off('invite_received');
           socket.off('trade_update');
           socket.off('trade_completed');
-          socket.off('update_character');
       }
   },
 
