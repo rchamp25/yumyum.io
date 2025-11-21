@@ -64,10 +64,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
   const [interactingWaypoint, setInteractingWaypoint] = useState<Waypoint | null>(null);
   
-  // Bank State
-  const [bankItems, setBankItems] = useState<(Item | null)[]>([]);
-  const [isBankLoading, setBankLoading] = useState(false);
-
   // Multiplayer State
   const [party, setParty] = useState<Party | null>(null);
   const [isPartyUIOpen, setPartyUIOpen] = useState(false);
@@ -182,11 +178,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
   const updateServerCharacter = useCallback((p: Player) => {
       if (isOnlineMode) {
-          // Important: We send the "toCharacterData()" which contains BASE STATS.
-          // However, the server needs to know about our Difficulty-Adjusted current health/stats for sync.
-          // We assume the server recalculates based on Difficulty if we wanted to enforce it server side,
-          // but currently we trust the client's reported position/actions.
-          // The client 'Game Loop' syncs HP changes.
           socketService.updateCharacter(p.toCharacterData());
       }
   }, [isOnlineMode]);
@@ -528,76 +519,82 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
        setPendingInvites(prev => prev.filter(i => i.fromId !== fromId));
   };
 
-  // Bank Logic
-  useEffect(() => {
-      if (interactingNPC?.npcType === NPCType.Banker) {
-          setBankLoading(true);
-          storageService.getBank(userId).then(items => {
-              // Always fully initialize the bank array to avoid state overwrite issues
-              const fullBank = [...items];
-              while (fullBank.length < 100) fullBank.push(null);
-              setBankItems(fullBank);
-              setBankLoading(false);
-          });
-      }
-  }, [interactingNPC, userId]);
+  const savePlayerState = useCallback((updatedPlayer: Player) => {
+      setPlayer(updatedPlayer);
+      updateServerCharacter(updatedPlayer);
+      storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
+  }, [userId, updateServerCharacter]);
 
   const handleDeposit = (inventoryIndex: number) => {
-      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker || isBankLoading) return;
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
       const item = player.inventory[inventoryIndex];
       if (!item) return;
 
-      const newBank = [...bankItems];
-      // Ensure bank is initialized with slots
-      while(newBank.length < 100) newBank.push(null);
-
-      const emptySlot = newBank.findIndex(s => s === null);
+      const emptySlot = player.bank.findIndex(s => s === null);
       if (emptySlot !== -1) {
           // Move
           player.inventory[inventoryIndex] = null;
-          newBank[emptySlot] = item;
+          player.bank[emptySlot] = item;
           
-          // Update states and save
-          setBankItems(newBank);
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
-          
-          storageService.saveBank(userId, newBank);
-          storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
+          savePlayerState(updatedPlayer);
       } else {
           addFloatingText(new FloatingText("Bank Full!", player.position, '#ef4444'));
       }
   };
 
   const handleWithdraw = (bankIndex: number) => {
-      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker || isBankLoading) return;
-      const item = bankItems[bankIndex];
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
+      const item = player.bank[bankIndex];
       if (!item) return;
 
       const emptySlot = player.inventory.findIndex(s => s === null);
       if (emptySlot !== -1) {
           // Move
-          const newBank = [...bankItems];
-          newBank[bankIndex] = null;
+          player.bank[bankIndex] = null;
           player.inventory[emptySlot] = item;
 
-          // Update states and save
-          setBankItems(newBank);
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
-
-          storageService.saveBank(userId, newBank);
-          storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
+          savePlayerState(updatedPlayer);
       } else {
           addFloatingText(new FloatingText("Inventory Full!", player.position, '#ef4444'));
       }
   }
+
+  const handleDepositGold = (amount: number) => {
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
+      if (amount <= 0) return;
+      if (player.gold >= amount) {
+          player.gold -= amount;
+          player.bankGold += amount;
+          
+          const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
+          savePlayerState(updatedPlayer);
+          addFloatingText(new FloatingText(`- ${amount} G`, player.position, '#facc15'));
+      } else {
+          addFloatingText(new FloatingText("Not enough gold!", player.position, '#ef4444'));
+      }
+  };
+
+  const handleWithdrawGold = (amount: number) => {
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
+      if (amount <= 0) return;
+      if (player.bankGold >= amount) {
+          player.bankGold -= amount;
+          player.gold += amount;
+          
+          const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
+          savePlayerState(updatedPlayer);
+          addFloatingText(new FloatingText(`+ ${amount} G`, player.position, '#facc15'));
+      } else {
+          addFloatingText(new FloatingText("Not enough in bank!", player.position, '#ef4444'));
+      }
+  };
+
 
   // Render
   useEffect(() => {
@@ -764,8 +761,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
+          savePlayerState(updatedPlayer);
       }
   };
   const handleItemUnequip = (itemSlot: ItemSlot) => {
@@ -775,8 +771,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
+          savePlayerState(updatedPlayer);
       }
   };
   
@@ -785,8 +780,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           player.toggleItemLock(itemIndex);
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
+          savePlayerState(updatedPlayer);
       }
   }
 
@@ -795,8 +789,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         player.moveItem(fromIndex, toIndex);
         const updatedPlayer = new Player(player.toCharacterData());
         if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-        setPlayer(updatedPlayer);
-        updateServerCharacter(updatedPlayer);
+        savePlayerState(updatedPlayer);
     }
   };
   
@@ -804,8 +797,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       if (player?.craftItem(recipe)) {
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
+          savePlayerState(updatedPlayer);
       }
   };
   
@@ -813,8 +805,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
        if (player?.sellItem(inventoryIndex, sellFullStack)) {
            const updatedPlayer = new Player(player.toCharacterData());
            if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-           setPlayer(updatedPlayer);
-           updateServerCharacter(updatedPlayer);
+           savePlayerState(updatedPlayer);
        }
   };
   
@@ -823,8 +814,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           player.sellUnlockedItemsByRarity(rarity);
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
+          savePlayerState(updatedPlayer);
       }
   }
   
@@ -832,8 +822,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       if (player?.buyItem(item, cost)) {
           const updatedPlayer = new Player(player.toCharacterData());
           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
-          setPlayer(updatedPlayer);
-          updateServerCharacter(updatedPlayer);
+          savePlayerState(updatedPlayer);
       }
   };
 
@@ -844,7 +833,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           addVisualEffect(new VisualEffect(destination.position, 'teleport_in', 1000, { radius: 40, endPos: destination.position }));
           addFloatingText(new FloatingText("Fast Travelled", destination.position, '#22d3ee'));
           setInteractingWaypoint(null);
-          updateServerCharacter(player); // Update position
+          updateServerCharacter(player); 
       }
   };
 
@@ -863,7 +852,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         party={party}
         onOpenParty={() => setPartyUIOpen(true)}
         onRequestTrade={(targetId) => socketService.requestTrade(targetId)}
-        otherPlayers={otherPlayers} // Pass other players to HUD
+        otherPlayers={otherPlayers} 
       />
       
       {/* Invites */}
@@ -928,10 +917,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             onSell={handleSell}
             onBuy={handleBuyItem}
             onSellByRarity={handleSellByRarity}
-            bankItems={bankItems}
+            bankItems={player.bank}
             onDeposit={handleDeposit}
             onWithdraw={handleWithdraw}
-            isBankLoading={isBankLoading}
+            onDepositGold={handleDepositGold}
+            onWithdrawGold={handleWithdrawGold}
+            isBankLoading={false}
         />
       )}
       {interactingWaypoint && player && (

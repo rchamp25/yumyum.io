@@ -82,6 +82,8 @@ export interface CharacterData {
   };
   inventory: (Item | null)[];
   equipment: Record<ItemSlot, Item | null>;
+  bank: (Item | null)[];
+  bankGold: number;
   position?: Vector2D; // For online mode
   discoveredWaypoints?: string[];
   hasClaimedDevRewards?: boolean; // Tracks if dev mode items have been granted

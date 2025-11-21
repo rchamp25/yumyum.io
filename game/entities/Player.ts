@@ -16,6 +16,11 @@ export class Player extends Character {
     kills: number;
     inventory: (Item | null)[];
     equipment: Record<ItemSlot, Item | null>;
+    
+    // Bank Storage
+    bank: (Item | null)[];
+    bankGold: number;
+
     baseStats: CharacterData['stats'];
     skills: SkillState[];
     discoveredWaypoints: string[];
@@ -62,6 +67,11 @@ export class Player extends Character {
         this.kills = data.kills;
         this.inventory = [...data.inventory];
         this.equipment = { ...data.equipment };
+        
+        // Initialize Bank
+        this.bank = data.bank ? [...data.bank] : Array(100).fill(null);
+        while(this.bank.length < 100) this.bank.push(null); // Ensure minimum size
+        this.bankGold = data.bankGold || 0;
         
         // Set the sanitized base stats to property
         this.baseStats = cleanBaseStats;
@@ -436,6 +446,8 @@ export class Player extends Character {
     
     respawn() {
         this.gold = Math.floor(this.gold * 0.9);
+        // Note: We do NOT touch bankGold here. It is safe.
+        
         this.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
         this.isDead = false;
         this.recalculateStats();
@@ -477,6 +489,8 @@ export class Player extends Character {
             stats: syncedStats, 
             inventory: this.inventory,
             equipment: this.equipment,
+            bank: this.bank,
+            bankGold: this.bankGold,
             position: this.position,
             discoveredWaypoints: this.discoveredWaypoints,
             hasClaimedDevRewards: this.hasClaimedDevRewards

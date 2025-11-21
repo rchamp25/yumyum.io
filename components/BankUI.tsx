@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Item, CharacterData } from '../game/types';
 import { ItemSlotComponent } from './Inventory';
 
@@ -8,23 +8,61 @@ interface BankUIProps {
     bankItems: (Item | null)[];
     onDeposit: (inventoryIndex: number) => void;
     onWithdraw: (bankIndex: number) => void;
+    onDepositGold?: (amount: number) => void;
+    onWithdrawGold?: (amount: number) => void;
     onClose: () => void;
     isLoading?: boolean;
 }
 
-const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, onWithdraw, onClose, isLoading }) => {
+const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, onWithdraw, onDepositGold, onWithdrawGold, onClose, isLoading }) => {
     // Ensure bank has 100 slots visual
     const displayBank = [...bankItems];
     while(displayBank.length < 100) displayBank.push(null);
 
     return (
         <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-auto z-50" onClick={onClose}>
-            <div className="bg-gray-800/95 backdrop-blur-md p-6 rounded-xl shadow-2xl border border-slate-500 max-w-5xl w-full h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="bg-gray-800/95 backdrop-blur-md p-6 rounded-xl shadow-2xl border border-slate-500 max-w-6xl w-full h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 shrink-0">
                     <h2 className="text-2xl font-bold text-slate-300 flex items-center">
-                        <span className="mr-3 text-3xl">🏦</span> Account Vault
+                        <span className="mr-3 text-3xl">🏦</span> Vault Master
                     </h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">&times;</button>
+                </div>
+
+                {/* Gold Section */}
+                <div className="flex justify-between items-center mb-4 bg-slate-900/60 p-4 rounded-lg border border-slate-700">
+                    {/* Player Gold */}
+                    <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                             <div className="text-xs text-gray-400 uppercase">Inventory Gold</div>
+                             <div className="text-yellow-400 font-bold text-xl">{characterData.gold.toLocaleString()} G</div>
+                        </div>
+                        {onDepositGold && (
+                            <div className="flex space-x-2">
+                                <button onClick={() => onDepositGold(1000)} className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded">Dep 1k</button>
+                                <button onClick={() => onDepositGold(10000)} className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded">Dep 10k</button>
+                                <button onClick={() => onDepositGold(characterData.gold)} className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs px-3 py-1 rounded">Deposit All</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="text-gray-500 font-bold text-2xl">⇄</div>
+
+                    {/* Bank Gold */}
+                    <div className="flex items-center space-x-4">
+                        {onWithdrawGold && (
+                            <div className="flex space-x-2">
+                                <button onClick={() => onWithdrawGold(characterData.bankGold)} className="bg-yellow-600 hover:bg-yellow-500 text-black font-bold text-xs px-3 py-1 rounded">Withdraw All</button>
+                                <button onClick={() => onWithdrawGold(10000)} className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded">With 10k</button>
+                                <button onClick={() => onWithdrawGold(1000)} className="bg-slate-700 hover:bg-slate-600 text-white text-xs px-2 py-1 rounded">With 1k</button>
+                            </div>
+                        )}
+                        <div className="text-left">
+                             <div className="text-xs text-gray-400 uppercase">Vault Gold</div>
+                             <div className="text-yellow-400 font-bold text-xl">{characterData.bankGold?.toLocaleString() || 0} G</div>
+                             <div className="text-[10px] text-green-400 italic">Safe from death</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="flex gap-6 flex-grow min-h-0">
@@ -49,7 +87,7 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                     {/* Right: Bank Stash */}
                     <div className="w-2/3 flex flex-col min-h-0 relative">
                         <h3 className="text-lg font-bold text-slate-300 mb-2 bg-slate-800/50 p-2 rounded text-center border border-slate-600">
-                            Shared Stash (Click to Withdraw)
+                            Personal Stash (Click to Withdraw)
                         </h3>
                         <div className="bg-slate-900/50 p-4 rounded-lg overflow-y-auto flex-grow border border-slate-700 relative">
                             {isLoading ? (
@@ -75,7 +113,7 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                             )}
                         </div>
                         <div className="mt-2 text-xs text-gray-500 text-center">
-                            Items stored here are accessible by all your characters.
+                            Items and Gold stored here are permanently saved to this character.
                         </div>
                     </div>
                 </div>

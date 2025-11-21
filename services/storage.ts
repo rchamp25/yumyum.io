@@ -18,6 +18,8 @@ class StorageService {
         stats: row.stats,
         inventory: row.inventory,
         equipment: row.equipment,
+        bank: row.bank || [], // Load bank from character row
+        bankGold: row.bank_gold || 0, // Load bank gold from character row
         position: row.position,
         discoveredWaypoints: row.discovered_waypoints,
         hasClaimedDevRewards: row.has_claimed_dev_rewards
@@ -38,6 +40,8 @@ class StorageService {
         stats: data.stats,
         inventory: data.inventory,
         equipment: data.equipment,
+        bank: data.bank, // Save bank to character row
+        bank_gold: data.bankGold, // Save bank gold to character row
         position: data.position,
         discovered_waypoints: data.discoveredWaypoints,
         has_claimed_dev_rewards: data.hasClaimedDevRewards
@@ -110,6 +114,8 @@ class StorageService {
           [ItemSlot.Accessory]: null,
           [ItemSlot.Bag]: null,
       },
+      bank: Array(100).fill(null), // Initialize empty bank
+      bank_gold: 0,
       discovered_waypoints: ['wp_spawn'],
       has_claimed_dev_rewards: false
     };
@@ -136,61 +142,7 @@ class StorageService {
         .eq('user_id', userId);
   }
 
-  // --- BANK METHODS ---
-  async getBank(userId: string): Promise<(Item | null)[]> {
-      try {
-          // Robust fetch: Get all rows, but only use the first one.
-          // This prevents 'maybeSingle' from erroring if duplicates exist.
-          const { data, error } = await supabase
-              .from('banks')
-              .select('items')
-              .eq('user_id', userId);
-          
-          if (error) {
-              console.error("Supabase Bank Fetch Error:", error);
-              return [];
-          }
-          
-          if (data && data.length > 0) {
-              const items = data[0].items as (Item | null)[] | null;
-              return items || [];
-          }
-          
-          return [];
-      } catch (error) {
-          console.error("Failed to fetch bank", error);
-          return [];
-      }
-  }
-
-  async saveBank(userId: string, items: (Item | null)[]): Promise<void> {
-      try {
-          // Robust Save: Check existence first to handle duplicates gracefully
-          const { data: existingRows } = await supabase
-              .from('banks')
-              .select('id')
-              .eq('user_id', userId);
-
-          if (existingRows && existingRows.length > 0) {
-              // Update the first existing row found
-              const { error } = await supabase
-                  .from('banks')
-                  .update({ items })
-                  .eq('id', existingRows[0].id);
-                  
-              if (error) console.error("Supabase Bank Update Error:", error);
-          } else {
-              // Insert new row
-              const { error } = await supabase
-                  .from('banks')
-                  .insert({ user_id: userId, items });
-                  
-              if (error) console.error("Supabase Bank Insert Error:", error);
-          }
-      } catch (error) {
-          console.error("Failed to save bank", error);
-      }
-  }
+  // NOTE: Deprecated shared bank methods. Bank is now per-character in the 'characters' table.
 }
 
 export const storageService = new StorageService();
