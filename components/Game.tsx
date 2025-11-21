@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType, EnemyType } from '../game/types';
+import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -131,7 +131,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   }, [isOnlineMode]);
 
   // Helper to create a single pack of enemies (used for init and spawning)
-  const generateEnemyPack = useCallback((worldId: string, existingEnemies: Enemy[]): Enemy[] => {
+  const generateEnemyPack = useCallback((worldId: string): Enemy[] => {
         let attempts = 0;
         let packCenter = { x: 0, y: 0 };
         let validPosition = false;
@@ -200,7 +200,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const spawnLocalEnemies = useCallback((worldId: string) => {
       setEnemies(prev => {
           if (prev.length >= GAME_CONFIG.MAX_ENEMIES) return prev; 
-          const newPack = generateEnemyPack(worldId, prev);
+          const newPack = generateEnemyPack(worldId);
           return [...prev, ...newPack];
       });
   }, [generateEnemyPack]);
@@ -324,7 +324,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           
           // 1. Generate Mobs (~70 packs * 4 mobs avg = 280 mobs)
           for(let i=0; i<70; i++) {
-              const pack = generateEnemyPack(currentWorldId, initialEnemies);
+              const pack = generateEnemyPack(currentWorldId);
               initialEnemies.push(...pack);
           }
 
