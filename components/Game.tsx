@@ -300,17 +300,19 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           // Solo Mode Initial Spawning
           setEnemies([]); // Clear online enemies
           setOtherPlayers([]);
+          localBossCooldownRef.current = 0; // Reset boss cooldown on new world init
+          localSpawnTimerRef.current = 0;
           
-          // Spawn initial batch
-          for(let i=0; i<10; i++) {
+          // Spawn initial batch - Increased to 60 iterations to fill the map immediately
+          for(let i=0; i<60; i++) {
               setTimeout(() => {
                   if (playerRef.current) spawnLocalEnemies(playerRef.current.currentWorldId);
-              }, i * 100);
+              }, i * 20);
           }
-          // Ensure initial boss check
+          // Ensure initial boss check - immediate
           setTimeout(() => {
               if (playerRef.current) spawnLocalBoss(playerRef.current.currentWorldId);
-          }, 1000);
+          }, 500);
       }
   }, [difficulty, isDevMode, isOnlineMode, onReturnToSelect]);
 
