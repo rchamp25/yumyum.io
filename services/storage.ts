@@ -139,22 +139,24 @@ class StorageService {
   // --- BANK METHODS ---
   async getBank(userId: string): Promise<(Item | null)[]> {
       try {
+          // Robust fetch: Get all rows, but only use the first one.
+          // This prevents 'maybeSingle' from erroring if duplicates exist.
           const { data, error } = await supabase
               .from('banks')
               .select('items')
-              .eq('user_id', userId)
-              .maybeSingle();
+              .eq('user_id', userId);
           
           if (error) {
               console.error("Supabase Bank Fetch Error:", error);
               return [];
           }
           
-          if (!data) return [];
+          if (data && data.length > 0) {
+              const items = data[0].items as (Item | null)[] | null;
+              return items || [];
+          }
           
-          // Ensure we return a valid array even if JSON is null
-          const items = data.items as (Item | null)[] | null;
-          return items || [];
+          return [];
       } catch (error) {
           console.error("Failed to fetch bank", error);
           return [];
@@ -163,32 +165,27 @@ class StorageService {
 
   async saveBank(userId: string, items: (Item | null)[]): Promise<void> {
       try {
-          // Using UPSERT logic based on user_id for simplicity and robustness
-          // Check if a bank entry exists
-          const { data: existingBank } = await supabase
+          // Robust Save: Check existence first to handle duplicates gracefully
+          const { data: existingRows } = await supabase
               .from('banks')
               .select('id')
-              .eq('user_id', userId)
-              .maybeSingle();
+              .eq('user_id', userId);
 
-          let error;
-          
-          if (existingBank) {
-              const result = await supabase
+          if (existingRows && existingRows.length > 0) {
+              // Update the first existing row found
+              const { error } = await supabase
                   .from('banks')
                   .update({ items })
-                  .eq('id', existingBank.id);
-              error = result.error;
+                  .eq('id', existingRows[0].id);
+                  
+              if (error) console.error("Supabase Bank Update Error:", error);
           } else {
-              // Try insert
-              const result = await supabase
+              // Insert new row
+              const { error } = await supabase
                   .from('banks')
                   .insert({ user_id: userId, items });
-              error = result.error;
-          }
-          
-          if (error) {
-              console.error("Supabase Bank Save Error:", error);
+                  
+              if (error) console.error("Supabase Bank Insert Error:", error);
           }
       } catch (error) {
           console.error("Failed to save bank", error);

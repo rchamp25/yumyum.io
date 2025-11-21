@@ -21,9 +21,19 @@ const App: React.FC = () => {
     const [currentCharacter, setCurrentCharacter] = useState<CharacterData | null>(null);
     const [deathStats, setDeathStats] = useState<GameStats | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isDevMode, setDevMode] = useState(false);
+    
+    // Initialize Dev Mode from Local Storage
+    const [isDevMode, setDevModeState] = useState<boolean>(() => {
+        return localStorage.getItem('yumyum_is_dev') === 'true';
+    });
+    
     const [isOnlineMode, setOnlineMode] = useState(false);
     const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(Difficulty.Normal);
+
+    const setDevMode = (value: boolean) => {
+        setDevModeState(value);
+        localStorage.setItem('yumyum_is_dev', String(value));
+    };
 
     // Load characters function
     const refreshCharacters = async (uid: string) => {
@@ -67,9 +77,6 @@ const App: React.FC = () => {
     };
     
     const handleSelectCharacter = async (character: CharacterData, difficulty: Difficulty = Difficulty.Normal) => {
-        // Logic for Online Mode validation can go here later if needed
-        // For now, we allow the connection to proceed so the Game component can initiate the socket.
-        
         setSelectedDifficulty(difficulty);
 
         let finalCharacterData = character;

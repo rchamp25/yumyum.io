@@ -47,6 +47,9 @@ const io = new Server(server, {
     }
 });
 
+// GLOBAL SERVER STATE
+let isWorldLocked = false;
+
 // GAME ROOMS based on Difficulty
 const GAME_ROOMS: Record<Difficulty, RoomState> = {
     [Difficulty.Normal]: { players: new Map(), enemies: new Map(), bossSpawnTimer: 0, globalBossCooldown: 0 },
@@ -255,7 +258,28 @@ app.get('*', (_req: Request, res: Response) => {
 io.on('connection', (socket: Socket) => {
     console.log(`Player connected: ${socket.id}`);
 
-    socket.on('join_game', ({ characterData, difficulty }: { characterData: CharacterData, difficulty?: Difficulty }) => {
+    // --- SERVER STATUS & ADMIN ---
+    socket.on('check_status', () => {
+        socket.emit('status_response', isWorldLocked);
+    });
+
+    socket.on('admin_toggle_lock', (locked: boolean) => {
+        // In a real app, you would check for an admin secret here.
+        // For this demo, we rely on the client identifying as a dev through the UI logic.
+        isWorldLocked = locked;
+        console.log(`Server Online Mode Locked: ${isWorldLocked}`);
+        io.emit('status_response', isWorldLocked); // Broadcast new status
+    });
+
+    socket.on('join_game', ({ characterData, difficulty, isDev }: { characterData: CharacterData, difficulty?: Difficulty, isDev?: boolean }) => {
+        
+        // LOCK CHECK
+        if (isWorldLocked && !isDev) {
+            console.log(`Rejected join for ${characterData.name} (Server Locked)`);
+            socket.emit('join_error', 'Online world is currently unavailable.');
+            return;
+        }
+        
         const selectedDifficulty = difficulty || Difficulty.Normal;
         
         const startPosition = characterData.position || { 
@@ -310,9 +334,6 @@ io.on('connection', (socket: Socket) => {
                 player.position = characterData.position;
             }
             const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position, true);
-            
-            // Note: We do NOT reduce speed here for Insane mode anymore, 
-            // keeping movement consistent with offline/client.
             
             player.speed = stats.speed;
             if (player.partyId) broadcastPartyUpdate(player.partyId);
@@ -707,6 +728,7 @@ setInterval(() => {
             const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
             const distFromSpawn = getDistance(enemy.position, enemy.spawnPosition || {x:0,y:0});
             
+            // Use strict leash logic to prevent edge glitching
             if (distFromSpawn > leashRange) {
                 enemy.isReturning = true;
                 enemy.damageTakenMap = {}; 
@@ -724,8 +746,10 @@ setInterval(() => {
 
             let potentialTargets = playerList;
             
+            // If boss, check if it has been damaged (aggroed)
             if (enemy.isBoss) {
                  const hasAggro = enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0;
+                 // Boss stays idle until hit
                  if (!hasAggro) continue; 
             }
 
@@ -739,8 +763,10 @@ setInterval(() => {
             
             let canChase = false;
             if (enemy.isBoss) {
+                // Boss always chases if aggroed (checked above)
                 canChase = true; 
             } else {
+                // Regular mobs check aggro distance
                 canChase = nearestDist < GAME_CONFIG.ENEMY_AGGRO_RANGE;
             }
 

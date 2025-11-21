@@ -52,9 +52,9 @@ export const socketService = {
       return socket?.id;
   },
 
-  joinGame(characterData: CharacterData, difficulty: Difficulty = Difficulty.Normal) {
+  joinGame(characterData: CharacterData, difficulty: Difficulty = Difficulty.Normal, isDev: boolean = false) {
     if (socket) {
-      socket.emit('join_game', { characterData, difficulty });
+      socket.emit('join_game', { characterData, difficulty, isDev });
     }
   },
   
@@ -104,6 +104,18 @@ export const socketService = {
       if(socket) socket.emit('trade_cancel');
   },
 
+  // --- Admin / Server Control ---
+  toggleServerLock(locked: boolean) {
+      if (socket) socket.emit('admin_toggle_lock', locked);
+  },
+  
+  checkServerStatus(callback: (isLocked: boolean) => void) {
+      if (socket) {
+          socket.emit('check_status');
+          socket.once('status_response', callback);
+      }
+  },
+
 
   // --- Listeners ---
   onGameState(callback: (gameState: GameStatePayload) => void) {
@@ -134,6 +146,10 @@ export const socketService = {
       if(socket) socket.on('trade_completed', callback);
   },
   
+  onJoinError(callback: (message: string) => void) {
+      if (socket) socket.on('join_error', callback);
+  },
+  
   offGameState() {
       if(socket) {
           socket.off('game_state');
@@ -143,6 +159,7 @@ export const socketService = {
           socket.off('invite_received');
           socket.off('trade_update');
           socket.off('trade_completed');
+          socket.off('join_error');
       }
   },
 

@@ -35,7 +35,7 @@ interface GameProps {
   difficulty: Difficulty;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId, difficulty }) => {
+const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId, difficulty, isDevMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const bossSpawnTimerRef = useRef(0);
@@ -208,7 +208,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         socketService.connect((id) => {
             playerIdRef.current = id;
             console.log("Connected to game server!", id);
-            socketService.joinGame(newPlayer.toCharacterData(), difficulty);
+            socketService.joinGame(newPlayer.toCharacterData(), difficulty, isDevMode);
+        });
+
+        socketService.onJoinError((message) => {
+            alert(message);
+            onReturnToSelect(characterData);
         });
 
         socketService.onGameState((payload) => {
@@ -371,7 +376,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     };
 
-  }, [characterData, playSound, isOnlineMode, addDroppedItem, addFloatingText, difficulty]);
+  }, [characterData, playSound, isOnlineMode, addDroppedItem, addFloatingText, difficulty, isDevMode]);
   
   const gameLoop = useCallback(() => {
     gameTimeRef.current++;

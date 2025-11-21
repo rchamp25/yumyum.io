@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CharacterData, CharacterClass, Difficulty } from '../game/types';
 import { WarriorIcon, MageIcon, ArcherIcon } from './icons';
 import { GoogleUser } from '../services/auth';
+import { socketService } from '../services/socketService';
 
 interface CharacterSelectScreenProps {
   user: GoogleUser;
@@ -66,6 +67,17 @@ const EmptySlotCard: React.FC<{ onCreate: () => void }> = ({ onCreate }) => (
 
 const DevModeToggle: React.FC<{ isDevMode: boolean, onSetDevMode: (isDev: boolean) => void }> = ({ isDevMode, onSetDevMode }) => {
     const [code, setCode] = useState('');
+    const [isServerLocked, setServerLocked] = useState(false);
+
+    useEffect(() => {
+        // Connect first to ensure socket exists
+        socketService.connect(() => {
+            // Check status
+            socketService.checkServerStatus((locked) => {
+                setServerLocked(locked);
+            });
+        });
+    }, []);
 
     const handleActivate = () => {
         if (code === 'gabs') {
@@ -75,11 +87,25 @@ const DevModeToggle: React.FC<{ isDevMode: boolean, onSetDevMode: (isDev: boolea
         }
     };
 
+    const toggleLock = () => {
+        const newState = !isServerLocked;
+        setServerLocked(newState);
+        socketService.toggleServerLock(newState);
+    };
+
     return (
         <div className={`p-2 rounded-lg border transition-colors ${isDevMode ? 'bg-green-900/50 border-green-500' : 'bg-gray-800/50 border-gray-600'}`}>
             <h4 className="text-xs font-bold text-gray-400 mb-1">Dev Tools</h4>
             {isDevMode ? (
-                <p className="text-sm font-bold text-green-400">Dev Mode Active</p>
+                <div className="flex flex-col space-y-2">
+                    <p className="text-sm font-bold text-green-400">Dev Mode Active</p>
+                    <button 
+                        onClick={toggleLock}
+                        className={`px-2 py-1 rounded text-xs font-bold ${isServerLocked ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}
+                    >
+                        Server: {isServerLocked ? 'LOCKED' : 'OPEN'}
+                    </button>
+                </div>
             ) : (
                 <div className="flex items-center space-x-2">
                     <input 
