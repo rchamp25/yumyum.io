@@ -18,7 +18,7 @@ export const GAME_CONFIG = {
     ENEMY_PACK_SIZE_MIN: 3,
     ENEMY_PACK_SIZE_MAX: 5,
     ENEMY_PACK_RADIUS: 75,
-    ENEMY_AGGRO_RANGE: 180, // How far an enemy can see the player (Reduced)
+    ENEMY_AGGRO_RANGE: 180, // How far an enemy can see the player
     ENEMY_LEASH_RANGE: 600, // How far from spawn an enemy will chase
 };
 
@@ -194,7 +194,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Titan of the Deep',
         radius: 70,
         healthMultiplier: 80, 
-        damageMultiplier: 9.0, // Doubled from 4.5
+        damageMultiplier: 9.0, // Doubled
         speed: 2.5,
         color: '#0ea5e9', // Sky Blue
         attackRange: 90,
@@ -205,7 +205,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Infernal Warlord',
         radius: 60,
         healthMultiplier: 70,
-        damageMultiplier: 12.0, // Doubled from 6.0
+        damageMultiplier: 12.0, // Doubled
         speed: 3.0,
         color: '#dc2626', // Red
         attackRange: 80,
@@ -216,7 +216,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Broodmother',
         radius: 65,
         healthMultiplier: 60,
-        damageMultiplier: 7.5, // Doubled from 3.75
+        damageMultiplier: 7.5, // Doubled
         speed: 3.5,
         color: '#a3e635', // Lime
         attackRange: 400,
@@ -227,7 +227,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Void Weaver',
         radius: 55,
         healthMultiplier: 65,
-        damageMultiplier: 15.0, // Doubled from 7.5
+        damageMultiplier: 15.0, // Doubled
         speed: 2.0,
         color: '#7c3aed', // Violet
         attackRange: 500,

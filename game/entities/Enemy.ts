@@ -28,6 +28,7 @@ export class Enemy extends Character {
     private wanderTarget: Vector2D | null = null;
     private nextWanderTime: number = 0;
     private specialAttackCooldown: number = 0;
+    private lastPosition: Vector2D; // Track last pos for online movement detection
 
     constructor(position: Vector2D, level: number, bossZoneId?: string, id?: string) {
         let type: EnemyType;
@@ -60,6 +61,7 @@ export class Enemy extends Character {
         
         this.goldValue = Math.floor(Math.random() * level + 1) * (isBoss ? 20 : 1);
         this.spawnPosition = { ...position };
+        this.lastPosition = { ...position };
         this.nextWanderTime = Date.now() + Math.random() * 2000;
 
         this.setInvulnerable(3000);
@@ -72,7 +74,7 @@ export class Enemy extends Character {
         this.level = data.level;
         if (data.radius) this.radius = data.radius;
         if (data.damage) this.damage = data.damage;
-        if (data.spawnPosition) this.spawnPosition = data.spawnPosition; // Sync spawn point for correct leashing logic
+        if (data.spawnPosition) this.spawnPosition = data.spawnPosition; 
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
@@ -117,7 +119,7 @@ export class Enemy extends Character {
 
         if (this.state !== 'returning') {
              const playerInSafeZone = player.isInSafeZone;
-             const outsideLeash = distToSpawn > leashRange + 200; // Buffer matches server
+             const outsideLeash = distToSpawn > leashRange + 200; 
              
              let shouldDeAggro = false;
              if (!this.isBoss) {
@@ -138,7 +140,6 @@ export class Enemy extends Character {
                 this.wanderTarget = null;
             }
         } else if (this.state === 'chasing') {
-             // Generous buffer for online mode (25 units) to ensure client sees "Attacking" even if server pos lags slightly behind
              const rangeBuffer = game.isOnlineMode ? 25 : 0;
              if (distToPlayer <= this.attackRange + rangeBuffer) {
                  this.state = 'attacking';
@@ -158,6 +159,15 @@ export class Enemy extends Character {
         // but we DO NOT modify this.position directly. Position updates come via sync().
         const applyMovement = !game.isOnlineMode;
 
+        if (game.isOnlineMode) {
+            // Detect movement from server updates
+            const distMoved = getDistance(this.position, this.lastPosition);
+            if (distMoved > 0.1) {
+                this.isMoving = true;
+            }
+            this.lastPosition = { ...this.position };
+        }
+
         switch(this.state) {
             case 'idle':
                 if (applyMovement) {
@@ -175,9 +185,6 @@ export class Enemy extends Character {
                     this.position.x += chaseDir.x * currentSpeed;
                     this.position.y += chaseDir.y * currentSpeed;
                     this.isMoving = true;
-                } else {
-                    // Just trigger animation, assume server handles position
-                    this.isMoving = true; 
                 }
                 break;
                 
@@ -190,7 +197,8 @@ export class Enemy extends Character {
                     }
                     this.lastAttackTime = Date.now();
                 }
-                this.isMoving = false;
+                // Attacking stops movement
+                this.isMoving = false; 
                 break;
                 
             case 'returning':
@@ -210,8 +218,6 @@ export class Enemy extends Character {
                         });
                         this.position.x += returnDir.x * (currentSpeed * 1.5);
                         this.position.y += returnDir.y * (currentSpeed * 1.5);
-                        this.isMoving = true;
-                    } else {
                         this.isMoving = true;
                     }
                 }
@@ -313,7 +319,6 @@ export class Enemy extends Character {
         const finalStats = player.getFinalStats();
         const itemFind = finalStats.itemFind || 0;
         
-        // Client-side dropLoot (Offline Only) does not pass isOnline=true
         const items = generateLoot(this.level, this.position, this.isBoss, itemFind, false);
         
         return items.map(item => new DroppedItem(this.position, item));
