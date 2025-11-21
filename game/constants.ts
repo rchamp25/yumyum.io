@@ -80,8 +80,8 @@ export const LOOT_CONFIG = {
     LEVEL_MATERIAL_DROP_RATE_BONUS: 0.002, // 0.2% per level. Level 45 = +9% material drop rate
 
     // Base Drop Rates
-    EQUIPMENT_DROP_RATE: 0.05, // 5% base chance (Reduced from 15%)
-    MATERIAL_DROP_RATE: 0.20, // 20% base chance (Reduced from 50%)
+    EQUIPMENT_DROP_RATE: 0.10, // 10% base chance (Doubled from 5%)
+    MATERIAL_DROP_RATE: 0.40, // 40% base chance (Doubled from 20%)
     MATERIAL_QUANTITY_MIN: 1,
     MATERIAL_QUANTITY_MAX: 2,
 

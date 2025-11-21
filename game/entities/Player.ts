@@ -438,7 +438,7 @@ export class Player extends Character {
     }
     
     respawn() {
-        this.gold = Math.floor(this.gold * 0.9);
+        this.gold = Math.floor(this.gold * 0.7); // Lose 30% gold
         this.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
         this.isDead = false;
         this.recalculateStats();
