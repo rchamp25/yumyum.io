@@ -32,6 +32,9 @@ export class Player extends Character {
     isInSafeZone: boolean = false;
     
     overflowItems: Item[] = [];
+    
+    // Difficulty Modifier
+    statMultiplier: number = 1;
 
     constructor(data: CharacterData) {
         // SANITIZATION: Recalculate base stats from level to fix any DB corruption / exploits.
@@ -80,8 +83,21 @@ export class Player extends Character {
         this.updateInventoryCapacity();
     }
 
+    applyInsaneModeNerfs() {
+        this.statMultiplier = 0.5;
+        this.recalculateStats();
+        // Also cut current health
+        this.health = Math.min(this.health, this.maxHealth);
+    }
+
     getFinalStats(isOnline: boolean = false) {
-        return calculateFinalStats(this.baseStats, this.equipment, this.position, isOnline);
+        const stats = calculateFinalStats(this.baseStats, this.equipment, this.position, isOnline);
+        if (this.statMultiplier !== 1) {
+            stats.maxHealth *= this.statMultiplier;
+            stats.damage *= this.statMultiplier;
+            stats.healthRegen *= this.statMultiplier;
+        }
+        return stats;
     }
 
     getMaxInventorySize(): number {
@@ -446,6 +462,9 @@ export class Player extends Character {
         // We export THIS.BASESTATS. This is critical.
         // The server or game reload will re-apply equipment bonuses.
         // We do NOT export 'finalStats' into the 'stats' field, or we get double-stats bug.
+        
+        // Note: We do not export the temporary stat nerfs from Insane mode here, 
+        // so saving the character preserves their real stats.
         
         return {
             id: this.id as string,

@@ -1,6 +1,6 @@
 
 import { io, Socket } from "socket.io-client";
-import { CharacterData, ServerEnemy, Item, Vector2D, Party, TradeSession } from "../game/types";
+import { CharacterData, ServerEnemy, Item, Vector2D, Party, TradeSession, Difficulty } from "../game/types";
 
 interface GameStatePayload {
     players: Record<string, {
@@ -52,9 +52,9 @@ export const socketService = {
       return socket?.id;
   },
 
-  joinGame(characterData: CharacterData) {
+  joinGame(characterData: CharacterData, difficulty: Difficulty = Difficulty.Normal) {
     if (socket) {
-      socket.emit('join_game', characterData);
+      socket.emit('join_game', { characterData, difficulty });
     }
   },
   

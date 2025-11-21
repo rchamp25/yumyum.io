@@ -4,7 +4,7 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Vector2D, CharacterData, ServerEnemy, Party, TradeSession } from './game/types';
+import { Vector2D, CharacterData, ServerEnemy, Party, TradeSession, Difficulty } from './game/types';
 import { GAME_CONFIG, BOSS_TYPES, BOSS_ZONES, BOSS_CONFIG, ONLINE_BOSS_CONFIG } from './game/constants';
 import { calculateFinalStats } from './game/stats';
 import { generateLoot } from './game/lootUtils';
@@ -23,11 +23,19 @@ interface ServerPlayer {
     radius: number;
     partyId: string | null;
     tradeSessionId: string | null;
+    difficulty: Difficulty;
 }
 
 // Extend ServerEnemy interface locally to include server-only state
 interface ExtendedServerEnemy extends ServerEnemy {
     isReturning: boolean;
+}
+
+interface RoomState {
+    players: Map<string, ServerPlayer>;
+    enemies: Map<string, ExtendedServerEnemy>;
+    bossSpawnTimer: number;
+    globalBossCooldown: number;
 }
 
 const app = express();
@@ -39,23 +47,46 @@ const io = new Server(server, {
     }
 });
 
-const players = new Map<string, ServerPlayer>();
-const enemies = new Map<string, ExtendedServerEnemy>();
+// GAME ROOMS based on Difficulty
+const GAME_ROOMS: Record<Difficulty, RoomState> = {
+    [Difficulty.Normal]: { players: new Map(), enemies: new Map(), bossSpawnTimer: 0, globalBossCooldown: 0 },
+    [Difficulty.Hard]: { players: new Map(), enemies: new Map(), bossSpawnTimer: 0, globalBossCooldown: 0 },
+    [Difficulty.Insane]: { players: new Map(), enemies: new Map(), bossSpawnTimer: 0, globalBossCooldown: 0 },
+};
+
 const parties = new Map<string, Party>();
 const tradeSessions = new Map<string, TradeSession>();
 
-let bossSpawnTimer = 0;
-let globalBossCooldown = 0;
+// Helper: Get all players across all rooms
+function getAllPlayers(): ServerPlayer[] {
+    let all: ServerPlayer[] = [];
+    Object.values(GAME_ROOMS).forEach(room => {
+        all = all.concat(Array.from(room.players.values()));
+    });
+    return all;
+}
+
+function getPlayer(id: string): ServerPlayer | undefined {
+    for (const room of Object.values(GAME_ROOMS)) {
+        if (room.players.has(id)) return room.players.get(id);
+    }
+    return undefined;
+}
+
+function getRoomByPlayerId(id: string): RoomState | undefined {
+    for (const room of Object.values(GAME_ROOMS)) {
+        if (room.players.has(id)) return room;
+    }
+    return undefined;
+}
 
 // --- Party Helpers ---
 function broadcastPartyUpdate(partyId: string) {
     const party = parties.get(partyId);
     if (party) {
         party.members.forEach(m => {
-            // Only send to online members
             if (m.isOnline) {
-                // Update health info for online members before sending
-                const p = players.get(m.id);
+                const p = getPlayer(m.id);
                 if (p) {
                     m.health = p.characterData.stats.health;
                     m.maxHealth = p.characterData.stats.maxHealth;
@@ -68,14 +99,13 @@ function broadcastPartyUpdate(partyId: string) {
 }
 
 function leaveParty(playerId: string) {
-    const player = players.get(playerId);
+    const player = getPlayer(playerId);
     if (!player || !player.partyId) return;
     
     const partyId = player.partyId;
     const party = parties.get(partyId);
     
     if (party) {
-        // Actually remove the member
         party.members = party.members.filter(m => m.id !== playerId);
         player.partyId = null;
         io.to(playerId).emit('party_update', null);
@@ -84,7 +114,6 @@ function leaveParty(playerId: string) {
             parties.delete(partyId);
         } else {
             if (party.leaderId === playerId) {
-                // Pass leadership to first online member, or first member if all offline
                 const nextLeader = party.members.find(m => m.isOnline) || party.members[0];
                 if (nextLeader) party.leaderId = nextLeader.id;
             }
@@ -97,8 +126,8 @@ function leaveParty(playerId: string) {
 function endTrade(sessionId: string, completed: boolean) {
     const session = tradeSessions.get(sessionId);
     if (session) {
-        const p1 = players.get(session.player1Id);
-        const p2 = players.get(session.player2Id);
+        const p1 = getPlayer(session.player1Id);
+        const p2 = getPlayer(session.player2Id);
         
         if (p1) {
             p1.tradeSessionId = null;
@@ -115,26 +144,22 @@ function endTrade(sessionId: string, completed: boolean) {
 }
 
 function processTrade(session: TradeSession) {
-    const p1 = players.get(session.player1Id);
-    const p2 = players.get(session.player2Id);
+    const p1 = getPlayer(session.player1Id);
+    const p2 = getPlayer(session.player2Id);
     
     if (!p1 || !p2) {
         endTrade(session.id, false);
         return;
     }
 
-    // Verify gold
     if (p1.characterData.gold < session.player1Offer.gold || p2.characterData.gold < session.player2Offer.gold) {
         endTrade(session.id, false);
         return;
     }
     
-    // Execute Swap
-    // 1. Deduct Gold
     p1.characterData.gold -= session.player1Offer.gold;
     p2.characterData.gold -= session.player2Offer.gold;
     
-    // 2. Remove Items (Set to null in inventory)
     session.player1Offer.items.forEach(i => {
         if (p1.characterData.inventory[i.inventoryIndex]) {
             p1.characterData.inventory[i.inventoryIndex] = null;
@@ -146,11 +171,9 @@ function processTrade(session: TradeSession) {
         }
     });
     
-    // 3. Add Gold
     p1.characterData.gold += session.player2Offer.gold;
     p2.characterData.gold += session.player1Offer.gold;
 
-    // 4. Add Items (Find empty slots)
     const addItem = (player: ServerPlayer, item: any) => {
         const emptyIdx = player.characterData.inventory.findIndex(s => s === null);
         if (emptyIdx !== -1) {
@@ -163,21 +186,30 @@ function processTrade(session: TradeSession) {
     session.player1Offer.items.forEach(i => addItem(p2, i.item));
     session.player2Offer.items.forEach(i => addItem(p1, i.item));
 
-    // Sync updates to clients
     io.to(p1.socketId).emit('update_character', p1.characterData);
     io.to(p2.socketId).emit('update_character', p2.characterData);
     
     endTrade(session.id, true);
 }
 
+function getDifficultyMultipliers(difficulty: Difficulty) {
+    switch(difficulty) {
+        case Difficulty.Hard:
+            return { health: 1.5, damage: 1.5, loot: 1.5 };
+        case Difficulty.Insane:
+            return { health: 3.0, damage: 3.0, loot: 2.0 };
+        case Difficulty.Normal:
+        default:
+            return { health: 1.0, damage: 1.0, loot: 1.0 };
+    }
+}
 
-function spawnEnemies() {
-    // ONLINE MODE SPAWN LOGIC: BOSS RUSH
-    bossSpawnTimer++;
-    if (bossSpawnTimer >= 60) { 
-        bossSpawnTimer = 0;
-        const activeBosses = Array.from(enemies.values()).filter(e => e.isBoss);
-        const isCooldownReady = Date.now() > globalBossCooldown;
+function spawnEnemies(difficulty: Difficulty, room: RoomState) {
+    room.bossSpawnTimer++;
+    if (room.bossSpawnTimer >= 60) { 
+        room.bossSpawnTimer = 0;
+        const activeBosses = Array.from(room.enemies.values()).filter(e => e.isBoss);
+        const isCooldownReady = Date.now() > room.globalBossCooldown;
 
         if (activeBosses.length < BOSS_CONFIG.MAX_ACTIVE_BOSSES && isCooldownReady) {
             const occupiedZoneIds = activeBosses.map(e => e.bossZoneId);
@@ -188,20 +220,21 @@ function spawnEnemies() {
                 const type = BOSS_TYPES[zone.id];
                 if (type) {
                     const id = `boss_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                    
-                    // APPLY ONLINE BOSS BUFFS
+                    const multipliers = getDifficultyMultipliers(difficulty);
+
+                    // APPLY ONLINE BOSS BUFFS * DIFFICULTY
                     const baseHealth = 20 * type.healthMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.2);
-                    const health = baseHealth * ONLINE_BOSS_CONFIG.HEALTH_MULTIPLIER;
+                    const health = baseHealth * ONLINE_BOSS_CONFIG.HEALTH_MULTIPLIER * multipliers.health;
                     
-                    const baseDamage = 0.75 * type.damageMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.15); // Base dmg formula from Enemy.ts
-                    const damage = baseDamage * ONLINE_BOSS_CONFIG.DAMAGE_MULTIPLIER;
+                    const baseDamage = 0.75 * type.damageMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.15); 
+                    const damage = baseDamage * ONLINE_BOSS_CONFIG.DAMAGE_MULTIPLIER * multipliers.damage;
                     
                     const radius = type.radius * ONLINE_BOSS_CONFIG.SIZE_MULTIPLIER;
 
-                    enemies.set(id, {
+                    room.enemies.set(id, {
                         id,
                         position: { x: zone.x, y: zone.y },
-                        spawnPosition: { x: zone.x, y: zone.y }, // TRACK SPAWN FOR LEASHING
+                        spawnPosition: { x: zone.x, y: zone.y },
                         health: health,
                         maxHealth: health,
                         level: GAME_CONFIG.MAX_LEVEL,
@@ -210,10 +243,10 @@ function spawnEnemies() {
                         typeId: zone.id,
                         radius: radius,
                         damage: damage,
-                        damageTakenMap: {}, // Initialize damage tracker
-                        isReturning: false // New state flag
+                        damageTakenMap: {}, 
+                        isReturning: false 
                     });
-                    globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+                    room.globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
             }
         }
@@ -229,7 +262,9 @@ app.get('*', (_req: Request, res: Response) => {
 io.on('connection', (socket: Socket) => {
     console.log(`Player connected: ${socket.id}`);
 
-    socket.on('join_game', (characterData: CharacterData) => {
+    socket.on('join_game', ({ characterData, difficulty }: { characterData: CharacterData, difficulty?: Difficulty }) => {
+        const selectedDifficulty = difficulty || Difficulty.Normal;
+        
         const startPosition = characterData.position || { 
             x: GAME_CONFIG.WORLD_WIDTH / 2, 
             y: GAME_CONFIG.WORLD_HEIGHT / 2 
@@ -237,20 +272,24 @@ io.on('connection', (socket: Socket) => {
 
         const stats = calculateFinalStats(characterData.stats, characterData.equipment, undefined, true); 
 
-        // Check if reconnecting to party
+        // Handle Party Logic (Reconnect)
         let partyId: string | null = null;
         for (const [pid, party] of parties.entries()) {
             const member = party.members.find(m => m.characterId === characterData.id);
             if (member) {
                 partyId = pid;
-                member.id = socket.id; // Update socket ID
+                member.id = socket.id;
                 member.isOnline = true;
                 broadcastPartyUpdate(pid);
                 break;
             }
         }
+        
+        // Join Room
+        socket.join(selectedDifficulty); 
+        const room = GAME_ROOMS[selectedDifficulty];
 
-        players.set(socket.id, {
+        room.players.set(socket.id, {
             id: socket.id,
             socketId: socket.id,
             characterData,
@@ -259,9 +298,11 @@ io.on('connection', (socket: Socket) => {
             speed: stats.speed,
             radius: GAME_CONFIG.PLAYER_RADIUS,
             partyId: partyId,
-            tradeSessionId: null
+            tradeSessionId: null,
+            difficulty: selectedDifficulty
         });
-        console.log(`Player ${characterData.name} (${socket.id}) joined.`);
+        
+        console.log(`Player ${characterData.name} (${socket.id}) joined [${selectedDifficulty}].`);
         
         if (partyId) {
              io.to(socket.id).emit('party_update', parties.get(partyId));
@@ -269,10 +310,9 @@ io.on('connection', (socket: Socket) => {
     });
     
     socket.on('update_character', (characterData: CharacterData) => {
-        const player = players.get(socket.id);
+        const player = getPlayer(socket.id);
         if (player) {
             player.characterData = characterData;
-            // FIX: Explicitly update server position from client (e.g. teleports)
             if (characterData.position) {
                 player.position = characterData.position;
             }
@@ -283,7 +323,7 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('player_input', (inputKeys: string[]) => {
-        const player = players.get(socket.id);
+        const player = getPlayer(socket.id);
         if (player) {
             const keys = Array.isArray(inputKeys) ? inputKeys : [];
             player.input = new Set(keys);
@@ -292,15 +332,16 @@ io.on('connection', (socket: Socket) => {
 
     // --- PARTY EVENTS ---
     socket.on('party_invite', (targetName: string) => {
-        const sender = players.get(socket.id);
+        const sender = getPlayer(socket.id);
         if (!sender) return;
 
-        const target = Array.from(players.values()).find(p => p.characterData.name.toLowerCase() === targetName.toLowerCase());
+        const target = getAllPlayers().find(p => p.characterData.name.toLowerCase() === targetName.toLowerCase());
         
         if (target) {
             if (target.id === sender.id) return; 
             if (target.partyId) return; 
-            
+            if (target.difficulty !== sender.difficulty) return; // Must be in same room
+
             io.to(target.socketId).emit('invite_received', {
                 fromId: sender.id,
                 fromName: sender.characterData.name,
@@ -310,11 +351,12 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('party_accept', (fromId: string) => {
-        const acceptor = players.get(socket.id);
-        const sender = players.get(fromId);
+        const acceptor = getPlayer(socket.id);
+        const sender = getPlayer(fromId);
         
         if (!acceptor || !sender) return;
         if (acceptor.partyId) return;
+        if (acceptor.difficulty !== sender.difficulty) return;
 
         let partyId = sender.partyId;
         if (!partyId) {
@@ -362,12 +404,13 @@ io.on('connection', (socket: Socket) => {
 
     // --- TRADE EVENTS ---
     socket.on('trade_request', (targetId: string) => {
-        const sender = players.get(socket.id);
-        const target = players.get(targetId);
+        const sender = getPlayer(socket.id);
+        const target = getPlayer(targetId);
         if (!sender || !target) return;
         
         if (sender.tradeSessionId || target.tradeSessionId) return; 
         if (sender.partyId !== target.partyId || !sender.partyId) return; 
+        if (sender.difficulty !== target.difficulty) return;
 
         io.to(target.socketId).emit('invite_received', {
             fromId: sender.id,
@@ -377,8 +420,8 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('trade_accept', (fromId: string) => {
-        const p2 = players.get(socket.id); 
-        const p1 = players.get(fromId); 
+        const p2 = getPlayer(socket.id); 
+        const p1 = getPlayer(fromId); 
         
         if (!p1 || !p2) return;
         if (p1.tradeSessionId || p2.tradeSessionId) return;
@@ -403,7 +446,7 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('trade_update', (payload: { gold: number, items: any[] }) => {
-        const player = players.get(socket.id);
+        const player = getPlayer(socket.id);
         if (!player || !player.tradeSessionId) return;
         
         const session = tradeSessions.get(player.tradeSessionId);
@@ -420,12 +463,14 @@ io.on('connection', (socket: Socket) => {
         session.player1Offer.isLocked = false;
         session.player2Offer.isLocked = false;
 
-        io.to(players.get(session.player1Id)!.socketId).emit('trade_update', session);
-        io.to(players.get(session.player2Id)!.socketId).emit('trade_update', session);
+        const p1 = getPlayer(session.player1Id);
+        const p2 = getPlayer(session.player2Id);
+        if (p1) io.to(p1.socketId).emit('trade_update', session);
+        if (p2) io.to(p2.socketId).emit('trade_update', session);
     });
 
     socket.on('trade_lock', (isLocked: boolean) => {
-        const player = players.get(socket.id);
+        const player = getPlayer(socket.id);
         if (!player || !player.tradeSessionId) return;
         
         const session = tradeSessions.get(player.tradeSessionId);
@@ -435,8 +480,10 @@ io.on('connection', (socket: Socket) => {
         if (isP1) session.player1Offer.isLocked = isLocked;
         else session.player2Offer.isLocked = isLocked;
 
-        io.to(players.get(session.player1Id)!.socketId).emit('trade_update', session);
-        io.to(players.get(session.player2Id)!.socketId).emit('trade_update', session);
+        const p1 = getPlayer(session.player1Id);
+        const p2 = getPlayer(session.player2Id);
+        if (p1) io.to(p1.socketId).emit('trade_update', session);
+        if (p2) io.to(p2.socketId).emit('trade_update', session);
 
         if (session.player1Offer.isLocked && session.player2Offer.isLocked) {
             processTrade(session);
@@ -444,46 +491,46 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('trade_cancel', () => {
-        const player = players.get(socket.id);
+        const player = getPlayer(socket.id);
         if (player && player.tradeSessionId) {
             endTrade(player.tradeSessionId, false);
         }
     });
 
     socket.on('hit_enemy', (payload: { enemyId: string, damage: number }) => {
-        const enemy = enemies.get(payload.enemyId);
-        const attacker = players.get(socket.id);
+        const attacker = getPlayer(socket.id);
+        if (!attacker) return;
+
+        const room = GAME_ROOMS[attacker.difficulty];
+        const enemy = room.enemies.get(payload.enemyId);
         
-        if (enemy && attacker) {
-            // Cannot damage enemy while returning/leashed
+        if (enemy) {
             if (enemy.isReturning) return;
 
             enemy.health -= payload.damage;
             
-            // Track damage for loot contribution and AGGRO
             if (!enemy.damageTakenMap) enemy.damageTakenMap = {};
             if (!enemy.damageTakenMap[socket.id]) enemy.damageTakenMap[socket.id] = 0;
             enemy.damageTakenMap[socket.id] += payload.damage;
 
             if (enemy.health <= 0) {
-                enemies.delete(payload.enemyId);
+                room.enemies.delete(payload.enemyId);
                 
                 if (enemy.isBoss) {
-                     globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+                     room.globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
 
-                // BOSS LOGIC: Distribution by contribution
+                const multipliers = getDifficultyMultipliers(attacker.difficulty);
+
                 if (enemy.isBoss && enemy.damageTakenMap) {
                     const totalDamage = Object.values(enemy.damageTakenMap).reduce((a, b) => a + b, 0);
                     
                     Object.entries(enemy.damageTakenMap).forEach(([pid, dmg]) => {
-                        const recipient = players.get(pid);
+                        const recipient = room.players.get(pid);
                         if (!recipient) return;
 
-                        // Calculate Contribution % (0.0 to 1.0)
                         const contribution = Math.min(1.0, Math.max(0.0, dmg / totalDamage));
                         
-                        // Base Rewards
                         let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
                         if (enemy.isBoss) xpValue *= 10;
                         const goldReward = Math.floor((Math.random() * enemy.level + 1) * (enemy.isBoss ? 20 : 1));
@@ -495,7 +542,6 @@ io.on('connection', (socket: Socket) => {
                             enemyLevel: enemy.level
                         });
 
-                        // Loot Generation (Scaled by contribution)
                         const killerStats = calculateFinalStats(
                             recipient.characterData.stats, 
                             recipient.characterData.equipment, 
@@ -508,8 +554,8 @@ io.on('connection', (socket: Socket) => {
                             enemy.position, 
                             enemy.isBoss, 
                             killerStats.itemFind || 0,
-                            true, // isOnline
-                            contribution // Scale quantity
+                            true,
+                            contribution * multipliers.loot // Apply Difficulty Loot Multiplier
                         );
 
                         if (drops.length > 0) {
@@ -521,13 +567,13 @@ io.on('connection', (socket: Socket) => {
                     });
 
                 } else {
-                    // MOB LOGIC (Existing logic for non-bosses)
+                    // MOB LOGIC
                     const recipients: ServerPlayer[] = [];
                     if (attacker.partyId) {
                         const party = parties.get(attacker.partyId);
                         if (party) {
                             party.members.forEach(m => {
-                                const p = players.get(m.id);
+                                const p = room.players.get(m.id);
                                 if (p && getDistance(p.position, enemy.position) < 1500) {
                                     recipients.push(p);
                                 }
@@ -567,7 +613,7 @@ io.on('connection', (socket: Socket) => {
                             enemy.isBoss, 
                             killerStats.itemFind || 0,
                             true,
-                            1.0
+                            1.0 * multipliers.loot // Apply Difficulty Loot Multiplier
                         );
 
                         const finalDrops = isPartyKill 
@@ -588,143 +634,146 @@ io.on('connection', (socket: Socket) => {
 
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
-        // Mark as offline in party but do NOT leave
-        const p = players.get(socket.id);
-        if (p && p.partyId) {
-            const party = parties.get(p.partyId);
-            if (party) {
-                const member = party.members.find(m => m.id === socket.id);
-                if (member) {
-                    member.isOnline = false;
-                    broadcastPartyUpdate(p.partyId);
+        const p = getPlayer(socket.id);
+        
+        if (p) {
+            // Remove from room
+            const room = GAME_ROOMS[p.difficulty];
+            room.players.delete(socket.id);
+
+            // Mark offline in party
+            if (p.partyId) {
+                const party = parties.get(p.partyId);
+                if (party) {
+                    const member = party.members.find(m => m.id === socket.id);
+                    if (member) {
+                        member.isOnline = false;
+                        broadcastPartyUpdate(p.partyId);
+                    }
                 }
             }
+            if (p.tradeSessionId) endTrade(p.tradeSessionId, false);
         }
-        
-        if (p && p.tradeSessionId) endTrade(p.tradeSessionId, false);
-        players.delete(socket.id);
     });
 });
 
 setInterval(() => {
-    // 1. Update Players
-    for (const player of players.values()) {
-        let moveX = 0;
-        let moveY = 0;
-        if (player.input.has('w')) moveY -= 1;
-        if (player.input.has('s')) moveY += 1;
-        if (player.input.has('a')) moveX -= 1;
-        if (player.input.has('d')) moveX += 1;
+    // Loop through ALL rooms
+    Object.entries(GAME_ROOMS).forEach(([difficultyStr, room]) => {
+        const difficulty = difficultyStr as Difficulty;
 
-        if (moveX !== 0 || moveY !== 0) {
-            const length = Math.sqrt(moveX * moveX + moveY * moveY);
-            player.position.x += (moveX / length) * player.speed;
-            player.position.y += (moveY / length) * player.speed;
+        // 1. Update Players
+        for (const player of room.players.values()) {
+            let moveX = 0;
+            let moveY = 0;
+            if (player.input.has('w')) moveY -= 1;
+            if (player.input.has('s')) moveY += 1;
+            if (player.input.has('a')) moveX -= 1;
+            if (player.input.has('d')) moveX += 1;
 
-            player.position.x = Math.max(player.radius, Math.min(GAME_CONFIG.WORLD_WIDTH - player.radius, player.position.x));
-            player.position.y = Math.max(player.radius, Math.min(GAME_CONFIG.WORLD_HEIGHT - player.radius, player.position.y));
+            if (moveX !== 0 || moveY !== 0) {
+                const length = Math.sqrt(moveX * moveX + moveY * moveY);
+                player.position.x += (moveX / length) * player.speed;
+                player.position.y += (moveY / length) * player.speed;
+
+                player.position.x = Math.max(player.radius, Math.min(GAME_CONFIG.WORLD_WIDTH - player.radius, player.position.x));
+                player.position.y = Math.max(player.radius, Math.min(GAME_CONFIG.WORLD_HEIGHT - player.radius, player.position.y));
+            }
         }
-    }
-    
-    // 2. Update Enemies
-    spawnEnemies();
-    
-    const playerList = Array.from(players.values());
-    for (const enemy of enemies.values()) {
-        // --- LEASH LOGIC ---
-        // If already returning, continue returning until healed and at spawn
-        if (enemy.isReturning) {
-            const dx = enemy.spawnPosition!.x - enemy.position.x;
-            const dy = enemy.spawnPosition!.y - enemy.position.y;
-            const distToSpawn = Math.sqrt(dx*dx + dy*dy);
+        
+        // 2. Update Enemies for this room
+        spawnEnemies(difficulty, room);
+        
+        const playerList = Array.from(room.players.values());
+        for (const enemy of room.enemies.values()) {
+            // --- LEASH LOGIC ---
+            if (enemy.isReturning) {
+                const dx = enemy.spawnPosition!.x - enemy.position.x;
+                const dy = enemy.spawnPosition!.y - enemy.position.y;
+                const distToSpawn = Math.sqrt(dx*dx + dy*dy);
+                
+                const type = BOSS_TYPES[enemy.typeId];
+                const speed = (type ? type.speed : 2) * 2; 
+
+                if (distToSpawn > 5) {
+                    enemy.position.x += (dx / distToSpawn) * speed;
+                    enemy.position.y += (dy / distToSpawn) * speed;
+                    enemy.health = Math.min(enemy.maxHealth, enemy.health + enemy.maxHealth * 0.02); 
+                } else {
+                    enemy.isReturning = false;
+                    enemy.health = enemy.maxHealth;
+                    enemy.damageTakenMap = {};
+                }
+                continue;
+            }
+
+            const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
+            const distFromSpawn = getDistance(enemy.position, enemy.spawnPosition || {x:0,y:0});
             
+            if (distFromSpawn > leashRange) {
+                enemy.isReturning = true;
+                enemy.damageTakenMap = {}; 
+                continue;
+            }
+
+            // --- AGGRO LOGIC ---
             const type = BOSS_TYPES[enemy.typeId];
-            const speed = (type ? type.speed : 2) * 2; // Return fast
+            const speed = type ? type.speed : 2;
+            const attackRange = type ? type.attackRange : 30;
+            const stopDistance = attackRange * 0.8;
 
-            if (distToSpawn > 5) {
-                enemy.position.x += (dx / distToSpawn) * speed;
-                enemy.position.y += (dy / distToSpawn) * speed;
-                enemy.health = Math.min(enemy.maxHealth, enemy.health + enemy.maxHealth * 0.02); // Rapid heal
+            let nearestDist = 99999;
+            let nearestPlayer: ServerPlayer | null = null;
+
+            let potentialTargets = playerList;
+            
+            if (enemy.isBoss) {
+                 const hasAggro = enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0;
+                 if (!hasAggro) continue; 
+            }
+
+            for (const p of potentialTargets) {
+                const d = getDistance(enemy.position, p.position);
+                if (d < nearestDist) {
+                    nearestDist = d;
+                    nearestPlayer = p;
+                }
+            }
+            
+            let canChase = false;
+            if (enemy.isBoss) {
+                canChase = true; 
             } else {
-                // Reset
-                enemy.isReturning = false;
-                enemy.health = enemy.maxHealth;
-                enemy.damageTakenMap = {};
+                canChase = nearestDist < GAME_CONFIG.ENEMY_AGGRO_RANGE;
             }
-            continue; // Skip aggro/attack logic while returning
-        }
 
-        // Check if we need to START returning
-        const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
-        const distFromSpawn = getDistance(enemy.position, enemy.spawnPosition || {x:0,y:0});
-        
-        if (distFromSpawn > leashRange) {
-            enemy.isReturning = true;
-            enemy.damageTakenMap = {}; // Clear aggro immediately
-            continue;
-        }
-
-        // --- AGGRO LOGIC ---
-        const type = BOSS_TYPES[enemy.typeId];
-        const speed = type ? type.speed : 2;
-        const attackRange = type ? type.attackRange : 30;
-        const stopDistance = attackRange * 0.8;
-
-        let nearestDist = 99999;
-        let nearestPlayer: ServerPlayer | null = null;
-
-        // For bosses, we only target players who have dealt damage (aggro'd)
-        // For normal mobs, we target closest
-        let potentialTargets = playerList;
-        
-        if (enemy.isBoss) {
-             const hasAggro = enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0;
-             if (!hasAggro) continue; // Boss stands still until damaged
-        }
-
-        for (const p of potentialTargets) {
-            const d = getDistance(enemy.position, p.position);
-            if (d < nearestDist) {
-                nearestDist = d;
-                nearestPlayer = p;
+            if (nearestPlayer && canChase && nearestDist > stopDistance) {
+                const dx = nearestPlayer.position.x - enemy.position.x;
+                const dy = nearestPlayer.position.y - enemy.position.y;
+                const len = Math.sqrt(dx*dx + dy*dy);
+                if (len > 0) {
+                    enemy.position.x += (dx/len) * speed;
+                    enemy.position.y += (dy/len) * speed;
+                }
             }
         }
-        
-        // Move towards target if not in attack range
-        // Normal mobs check AGGRO_RANGE before chasing. Bosses chase infinitely within leash if aggro'd.
-        let canChase = false;
-        if (enemy.isBoss) {
-            canChase = true; // Already checked aggro above
-        } else {
-            canChase = nearestDist < GAME_CONFIG.ENEMY_AGGRO_RANGE;
-        }
 
-        if (nearestPlayer && canChase && nearestDist > stopDistance) {
-            const dx = nearestPlayer.position.x - enemy.position.x;
-            const dy = nearestPlayer.position.y - enemy.position.y;
-            const len = Math.sqrt(dx*dx + dy*dy);
-            if (len > 0) {
-                enemy.position.x += (dx/len) * speed;
-                enemy.position.y += (dy/len) * speed;
-            }
-        }
-    }
+        // 3. Broadcast State to Room
+        const playersObj: any = {};
+        room.players.forEach((p, id) => {
+            playersObj[id] = {
+                position: p.position,
+                characterData: p.characterData
+            };
+        });
 
-    // 3. Broadcast State
-    const playersObj: any = {};
-    players.forEach((p, id) => {
-        playersObj[id] = {
-            position: p.position,
-            characterData: p.characterData
-        };
-    });
+        const safeEnemies = Array.from(room.enemies.values()).map(({ damageTakenMap, ...e }) => e);
 
-    // Filter sensitive server data
-    const safeEnemies = Array.from(enemies.values()).map(({ damageTakenMap, ...e }) => e);
-
-    io.emit('game_state', { 
-        players: playersObj, 
-        enemies: safeEnemies
+        // Broadcast to specific room/difficulty
+        io.to(difficulty).emit('game_state', { 
+            players: playersObj, 
+            enemies: safeEnemies
+        });
     });
 
 }, 1000 / 60);

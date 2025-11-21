@@ -17,6 +17,12 @@ export enum CharacterClass {
   Archer,
 }
 
+export enum Difficulty {
+    Normal = 'Normal',
+    Hard = 'Hard',
+    Insane = 'Insane'
+}
+
 export enum ItemSlot {
   Weapon = 'Weapon',
   Armor = 'Armor',

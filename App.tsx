@@ -7,7 +7,7 @@ import Game from './components/Game';
 import DeathScreen from './components/DeathScreen';
 import { authService, GoogleUser } from './services/auth';
 import { storageService } from './services/storage';
-import { CharacterData, CharacterClass, GameStats, Item } from './game/types';
+import { CharacterData, CharacterClass, GameStats, Item, Difficulty } from './game/types';
 import { Player } from './game/entities/Player';
 import { MATERIALS_DB, ALL_EQUIPMENT } from './game/items';
 import { GAME_CONFIG, WAYPOINTS } from './game/constants';
@@ -23,6 +23,7 @@ const App: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [isDevMode, setDevMode] = useState(false);
     const [isOnlineMode, setOnlineMode] = useState(false);
+    const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(Difficulty.Normal);
 
     // Load characters function
     const refreshCharacters = async (uid: string) => {
@@ -65,9 +66,11 @@ const App: React.FC = () => {
         setCharacters([]);
     };
     
-    const handleSelectCharacter = async (character: CharacterData) => {
+    const handleSelectCharacter = async (character: CharacterData, difficulty: Difficulty = Difficulty.Normal) => {
         // Logic for Online Mode validation can go here later if needed
         // For now, we allow the connection to proceed so the Game component can initiate the socket.
+        
+        setSelectedDifficulty(difficulty);
 
         let finalCharacterData = character;
 
@@ -124,6 +127,7 @@ const App: React.FC = () => {
             const newChar = await storageService.createCharacter(user.uid, name, characterClass);
             if (newChar) {
                 await refreshCharacters(user.uid);
+                // Select with default difficulty
                 handleSelectCharacter(newChar);
             } else {
                 setLoading(false);
@@ -170,6 +174,12 @@ const App: React.FC = () => {
 
         const playerToRespawn = new Player(currentCharacter);
         playerToRespawn.respawn();
+        
+        // If in insane mode, re-apply nerfs to the fresh player instance
+        if (isOnlineMode && selectedDifficulty === Difficulty.Insane) {
+             playerToRespawn.applyInsaneModeNerfs();
+        }
+
         const respawnedCharacterData = playerToRespawn.toCharacterData();
 
         await storageService.saveCharacter(user.uid, respawnedCharacterData);
@@ -213,6 +223,7 @@ const App: React.FC = () => {
                                                 isDevMode={isDevMode}
                                                 isOnlineMode={isOnlineMode}
                                                 userId={user.uid}
+                                                difficulty={selectedDifficulty}
                                             />;
             case 'dead':
                 return <DeathScreen 

@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession } from '../game/types';
+import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -31,10 +31,11 @@ interface GameProps {
   onReturnToSelect: (finalCharacterData: CharacterData) => void;
   isOnlineMode: boolean;
   isDevMode: boolean;
-  userId: string; // Added userId for Bank access
+  userId: string;
+  difficulty: Difficulty;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId }) => {
+const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId, difficulty }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const bossSpawnTimerRef = useRef(0);
@@ -181,6 +182,11 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
   const updateServerCharacter = useCallback((p: Player) => {
       if (isOnlineMode) {
+          // Important: We send the "toCharacterData()" which contains BASE STATS.
+          // However, the server needs to know about our Difficulty-Adjusted current health/stats for sync.
+          // We assume the server recalculates based on Difficulty if we wanted to enforce it server side,
+          // but currently we trust the client's reported position/actions.
+          // The client 'Game Loop' syncs HP changes.
           socketService.updateCharacter(p.toCharacterData());
       }
   }, [isOnlineMode]);
@@ -188,6 +194,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   // Initialize game
   useEffect(() => {
     const newPlayer = new Player(characterData);
+    
+    // Apply Insane Mode Nerfs Locally
+    if (isOnlineMode && difficulty === Difficulty.Insane) {
+        newPlayer.applyInsaneModeNerfs();
+    }
+
     setPlayer(newPlayer);
     prevHealthRef.current = newPlayer.health;
     setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
@@ -196,7 +208,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         socketService.connect((id) => {
             playerIdRef.current = id;
             console.log("Connected to game server!", id);
-            socketService.joinGame(newPlayer.toCharacterData());
+            socketService.joinGame(newPlayer.toCharacterData(), difficulty);
         });
 
         socketService.onGameState((payload) => {
@@ -250,6 +262,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             setPlayer(prev => {
                 if (!prev) return null;
                 const updatedPlayer = new Player(prev.toCharacterData());
+                // Preserve nerf state if re-instantiating
+                if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
+
                 const oldLevel = updatedPlayer.level;
                 
                 updatedPlayer.gainXP(data.xp, addFloatingText, data.enemyLevel);
@@ -295,7 +310,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         new NPC({ x: cx - dist, y: cy }, 'Trevor', NPCType.Vendor),
         new NPC({ x: cx, y: cy - dist }, 'Jackson', NPCType.Seller),
         new NPC({ x: cx, y: cy + dist }, 'Rory', NPCType.WorldTraveler),
-        new NPC({ x: cx - dist, y: cy + dist }, 'Vault Master', NPCType.Banker), // Added Banker
+        new NPC({ x: cx - dist, y: cy + dist }, 'Vault Master', NPCType.Banker),
     ]);
     setWaypoints(WAYPOINTS.map(data => new Waypoint(data)));
 
@@ -356,7 +371,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     };
 
-  }, [characterData, playSound, isOnlineMode, addDroppedItem, addFloatingText]);
+  }, [characterData, playSound, isOnlineMode, addDroppedItem, addFloatingText, difficulty]);
   
   const gameLoop = useCallback(() => {
     gameTimeRef.current++;
@@ -540,6 +555,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           // Update states and save
           setBankItems(newBank);
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
+          
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
           
@@ -565,6 +582,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           // Update states and save
           setBankItems(newBank);
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
+          
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
 
@@ -667,9 +686,22 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     projectiles.forEach(p => { if(isVisible(p.position, p.radius)) p.draw(ctx); });
     visualEffects.forEach(ve => { if(isVisible(ve.position, 100)) ve.draw(ctx); });
     floatingTexts.forEach(ft => { if(isVisible(ft.position, 50)) ft.draw(ctx); });
+    
+    // Difficulty Indicator
+    if (isOnlineMode) {
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'right';
+        if (difficulty === Difficulty.Hard) {
+            ctx.fillStyle = '#fbbf24';
+            ctx.fillText('HARD MODE', canvas.width - 20, 30);
+        } else if (difficulty === Difficulty.Insane) {
+            ctx.fillStyle = '#ef4444';
+            ctx.fillText('INSANE MODE', canvas.width - 20, 30);
+        }
+    }
 
     ctx.restore();
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers, difficulty, isOnlineMode]);
 
   const toggleInventory = useCallback(() => {
     if (interactingNPC || interactingWaypoint || activeTradeSession) return;
@@ -726,6 +758,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           const dropped = player.flushOverflowItems();
           dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
       }
@@ -736,6 +769,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           const dropped = player.flushOverflowItems();
           dropped.forEach(item => addDroppedItem(new DroppedItem(player.position, item)));
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
       }
@@ -745,6 +779,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       if (player) {
           player.toggleItemLock(itemIndex);
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
       }
@@ -754,6 +789,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     if (player) {
         player.moveItem(fromIndex, toIndex);
         const updatedPlayer = new Player(player.toCharacterData());
+        if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
         setPlayer(updatedPlayer);
         updateServerCharacter(updatedPlayer);
     }
@@ -762,6 +798,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const handleCraft = (recipe: Recipe) => {
       if (player?.craftItem(recipe)) {
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
       }
@@ -770,6 +807,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const handleSell = (_item: Item, inventoryIndex: number, sellFullStack: boolean) => {
        if (player?.sellItem(inventoryIndex, sellFullStack)) {
            const updatedPlayer = new Player(player.toCharacterData());
+           if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
            setPlayer(updatedPlayer);
            updateServerCharacter(updatedPlayer);
        }
@@ -779,6 +817,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       if (player) {
           player.sellUnlockedItemsByRarity(rarity);
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
       }
@@ -787,6 +826,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const handleBuyItem = (item: Item, cost: number) => {
       if (player?.buyItem(item, cost)) {
           const updatedPlayer = new Player(player.toCharacterData());
+          if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
           setPlayer(updatedPlayer);
           updateServerCharacter(updatedPlayer);
       }

@@ -1,12 +1,13 @@
+
 import React, { useState } from 'react';
-import { CharacterData, CharacterClass } from '../game/types';
+import { CharacterData, CharacterClass, Difficulty } from '../game/types';
 import { WarriorIcon, MageIcon, ArcherIcon } from './icons';
 import { GoogleUser } from '../services/auth';
 
 interface CharacterSelectScreenProps {
   user: GoogleUser;
   characters: CharacterData[];
-  onSelectCharacter: (character: CharacterData) => void;
+  onSelectCharacter: (character: CharacterData, difficulty?: Difficulty) => void;
   onCreateNew: () => void;
   onDeleteCharacter: (characterId: string) => void;
   onLogout: () => void;
@@ -121,11 +122,80 @@ const ModeToggle: React.FC<{ isOnline: boolean, onToggle: (isOnline: boolean) =>
     );
 };
 
+const DifficultySelectionModal: React.FC<{ onConfirm: (diff: Difficulty) => void, onCancel: () => void }> = ({ onConfirm, onCancel }) => {
+    return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onCancel}>
+            <div className="bg-gray-900/95 border border-gray-600 rounded-xl p-8 max-w-3xl w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+                <h2 className="text-3xl font-bold text-white mb-6 text-center">Select World Difficulty</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Normal */}
+                    <button 
+                        onClick={() => onConfirm(Difficulty.Normal)}
+                        className="bg-gray-800 hover:bg-gray-700 border border-green-500/30 hover:border-green-500 p-6 rounded-lg transition-all group"
+                    >
+                        <h3 className="text-xl font-bold text-green-400 mb-2">Normal</h3>
+                        <ul className="text-sm text-gray-400 space-y-1 text-left">
+                            <li>• Standard Experience</li>
+                            <li>• Normal Drop Rates</li>
+                            <li>• Normal Boss Strength</li>
+                        </ul>
+                    </button>
+
+                    {/* Hard */}
+                    <button 
+                        onClick={() => onConfirm(Difficulty.Hard)}
+                        className="bg-gray-800 hover:bg-gray-700 border border-yellow-500/30 hover:border-yellow-500 p-6 rounded-lg transition-all group"
+                    >
+                        <h3 className="text-xl font-bold text-yellow-400 mb-2">Hard</h3>
+                        <ul className="text-sm text-gray-400 space-y-1 text-left">
+                            <li>• <span className="text-yellow-200">1.5x</span> Loot Drops</li>
+                            <li>• <span className="text-red-300">1.5x</span> Boss Health & Damage</li>
+                            <li>• Greater Challenge</li>
+                        </ul>
+                    </button>
+
+                    {/* Insane */}
+                    <button 
+                        onClick={() => onConfirm(Difficulty.Insane)}
+                        className="bg-gray-800 hover:bg-gray-700 border border-red-600/30 hover:border-red-600 p-6 rounded-lg transition-all group"
+                    >
+                        <h3 className="text-xl font-bold text-red-600 mb-2 group-hover:animate-pulse">INSANE</h3>
+                        <ul className="text-sm text-gray-400 space-y-1 text-left">
+                            <li>• <span className="text-yellow-200">2.0x</span> Loot Drops</li>
+                            <li>• <span className="text-red-300">3.0x</span> Boss Health & Damage</li>
+                            <li className="text-red-400 font-bold mt-2 border-t border-red-900/50 pt-2">YOUR STATS HALVED</li>
+                            <li className="text-xs text-red-500">(50% HP, DMG, Regen)</li>
+                        </ul>
+                    </button>
+                </div>
+                <button onClick={onCancel} className="mt-8 w-full py-2 text-gray-500 hover:text-white">Cancel</button>
+            </div>
+        </div>
+    );
+}
+
 const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, characters, onSelectCharacter, onCreateNew, onDeleteCharacter, onLogout, isDevMode, onSetDevMode, isOnlineMode, onSetOnlineMode }) => {
+  const [pendingCharacter, setPendingCharacter] = useState<CharacterData | null>(null);
+
   const slots = Array(3).fill(null);
   characters.forEach((char, index) => {
     if(index < 3) slots[index] = char;
   });
+
+  const handleCharacterClick = (character: CharacterData) => {
+      if (isOnlineMode) {
+          setPendingCharacter(character);
+      } else {
+          onSelectCharacter(character);
+      }
+  };
+
+  const handleDifficultyConfirm = (difficulty: Difficulty) => {
+      if (pendingCharacter) {
+          onSelectCharacter(pendingCharacter, difficulty);
+          setPendingCharacter(null);
+      }
+  };
 
   return (
     <div className="bg-gray-900/50 backdrop-blur-md p-8 rounded-xl shadow-lg border border-gray-700 text-center max-w-5xl w-full">
@@ -143,12 +213,19 @@ const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, cha
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {slots.map((char, index) =>
           char ? (
-            <CharacterCard key={char.id} character={char} onSelect={() => onSelectCharacter(char)} onDelete={() => onDeleteCharacter(char.id)} />
+            <CharacterCard key={char.id} character={char} onSelect={() => handleCharacterClick(char)} onDelete={() => onDeleteCharacter(char.id)} />
           ) : (
             <EmptySlotCard key={index} onCreate={onCreateNew} />
           )
         )}
       </div>
+
+      {pendingCharacter && (
+          <DifficultySelectionModal 
+             onConfirm={handleDifficultyConfirm}
+             onCancel={() => setPendingCharacter(null)}
+          />
+      )}
     </div>
   );
 };
