@@ -268,6 +268,10 @@ io.on('connection', (socket: Socket) => {
         const player = players.get(socket.id);
         if (player) {
             player.characterData = characterData;
+            // FIX: Explicitly update server position from client (e.g. teleports)
+            if (characterData.position) {
+                player.position = characterData.position;
+            }
             const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position, true);
             player.speed = stats.speed;
             if (player.partyId) broadcastPartyUpdate(player.partyId);
@@ -628,8 +632,6 @@ setInterval(() => {
         const type = BOSS_TYPES[enemy.typeId];
         const speed = type ? type.speed : 2;
 
-        // BOSS USES BOSS CONSTANTS
-        // Mobs don't exist here in online mode, but if they did, they'd use ENEMY_ constants.
         const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
 
         if (enemy.spawnPosition && distToSpawn > leashRange) { 
@@ -650,38 +652,34 @@ setInterval(() => {
         }
 
         // Aggro Logic
-        const chaseRange = enemy.isBoss ? GAME_CONFIG.BOSS_AGGRO_RANGE : GAME_CONFIG.ENEMY_AGGRO_RANGE;
-        const attackRange = type ? type.attackRange : 30; 
-        const stopDistance = attackRange * 0.8;
-
-        let activeChaseRange = chaseRange;
+        let activeChaseRange = GAME_CONFIG.ENEMY_AGGRO_RANGE;
         let isAggroed = false;
         
-        // Check aggro state
         if (enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0) {
             isAggroed = true;
         }
+
+        if (enemy.isBoss) {
+            if (!isAggroed) {
+                // Boss ignores players until damaged (FIXED)
+                continue;
+            }
+            // Once aggroed, chase anywhere in the leash zone
+            activeChaseRange = GAME_CONFIG.BOSS_LEASH_RANGE;
+        } else {
+            if (isAggroed) {
+                activeChaseRange = GAME_CONFIG.ENEMY_LEASH_RANGE;
+            }
+        }
+
+        const attackRange = type ? type.attackRange : 30; 
+        const stopDistance = attackRange * 0.8;
 
         let nearestDist = 99999;
         let nearestPlayer: ServerPlayer | null = null;
 
         for (const p of playerList) {
             const d = getDistance(enemy.position, p.position);
-            
-            // Boss specific aggro overrides
-            if (enemy.isBoss) {
-                const distToSpawn = getDistance(p.position, enemy.spawnPosition || {x:0,y:0});
-                // If player is inside boss zone, force aggro range to leash range
-                if (distToSpawn < BOSS_CONFIG.ZONE_RADIUS) {
-                    activeChaseRange = GAME_CONFIG.BOSS_LEASH_RANGE;
-                }
-            }
-            
-            // If already aggroed (damaged), extend chase range to leash range
-            if (isAggroed) {
-                activeChaseRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
-            }
-
             if (d < nearestDist) {
                 nearestDist = d;
                 nearestPlayer = p;
@@ -700,7 +698,6 @@ setInterval(() => {
     }
 
     // 3. Broadcast State
-    // Do not send damageTakenMap to clients
     const playersObj: any = {};
     players.forEach((p, id) => {
         playersObj[id] = {
@@ -709,7 +706,6 @@ setInterval(() => {
         };
     });
 
-    // Strip internal data
     const safeEnemies = Array.from(enemies.values()).map(({ damageTakenMap, ...e }) => e);
 
     io.emit('game_state', { 

@@ -41,6 +41,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const globalBossSpawnTimeRef = useRef(0);
   
   const [player, setPlayer] = useState<Player | null>(null);
+  const playerRef = useRef<Player | null>(null);
+
+  // Sync playerRef with state
+  useEffect(() => {
+      playerRef.current = player;
+  }, [player]);
+
   const [enemies, setEnemies] = useState<Enemy[]>([]);
   const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
@@ -197,6 +204,18 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             Object.entries(payload.players).forEach(([id, data]) => {
                 if (id !== playerIdRef.current) {
                     others.push(data);
+                } else {
+                    // Reconcile Local Player Position with Server
+                    if (playerRef.current) {
+                        const serverPos = data.position;
+                        const localPos = playerRef.current.position;
+                        const distance = getDistance(localPos, serverPos);
+                        
+                        // Snap if distance is too large (e.g. teleport/fast travel desync)
+                        if (distance > 200) {
+                            playerRef.current.position = { ...serverPos };
+                        }
+                    }
                 }
             });
             setOtherPlayers(others);
@@ -256,16 +275,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         
         socketService.onTradeUpdate((session) => {
             setActiveTradeSession(session);
-            // If trade completed successfully (session becomes null but we need feedback), handled by separate event
         });
         
         socketService.onTradeCompleted((success) => {
             if (success) {
-                addFloatingText(new FloatingText("Trade Successful!", player!.position, '#4ade80', 24));
-                // Force update player data as trade modified inventory/gold directly on server
-                // Ideally server sends update_character right before this, which we handle
+                addFloatingText(new FloatingText("Trade Successful!", playerRef.current!.position, '#4ade80', 24));
             } else {
-                addFloatingText(new FloatingText("Trade Failed", player!.position, '#ef4444', 24));
+                addFloatingText(new FloatingText("Trade Failed", playerRef.current!.position, '#ef4444', 24));
             }
             setActiveTradeSession(null);
         });
