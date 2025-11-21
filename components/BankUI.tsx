@@ -9,9 +9,10 @@ interface BankUIProps {
     onDeposit: (inventoryIndex: number) => void;
     onWithdraw: (bankIndex: number) => void;
     onClose: () => void;
+    isLoading?: boolean;
 }
 
-const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, onWithdraw, onClose }) => {
+const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, onWithdraw, onClose, isLoading }) => {
     // Ensure bank has 100 slots visual
     const displayBank = [...bankItems];
     while(displayBank.length < 100) displayBank.push(null);
@@ -38,7 +39,7 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                                     <ItemSlotComponent 
                                         key={index}
                                         item={item}
-                                        onClick={item ? () => onDeposit(index) : undefined}
+                                        onClick={item && !isLoading ? () => onDeposit(index) : undefined}
                                     />
                                 ))}
                             </div>
@@ -46,20 +47,32 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                     </div>
 
                     {/* Right: Bank Stash */}
-                    <div className="w-2/3 flex flex-col min-h-0">
+                    <div className="w-2/3 flex flex-col min-h-0 relative">
                         <h3 className="text-lg font-bold text-slate-300 mb-2 bg-slate-800/50 p-2 rounded text-center border border-slate-600">
                             Shared Stash (Click to Withdraw)
                         </h3>
-                        <div className="bg-slate-900/50 p-4 rounded-lg overflow-y-auto flex-grow border border-slate-700">
-                            <div className="grid grid-cols-10 gap-2">
-                                {displayBank.map((item, index) => (
-                                    <ItemSlotComponent 
-                                        key={index}
-                                        item={item}
-                                        onClick={item ? () => onWithdraw(index) : undefined}
-                                    />
-                                ))}
-                            </div>
+                        <div className="bg-slate-900/50 p-4 rounded-lg overflow-y-auto flex-grow border border-slate-700 relative">
+                            {isLoading ? (
+                                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 z-10">
+                                    <div className="flex flex-col items-center">
+                                        <svg className="animate-spin h-10 w-10 text-slate-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        <span className="text-slate-300 font-bold">Accessing Vault...</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-10 gap-2">
+                                    {displayBank.map((item, index) => (
+                                        <ItemSlotComponent 
+                                            key={index}
+                                            item={item}
+                                            onClick={item ? () => onWithdraw(index) : undefined}
+                                        />
+                                    ))}
+                                </div>
+                            )}
                         </div>
                         <div className="mt-2 text-xs text-gray-500 text-center">
                             Items stored here are accessible by all your characters.

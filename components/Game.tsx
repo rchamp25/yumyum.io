@@ -58,6 +58,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   
   // Bank State
   const [bankItems, setBankItems] = useState<(Item | null)[]>([]);
+  const [isBankLoading, setBankLoading] = useState(false);
 
   // Multiplayer State
   const [party, setParty] = useState<Party | null>(null);
@@ -494,14 +495,19 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   // Bank Logic
   useEffect(() => {
       if (interactingNPC?.npcType === NPCType.Banker) {
+          setBankLoading(true);
           storageService.getBank(userId).then(items => {
-              setBankItems(items);
+              // Always fully initialize the bank array to avoid state overwrite issues
+              const fullBank = [...items];
+              while (fullBank.length < 100) fullBank.push(null);
+              setBankItems(fullBank);
+              setBankLoading(false);
           });
       }
   }, [interactingNPC, userId]);
 
   const handleDeposit = (inventoryIndex: number) => {
-      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker || isBankLoading) return;
       const item = player.inventory[inventoryIndex];
       if (!item) return;
 
@@ -529,7 +535,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   };
 
   const handleWithdraw = (bankIndex: number) => {
-      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker || isBankLoading) return;
       const item = bankItems[bankIndex];
       if (!item) return;
 
@@ -864,6 +870,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             bankItems={bankItems}
             onDeposit={handleDeposit}
             onWithdraw={handleWithdraw}
+            isBankLoading={isBankLoading}
         />
       )}
       {interactingWaypoint && player && (

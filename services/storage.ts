@@ -143,9 +143,9 @@ class StorageService {
               .from('banks')
               .select('items')
               .eq('user_id', userId)
-              .single();
+              .maybeSingle(); // Use maybeSingle to avoid errors if no row exists
           
-          if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+          if (error) {
               console.error("Supabase Bank Fetch Error:", error);
               return [];
           }
@@ -153,7 +153,8 @@ class StorageService {
           // If no bank exists, return empty array (will be created on save)
           if (!data) return [];
           
-          return data.items || [];
+          // Explicit cast to avoid TS build errors with JSON types
+          return (data.items as (Item | null)[]) || [];
       } catch (error) {
           console.error("Failed to fetch bank", error);
           return [];
@@ -162,9 +163,28 @@ class StorageService {
 
   async saveBank(userId: string, items: (Item | null)[]): Promise<void> {
       try {
-          const { error } = await supabase
+          // Check for existing bank entry first to ensure we update rather than duplicate
+          // This guards against tables without proper unique constraints on user_id
+          const { data: existingBank } = await supabase
               .from('banks')
-              .upsert({ user_id: userId, items });
+              .select('id')
+              .eq('user_id', userId)
+              .maybeSingle();
+
+          let error;
+          
+          if (existingBank) {
+              const result = await supabase
+                  .from('banks')
+                  .update({ items })
+                  .eq('id', existingBank.id);
+              error = result.error;
+          } else {
+              const result = await supabase
+                  .from('banks')
+                  .insert({ user_id: userId, items });
+              error = result.error;
+          }
           
           if (error) console.error("Supabase Bank Save Error:", error);
       } catch (error) {

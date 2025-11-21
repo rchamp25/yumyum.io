@@ -21,11 +21,12 @@ interface NPCInteractionProps {
     bankItems?: (Item | null)[];
     onDeposit?: (inventoryIndex: number) => void;
     onWithdraw?: (bankIndex: number) => void;
+    isBankLoading?: boolean;
 }
 
 const NPCInteraction: React.FC<NPCInteractionProps> = ({ 
     npc, characterData, recipes, onClose, onCraft, onSell, onBuy, onSellByRarity,
-    bankItems, onDeposit, onWithdraw
+    bankItems, onDeposit, onWithdraw, isBankLoading
 }) => {
     
     const renderContent = () => {
@@ -70,6 +71,7 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
                             onDeposit={onDeposit}
                             onWithdraw={onWithdraw}
                             onClose={onClose}
+                            isLoading={isBankLoading}
                         />
                     );
                 }
