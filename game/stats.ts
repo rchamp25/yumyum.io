@@ -64,7 +64,7 @@ export function calculateFinalStats(
                 }
             }
 
-            final.itemFind = (final.itemFind || 0) + bonus;
+            final.itemFind = Number((final.itemFind || 0) + bonus);
             
             if (final.itemFind > cap) {
                 final.itemFind = cap;
