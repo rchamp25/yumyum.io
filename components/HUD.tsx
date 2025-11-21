@@ -304,7 +304,7 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
       
       {/* Status Effects List - Centered above Skill Bar */}
       <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex items-end justify-center space-x-2 z-40 pointer-events-none">
-        {player.statusEffects.map((effect, index) => (
+        {player.statusEffects.map((effect) => (
             <StatusEffectIcon key={`${effect.type}_${effect.startTime}`} effect={effect} />
         ))}
       </div>
