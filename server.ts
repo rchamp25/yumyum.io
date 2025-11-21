@@ -195,6 +195,7 @@ function spawnEnemies() {
                     enemies.set(id, {
                         id,
                         position: { x: zone.x, y: zone.y },
+                        spawnPosition: { x: zone.x, y: zone.y }, // TRACK SPAWN FOR LEASHING
                         health: health,
                         maxHealth: health,
                         level: GAME_CONFIG.MAX_LEVEL,
@@ -536,6 +537,37 @@ setInterval(() => {
     
     const playerList = Array.from(players.values());
     for (const enemy of enemies.values()) {
+        // Leashing Logic
+        let spawnPos = enemy.spawnPosition;
+        if (!spawnPos) spawnPos = { x: 0, y: 0 }; // Fallback
+
+        const distToSpawn = getDistance(enemy.position, spawnPos);
+        const type = BOSS_TYPES[enemy.typeId];
+        const speed = type ? type.speed : 2;
+
+        // Check if we should leash (too far from spawn)
+        if (enemy.spawnPosition && distToSpawn > BOSS_CONFIG.ZONE_RADIUS + 200) { 
+             // Move back to spawn
+             const dx = spawnPos.x - enemy.position.x;
+             const dy = spawnPos.y - enemy.position.y;
+             const len = Math.sqrt(dx*dx + dy*dy);
+             if (len > 0) {
+                 // Return faster (3x speed) to reset quickly
+                 enemy.position.x += (dx/len) * speed * 3;
+                 enemy.position.y += (dy/len) * speed * 3;
+             }
+             
+             // Rapid Regen while leashing
+             enemy.health = Math.min(enemy.maxHealth, enemy.health + enemy.maxHealth * 0.01);
+
+             // If close to spawn, fully reset
+             if (len < 10) {
+                 enemy.health = enemy.maxHealth;
+             }
+             // Skip chasing logic
+             continue;
+        }
+
         let nearestDist = 99999;
         let nearestPlayer: ServerPlayer | null = null;
         
@@ -547,11 +579,8 @@ setInterval(() => {
             }
         }
         
-        const chaseRange = BOSS_CONFIG.ZONE_RADIUS;
-        const type = BOSS_TYPES[enemy.typeId];
-        // FIX: Use the type-specific attack range instead of hardcoded 30 to prevent merging
+        const chaseRange = BOSS_CONFIG.ZONE_RADIUS + 150; // Can chase slightly outside
         const attackRange = type ? type.attackRange : 30; 
-        const speed = type ? type.speed : 2;
 
         if (nearestPlayer && nearestDist < chaseRange && nearestDist > attackRange) {
             const dx = nearestPlayer.position.x - enemy.position.x;

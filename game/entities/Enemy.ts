@@ -72,6 +72,7 @@ export class Enemy extends Character {
         this.level = data.level;
         if (data.radius) this.radius = data.radius;
         if (data.damage) this.damage = data.damage;
+        if (data.spawnPosition) this.spawnPosition = data.spawnPosition; // Sync spawn point for correct leashing logic
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
@@ -116,7 +117,7 @@ export class Enemy extends Character {
 
         if (this.state !== 'returning') {
              const playerInSafeZone = player.isInSafeZone;
-             const outsideLeash = distToSpawn > leashRange;
+             const outsideLeash = distToSpawn > leashRange + 200; // Buffer matches server
              
              let shouldDeAggro = false;
              if (!this.isBoss) {
@@ -137,11 +138,13 @@ export class Enemy extends Character {
                 this.wanderTarget = null;
             }
         } else if (this.state === 'chasing') {
-             if (distToPlayer <= this.attackRange) {
+             // Generous buffer for online mode (25 units) to ensure client sees "Attacking" even if server pos lags slightly behind
+             const rangeBuffer = game.isOnlineMode ? 25 : 0;
+             if (distToPlayer <= this.attackRange + rangeBuffer) {
                  this.state = 'attacking';
              }
         } else if (this.state === 'attacking') {
-            if (distToPlayer > this.attackRange) {
+            if (distToPlayer > this.attackRange + (game.isOnlineMode ? 25 : 0)) {
                 this.state = 'chasing';
             }
         }

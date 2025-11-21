@@ -154,6 +154,7 @@ export interface WaypointData {
 export interface ServerEnemy {
     id: string;
     position: Vector2D;
+    spawnPosition?: Vector2D; // Added for tracking leash point
     health: number;
     maxHealth: number;
     level: number;
