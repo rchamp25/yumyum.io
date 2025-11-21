@@ -233,7 +233,7 @@ function getRandomPositionOutsideSafeZone(): Vector2D {
     };
 }
 
-function spawnEnemy(room: RoomState, type: EnemyType, position: Vector2D, level: number) {
+function spawnEnemy(room: RoomState, type: EnemyType, position: Vector2D, level: number, typeId: string) {
     const id = `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const multipliers = getDifficultyMultipliers(room.difficulty);
 
@@ -248,7 +248,7 @@ function spawnEnemy(room: RoomState, type: EnemyType, position: Vector2D, level:
         maxHealth: health,
         level: level,
         isBoss: false,
-        typeId: Object.keys(room.worldId === WORLD_IDS.WORLD_2 ? GROVE_ENEMIES : ENEMY_TYPES).find(key => (room.worldId === WORLD_IDS.WORLD_2 ? GROVE_ENEMIES[key] : ENEMY_TYPES[key]) === type) || 'unknown',
+        typeId: typeId,
         radius: type.radius,
         damage: damage,
         damageTakenMap: {},
@@ -277,32 +277,35 @@ function spawnMobPacks(room: RoomState) {
             const packSize = Math.floor(Math.random() * 3) + 3;
             for(let i=0; i<packSize; i++) {
                 const offset = { x: (Math.random()-0.5)*100, y: (Math.random()-0.5)*100 };
-                spawnEnemy(room, GROVE_ENEMIES['wolf'], { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level);
+                spawnEnemy(room, GROVE_ENEMIES['wolf'], { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, 'wolf');
             }
         } else if (packRoll < 0.7) {
             // 30% Chance: Forest Guardians (1 Treant + 2 Dryads)
-            spawnEnemy(room, GROVE_ENEMIES['treant'], packCenter, level);
-            spawnEnemy(room, GROVE_ENEMIES['dryad'], { x: packCenter.x + 50, y: packCenter.y + 50 }, level);
-            spawnEnemy(room, GROVE_ENEMIES['dryad'], { x: packCenter.x - 50, y: packCenter.y - 50 }, level);
+            spawnEnemy(room, GROVE_ENEMIES['treant'], packCenter, level, 'treant');
+            spawnEnemy(room, GROVE_ENEMIES['dryad'], { x: packCenter.x + 50, y: packCenter.y + 50 }, level, 'dryad');
+            spawnEnemy(room, GROVE_ENEMIES['dryad'], { x: packCenter.x - 50, y: packCenter.y - 50 }, level, 'dryad');
         } else {
             // 30% Chance: Bear Ambush (1-2 Bears)
              const count = Math.random() > 0.5 ? 2 : 1;
              for(let i=0; i<count; i++) {
                 const offset = { x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*80 };
-                spawnEnemy(room, GROVE_ENEMIES['bear'], { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level);
+                spawnEnemy(room, GROVE_ENEMIES['bear'], { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, 'bear');
             }
         }
 
     } else {
         // --- THE RAT (World 1) SPAWN LOGIC ---
-        // Random assortment
-        const types = Object.values(ENEMY_TYPES);
-        const type = types[Math.floor(Math.random() * types.length)];
+        // Random assortment via KEYS to be safe
+        const typeKeys = Object.keys(ENEMY_TYPES);
+        if (typeKeys.length === 0) return;
+
+        const typeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+        const type = ENEMY_TYPES[typeKey];
         const packSize = Math.floor(Math.random() * 3) + 1;
         
         for(let i=0; i<packSize; i++) {
             const offset = { x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*80 };
-            spawnEnemy(room, type, { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level);
+            spawnEnemy(room, type, { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, typeKey);
         }
     }
 }

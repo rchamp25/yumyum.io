@@ -3,7 +3,7 @@ import { Character } from './Character';
 import { Vector2D, GameContext, ServerEnemy, EnemyType } from '../types';
 import { normalizeVector, getDistance } from '../math';
 import { DroppedItem } from './DroppedItem';
-import { GAME_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES } from '../constants';
+import { GAME_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES, GROVE_ENEMIES, GROVE_BOSSES } from '../constants';
 import { Projectile } from './Projectile';
 import { FloatingText } from './FloatingText';
 import { Player } from './Player';
@@ -19,6 +19,7 @@ export class Enemy extends Character {
     lootDropped: boolean = false;
     isBoss: boolean = false;
     bossZoneId?: string;
+    typeId?: string; // Track the server's type ID
     
     private spawnPosition: Vector2D;
     private state: 'idle' | 'chasing' | 'attacking' | 'returning' = 'idle';
@@ -75,6 +76,23 @@ export class Enemy extends Character {
         if (data.radius) this.radius = data.radius;
         if (data.damage) this.damage = data.damage;
         if (data.spawnPosition) this.spawnPosition = data.spawnPosition; 
+        
+        // Visual Sync based on Type ID from Server
+        if (data.typeId && data.typeId !== this.typeId) {
+            this.typeId = data.typeId;
+            
+            // Find the type definition
+            let newType = BOSS_TYPES[data.typeId] || GROVE_BOSSES[data.typeId] || ENEMY_TYPES[data.typeId] || GROVE_ENEMIES[data.typeId];
+            
+            if (newType) {
+                this.type = newType;
+                this.name = newType.name;
+                this.color = newType.color;
+                this.radius = newType.radius;
+                this.speed = newType.speed;
+                this.attackRange = newType.attackRange;
+            }
+        }
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
