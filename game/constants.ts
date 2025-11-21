@@ -299,9 +299,9 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
     }
 };
 
-// World 2 Bosses (Used by server logic manually based on Zone ID)
+// World 2 Bosses - UPDATED KEYS TO BE UNIQUE
 export const GROVE_BOSSES: { [key: string]: EnemyType } = {
-    'boss_nw': { 
+    'grove_boss_nw': { 
         name: 'Elder Barkskin',
         radius: 80,
         healthMultiplier: 80 * 20, // 20x World 1
@@ -312,7 +312,7 @@ export const GROVE_BOSSES: { [key: string]: EnemyType } = {
         attackCooldown: 2500,
         attackType: 'melee'
     },
-    'boss_ne': { 
+    'grove_boss_ne': { 
         name: 'Alpha Warg',
         radius: 65,
         healthMultiplier: 70 * 20,
@@ -323,7 +323,7 @@ export const GROVE_BOSSES: { [key: string]: EnemyType } = {
         attackCooldown: 800,
         attackType: 'melee'
     },
-    'boss_sw': { 
+    'grove_boss_sw': { 
         name: 'Spore Queen',
         radius: 75,
         healthMultiplier: 60 * 20,
@@ -334,7 +334,7 @@ export const GROVE_BOSSES: { [key: string]: EnemyType } = {
         attackCooldown: 1200,
         attackType: 'ranged'
     },
-    'boss_se': { 
+    'grove_boss_se': { 
         name: 'Corrupted Druid',
         radius: 60,
         healthMultiplier: 65 * 20,

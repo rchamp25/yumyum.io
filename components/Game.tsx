@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType } from '../game/types';
+import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType, EnemyType } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -130,95 +130,115 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       }
   }, [isOnlineMode]);
 
-  const spawnLocalEnemies = (worldId: string) => {
+  // Helper to create a single pack of enemies (used for init and spawning)
+  const generateEnemyPack = useCallback((worldId: string, existingEnemies: Enemy[]): Enemy[] => {
+        let attempts = 0;
+        let packCenter = { x: 0, y: 0 };
+        let validPosition = false;
+
+        // RETRY LOOP
+        while(!validPosition && attempts < 15) {
+            attempts++;
+            const angle = Math.random() * Math.PI * 2;
+            const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 150;
+            const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 150;
+            const dist = minR + Math.random() * (maxR - minR);
+            
+            const testPos = {
+                    x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
+                    y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
+            };
+
+            let inBossZone = false;
+            for (const zone of BOSS_ZONES) {
+                if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
+                    inBossZone = true;
+                    break;
+                }
+            }
+            
+            if (!inBossZone) {
+                packCenter = testPos;
+                validPosition = true;
+            }
+        }
+
+        if (!validPosition) return [];
+
+        let level = 1;
+        if (worldId === WORLD_IDS.WORLD_2) {
+            level = GAME_CONFIG.MAX_LEVEL;
+        } else {
+            const safeZone = GAME_CONFIG.SAFE_ZONE_RADIUS;
+            const maxDist = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
+            const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
+            const progress = Math.max(0, (distFromCenter - safeZone) / (maxDist - safeZone));
+            level = Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1));
+            level = Math.min(GAME_CONFIG.MAX_LEVEL, Math.max(1, level));
+        }
+
+        let typeId: string;
+        const packSize = Math.floor(Math.random() * 3) + 3; // 3 to 5 mobs
+        
+        if (worldId === WORLD_IDS.WORLD_2) {
+            const typeKeys = Object.keys(GROVE_ENEMIES);
+            typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+        } else {
+            const typeKeys = Object.keys(ENEMY_TYPES);
+            typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+        }
+
+        const pack: Enemy[] = [];
+        for(let i=0; i<packSize; i++) {
+            const offset = { x: (Math.random()-0.5)*120, y: (Math.random()-0.5)*120 };
+            const pos = { x: packCenter.x + offset.x, y: packCenter.y + offset.y };
+            pack.push(new Enemy(pos, level, undefined, `local_${Date.now()}_${Math.random()}`, typeId));
+        }
+        return pack;
+  }, []);
+
+  const spawnLocalEnemies = useCallback((worldId: string) => {
       setEnemies(prev => {
-          if (prev.length >= GAME_CONFIG.MAX_ENEMIES) return prev; // Local cap
-          
-          // Use same spawn logic as server but simplified for local
-          const angle = Math.random() * Math.PI * 2;
-          const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 100;
-          const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
-          const dist = minR + Math.random() * (maxR - minR);
-          const packCenter = {
-               x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
-               y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
-          };
-
-          let inBossZone = false;
-          for (const zone of BOSS_ZONES) {
-              if (getDistance(packCenter, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
-                  inBossZone = true;
-                  break;
-              }
-          }
-          if (inBossZone) return prev;
-
-          let level = 1;
-          if (worldId === WORLD_IDS.WORLD_2) {
-              level = GAME_CONFIG.MAX_LEVEL;
-          } else {
-              const safeZone = GAME_CONFIG.SAFE_ZONE_RADIUS;
-              const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
-              // Calculate Level based on Distance
-              const progress = Math.max(0, (distFromCenter - safeZone) / (maxR - safeZone));
-              level = Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1));
-              level = Math.min(GAME_CONFIG.MAX_LEVEL, Math.max(1, level));
-          }
-
-          let typeId: string;
-          const packSize = Math.floor(Math.random() * 3) + 3; // 3 to 5 mobs
-          
-          if (worldId === WORLD_IDS.WORLD_2) {
-              const typeKeys = Object.keys(GROVE_ENEMIES);
-              typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-          } else {
-              const typeKeys = Object.keys(ENEMY_TYPES);
-              typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-          }
-
-          const newEnemies: Enemy[] = [];
-          for(let i=0; i<packSize; i++) {
-              const offset = { x: (Math.random()-0.5)*120, y: (Math.random()-0.5)*120 };
-              const pos = { x: packCenter.x + offset.x, y: packCenter.y + offset.y };
-              newEnemies.push(new Enemy(pos, level, undefined, `local_${Date.now()}_${Math.random()}`, typeId));
-          }
-
-          return [...prev, ...newEnemies];
+          if (prev.length >= GAME_CONFIG.MAX_ENEMIES) return prev; 
+          const newPack = generateEnemyPack(worldId, prev);
+          return [...prev, ...newPack];
       });
+  }, [generateEnemyPack]);
+
+  const createLocalBoss = (worldId: string, existingEnemies: Enemy[]): Enemy | null => {
+      const activeBosses = existingEnemies.filter(e => e.isBoss);
+      if (activeBosses.length >= BOSS_CONFIG.MAX_ACTIVE_BOSSES) return null;
+
+      const occupiedZones = activeBosses.map(e => e.bossZoneId);
+      const availableZones = BOSS_ZONES.filter(z => !occupiedZones.includes(z.id));
+      
+      if (availableZones.length === 0) return null;
+      
+      const zone = availableZones[Math.floor(Math.random() * availableZones.length)];
+      let typeId = zone.id; // Default matches World 1 boss keys
+      
+      if (worldId === WORLD_IDS.WORLD_2) {
+          typeId = `grove_${zone.id}`; 
+      }
+
+      return new Enemy({ x: zone.x, y: zone.y }, GAME_CONFIG.MAX_LEVEL, zone.id, `boss_${Date.now()}`, typeId);
   };
 
-  const spawnLocalBoss = (worldId: string) => {
+  const spawnLocalBoss = useCallback((worldId: string) => {
       setEnemies(prev => {
-          const activeBosses = prev.filter(e => e.isBoss);
-          if (activeBosses.length >= BOSS_CONFIG.MAX_ACTIVE_BOSSES) return prev;
           if (Date.now() < localBossCooldownRef.current) return prev;
-
-          // Try to spawn a boss
-          const occupiedZones = activeBosses.map(e => e.bossZoneId);
-          const availableZones = BOSS_ZONES.filter(z => !occupiedZones.includes(z.id));
-          
-          if (availableZones.length === 0) return prev;
-          
-          const zone = availableZones[Math.floor(Math.random() * availableZones.length)];
-          let typeId = zone.id; // ID matches
-          
-          // World 2 Override
-          if (worldId === WORLD_IDS.WORLD_2) {
-              // Keys for Grove bosses match zone IDs in constants
+          const boss = createLocalBoss(worldId, prev);
+          if (boss) {
+              localBossCooldownRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+              return [...prev, boss];
           }
-
-          // Spawn Boss
-          const boss = new Enemy({ x: zone.x, y: zone.y }, GAME_CONFIG.MAX_LEVEL, zone.id, `boss_${Date.now()}`, typeId);
-          
-          localBossCooldownRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
-          return [...prev, boss];
+          return prev;
       });
-  };
+  }, []);
 
   const initializeGame = useCallback((updatedCharData: CharacterData) => {
       const newPlayer = new Player(updatedCharData);
       
-      // Apply Insane Mode Nerfs Locally
       if (isOnlineMode && difficulty === Difficulty.Insane) {
           newPlayer.applyInsaneModeNerfs();
       }
@@ -227,7 +247,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       prevHealthRef.current = newPlayer.health;
       setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
   
-      // Setup Static Objects - NPCs
+      // Setup NPCs
       const cx = GAME_CONFIG.WORLD_WIDTH / 2;
       const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
       const dist = 150;
@@ -241,12 +261,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       setWaypoints(WAYPOINTS.map(data => new Waypoint(data)));
 
       if (isOnlineMode) {
-          // Ensure we are disconnected from any previous game session before joining new
           socketService.disconnect(); 
-          
           socketService.connect((id) => {
               playerIdRef.current = id;
-              console.log("Connected to game server!", id);
               socketService.joinGame(newPlayer.toCharacterData(), difficulty, isDevMode);
           });
   
@@ -261,13 +278,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                 if (id !== playerIdRef.current) {
                     others.push(data);
                 } else {
-                    // Reconcile Local Player Position with Server
                     if (playerRef.current) {
                         const serverPos = data.position;
                         const localPos = playerRef.current.position;
                         const distance = getDistance(localPos, serverPos);
-                        
-                        // Snap if distance is too large (e.g. teleport/fast travel desync)
                         if (distance > 200) {
                             playerRef.current.position = { ...serverPos };
                         }
@@ -295,32 +309,40 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                 });
             }
         });
-          // ... rest of socket setup ...
       } else {
-          // Solo Mode Initial Spawning
-          setEnemies([]); // Clear online enemies
+          // SOLO MODE INITIALIZATION
+          setEnemies([]); 
           setOtherPlayers([]);
-          localBossCooldownRef.current = 0; // Reset boss cooldown on new world init
+          localBossCooldownRef.current = 0; 
           localSpawnTimerRef.current = 0;
           
-          // Spawn initial batch - Increased to 60 iterations to fill the map immediately
-          for(let i=0; i<60; i++) {
-              setTimeout(() => {
-                  if (playerRef.current) spawnLocalEnemies(playerRef.current.currentWorldId);
-              }, i * 20);
+          const currentWorldId = newPlayer.currentWorldId;
+          
+          // SYNCHRONOUS SPAWNING TO FILL MAP INSTANTLY
+          // Instead of timeout loop, generate state immediately
+          const initialEnemies: Enemy[] = [];
+          
+          // 1. Generate Mobs (~70 packs * 4 mobs avg = 280 mobs)
+          for(let i=0; i<70; i++) {
+              const pack = generateEnemyPack(currentWorldId, initialEnemies);
+              initialEnemies.push(...pack);
           }
-          // Ensure initial boss check - immediate
-          setTimeout(() => {
-              if (playerRef.current) spawnLocalBoss(playerRef.current.currentWorldId);
-          }, 500);
+
+          // 2. Generate Boss
+          const boss = createLocalBoss(currentWorldId, initialEnemies);
+          if (boss) {
+              initialEnemies.push(boss);
+              localBossCooldownRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+          }
+
+          setEnemies(initialEnemies);
       }
-  }, [difficulty, isDevMode, isOnlineMode, onReturnToSelect]);
+  }, [difficulty, isDevMode, isOnlineMode, onReturnToSelect, generateEnemyPack]);
 
   // Initial Load
   useEffect(() => {
       initializeGame(characterData);
       
-      // Setup common listeners (Loot, Kill, etc)
       if (isOnlineMode) {
            socketService.onLootDropped((drops) => {
             drops.forEach(drop => {
@@ -332,7 +354,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             setPlayer(prev => {
                 if (!prev) return null;
                 const updatedPlayer = new Player(prev.toCharacterData());
-                // Preserve nerf state if re-instantiating
                 if (difficulty === Difficulty.Insane) updatedPlayer.applyInsaneModeNerfs();
 
                 const oldLevel = updatedPlayer.level;
@@ -393,10 +414,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     }
     
-    // Solo Mode Spawning Loop
+    // Solo Mode Spawning Loop (Maintenance)
     if (!isOnlineMode) {
         localSpawnTimerRef.current++;
-        if (localSpawnTimerRef.current > 60) { // Check every second (approx)
+        if (localSpawnTimerRef.current > 60) { 
              spawnLocalEnemies(player.currentWorldId);
              spawnLocalBoss(player.currentWorldId);
              localSpawnTimerRef.current = 0;
@@ -437,7 +458,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     groundEffects.forEach(ge => ge.update(updatedEnemies, gameContext));
     droppedItems.forEach(di => di.update(player));
     
-    // Projectile Collisions...
+    // Projectile Collisions
     projectiles.forEach(p => {
         if (p.ownerId === player.id || !p.isHostile) { 
             for (const enemy of updatedEnemies) {
@@ -450,16 +471,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                         socketService.damageEnemy(enemy.id as string, p.damage);
                     } else {
                         p.onHit(enemy, gameContext);
-                        // Local Death Check
-                        if (enemy.health <= 0 && !enemy.isDead) {
-                            enemy.isDead = true;
-                            const drops = enemy.dropLoot(player);
-                            drops.forEach(d => addDroppedItem(d));
-                            player.gainXP(enemy.xpValue, addFloatingText, enemy.level);
-                            player.gainGold(enemy.goldValue, addFloatingText);
-                            player.kills++;
-                            playSound('level_up'); // Reuse or change
-                        }
                     }
                     if (!p.piercing && p.bounces <= 0) p.expire();
                 }
@@ -472,15 +483,39 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     });
 
-    // Clean up dead enemies locally
+    // GLOBAL DEATH HANDLER (Solo Mode)
     if (!isOnlineMode) {
+        updatedEnemies.forEach(enemy => {
+            if (enemy.health <= 0) {
+                if (!enemy.isDead) enemy.isDead = true;
+                
+                // Attempt to drop loot
+                if (!enemy.lootDropped) {
+                    // Critical: Ensure drops are generated and added immediately
+                    const drops = enemy.dropLoot(player);
+                    if (drops.length > 0) {
+                        drops.forEach(d => addDroppedItem(d));
+                    }
+                }
+                
+                // Award XP/Gold
+                if (!enemy.xpGiven) {
+                    enemy.xpGiven = true;
+                    player.gainXP(enemy.xpValue, addFloatingText, enemy.level);
+                    player.gainGold(enemy.goldValue, addFloatingText);
+                    player.kills++;
+                    playSound('level_up'); 
+                }
+            }
+        });
+        
         const aliveEnemies = updatedEnemies.filter(e => !e.isDead);
         if (aliveEnemies.length !== enemies.length) {
             setEnemies(aliveEnemies);
         }
     }
 
-    // Item Pickup...
+    // Item Pickup
     const remainingItems: DroppedItem[] = [];
     droppedItems.forEach(di => {
         if(getDistance(di.position, player.position) < player.radius) {
@@ -526,11 +561,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }));
     }
 
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers, interactingNPC]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers, interactingNPC, spawnLocalEnemies, spawnLocalBoss]);
 
   useGameLoop(gameLoop);
   
-  // Mouse/Input Handlers (Same as before, omitted for brevity to focus on changes)
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
     if (interactingNPC) {
@@ -552,26 +586,19 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     setTooltipPos({ x: e.clientX, y: e.clientY });
   };
 
-  // World Travel Handler
   const handleTravelToWorld = (targetWorldId: string) => {
       if (!player) return;
       
-      // Update local player state
       const newCharData = player.toCharacterData();
       newCharData.currentWorldId = targetWorldId;
-      
-      // Teleport back to spawn in new world
       newCharData.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
       
-      // Save
       storageService.saveCharacter(userId, newCharData);
 
-      // Close UI
       setInteractingNPC(null);
-      setEnemies([]); // Clear enemies from old world
+      setEnemies([]);
       setDroppedItems([]);
       
-      // Re-init
       initializeGame(newCharData);
   };
 
@@ -581,8 +608,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
   }, [userId, updateServerCharacter]);
 
-  // ... Other handlers (equip, craft, sell, bank) same as before ...
-  // Simplified for update block to avoid repeating 300 lines of code that didn't change
+  // Handlers (Omitted logic same as original to save space, just ensuring bindings)
   const toggleInventory = useCallback(() => {
     if (interactingNPC || interactingWaypoint || activeTradeSession) return;
     setInventoryOpen(prev => !prev);
@@ -603,7 +629,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const handleDepositGold = (a: number) => { if(!player) return; if(a<=0) return; if(player.gold>=a) { player.gold -= a; player.bankGold += a; const u = new Player(player.toCharacterData()); if(difficulty === Difficulty.Insane) u.applyInsaneModeNerfs(); savePlayerState(u); addFloatingText(new FloatingText(`- ${a} G`, player.position, '#facc15')); } else { addFloatingText(new FloatingText("Not enough gold!", player.position, '#ef4444')); }};
   const handleWithdrawGold = (a: number) => { if(!player) return; if(a<=0) return; if(player.bankGold>=a) { player.bankGold -= a; player.gold += a; const u = new Player(player.toCharacterData()); if(difficulty === Difficulty.Insane) u.applyInsaneModeNerfs(); savePlayerState(u); addFloatingText(new FloatingText(`+ ${a} G`, player.position, '#facc15')); } else { addFloatingText(new FloatingText("Not enough in bank!", player.position, '#ef4444')); }};
   const handleFastTravel = (d: WaypointData) => { if(player) { player.position = {...d.position}; setCamera({x: player.position.x, y: player.position.y}); addVisualEffect(new VisualEffect(d.position, 'teleport_in', 1000, { radius: 40, endPos: d.position })); addFloatingText(new FloatingText("Fast Travelled", d.position, '#22d3ee')); setInteractingWaypoint(null); updateServerCharacter(player); }};
-
 
   const nearbyNPC = player ? (npcs.find(npc => getDistance(player.position, npc.position) < npc.interactionRadius) || null) : null;
   const nearbyWaypoint = player ? (waypoints.find(wp => getDistance(player.position, wp.data.position) < wp.interactionRadius && player.discoveredWaypoints.includes(wp.data.id)) || null) : null;
@@ -639,7 +664,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleInventory, nearbyNPC, nearbyWaypoint, activeTradeSession]);
 
-  // Render
+  // Drawing (Same as previous, just ensuring context correctness)
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -648,7 +673,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // --- BACKGROUND LOGIC ---
     const currentWorldConfig = WORLD_CONFIGS[player.currentWorldId] || WORLD_CONFIGS[WORLD_IDS.WORLD_1];
     ctx.fillStyle = currentWorldConfig.bgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -671,11 +695,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME_CONFIG.WORLD_WIDTH, y); ctx.stroke();
     }
 
-    // Draw World Name Watermark if in World 2
     if (player.currentWorldId === WORLD_IDS.WORLD_2) {
          ctx.save();
          ctx.font = "bold 200px sans-serif";
-         ctx.fillStyle = "rgba(20, 83, 45, 0.2)"; // Very faint green text
+         ctx.fillStyle = "rgba(20, 83, 45, 0.2)"; 
          ctx.textAlign = "center";
          ctx.textBaseline = "middle";
          ctx.translate(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2);
@@ -683,7 +706,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
          ctx.restore();
     }
 
-    // ... Rest of drawing logic same as before ...
     if (isVisible({ x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.SAFE_ZONE_RADIUS)) {
         ctx.beginPath();
         ctx.arc(GAME_CONFIG.WORLD_WIDTH / 2, GAME_CONFIG.WORLD_HEIGHT / 2, GAME_CONFIG.SAFE_ZONE_RADIUS, 0, Math.PI * 2);

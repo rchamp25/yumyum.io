@@ -24,7 +24,8 @@ export function generateLoot(
     const rarityBonus = enemyLevel * LOOT_CONFIG.LEVEL_RARITY_BONUS;
     
     // Drop materials
-    const matDropChance = (LOOT_CONFIG.MATERIAL_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
+    // Base chance 20% (Reverted from 50%)
+    const matDropChance = (0.20 + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
     
     const onlineMultiplier = (isOnline && isBoss) ? ONLINE_BOSS_CONFIG.DROP_COUNT_MULTIPLIER : 1;
 
@@ -91,14 +92,13 @@ export function generateLoot(
     const scaledLoopCount = dropLoopCount * quantityScale;
     const finalLoopCount = Math.floor(scaledLoopCount) + (Math.random() < (scaledLoopCount % 1) ? 1 : 0);
 
-    // Buffed base drop rate from 0.05 to 0.08
-    const baseDropRate = 0.08;
+    // Base drop rate 5% (Reverted from 40%)
+    const baseDropRate = 0.05;
 
     for(let i=0; i<finalLoopCount; i++) {
         const equipDropChance = (baseDropRate + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
         
-        // Fix: Only force drop for BOSSES or High Contribution Online kills. Standard solo mobs rely on RNG.
-        // Previous logic forced drop if quantityScale=1 (Solo), causing 100% drop rate.
+        // Only force drop for BOSSES or High Contribution Online kills (1st roll). Standard solo mobs rely on RNG.
         const forceDrop = isBoss || (isOnline && quantityScale >= 0.1 && i === 0);
         
         const shouldDrop = forceDrop || Math.random() < equipDropChance;

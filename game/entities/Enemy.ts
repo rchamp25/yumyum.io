@@ -17,6 +17,7 @@ export class Enemy extends Character {
     goldValue: number;
     type: EnemyType;
     lootDropped: boolean = false;
+    xpGiven: boolean = false; // Track if XP/Gold has been awarded
     isBoss: boolean = false;
     bossZoneId?: string;
     typeId?: string; // Track the server's type ID
@@ -35,17 +36,27 @@ export class Enemy extends Character {
         let type: EnemyType;
         let isBoss = false;
 
-        if (bossZoneId && BOSS_TYPES[bossZoneId]) {
-            type = BOSS_TYPES[bossZoneId];
-            isBoss = true;
-        } else if (typeId) {
-            // Explicit type passed (Online sync or controlled local spawn)
+        // CHECK TYPE_ID FIRST to allow World 2 overrides (using unique keys)
+        if (typeId) {
             type = ENEMY_TYPES[typeId] || GROVE_ENEMIES[typeId] || BOSS_TYPES[typeId] || GROVE_BOSSES[typeId] || ENEMY_TYPES['slime'];
-            // If it matches a boss ID, mark as boss
+            
             if (BOSS_TYPES[typeId] || GROVE_BOSSES[typeId]) {
                 isBoss = true;
-                bossZoneId = typeId;
+                // If bossZoneId was not explicitly passed, try to infer it if the type key is a boss key
+                // Note: Grove bosses have keys like 'grove_boss_nw' which DON'T match zone IDs directly
+                // But for World 1 'boss_nw' matches. 
+                // We trust the caller to pass correct bossZoneId for logic, but type determines stats.
+                if (!bossZoneId) {
+                     if (BOSS_ZONES.some(z => z.id === typeId)) {
+                         bossZoneId = typeId;
+                     }
+                }
             }
+        } 
+        // Fallback to Boss Zone ID logic (Legacy / Default World 1 behavior)
+        else if (bossZoneId && BOSS_TYPES[bossZoneId]) {
+            type = BOSS_TYPES[bossZoneId];
+            isBoss = true;
         } else {
             // Fallback Random selection
             const typeKey = Object.keys(ENEMY_TYPES)[Math.floor(Math.random() * Object.keys(ENEMY_TYPES).length)];
