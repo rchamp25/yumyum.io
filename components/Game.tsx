@@ -12,7 +12,7 @@ import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
 import useGameLoop from '../hooks/useGameLoop';
 import useKeyboardInput from '../hooks/useKeyboardInput';
-import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES, BOSS_TYPES, GROVE_BOSSES } from '../game/constants';
+import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES } from '../game/constants';
 import { CRAFTING_RECIPES } from '../game/items';
 import { getDistance } from '../game/math';
 import HUD from './HUD';
