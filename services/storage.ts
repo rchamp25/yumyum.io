@@ -137,7 +137,7 @@ class StorageService {
   }
 
   // --- BANK METHODS ---
-  async getBank(userId: string): Promise<Item[]> {
+  async getBank(userId: string): Promise<(Item | null)[]> {
       try {
           // Ensure we select using the correct filter
           const { data, error } = await supabase
@@ -152,9 +152,9 @@ class StorageService {
           }
           
           // If no bank exists, return empty array (will be created on save)
-          if (!data) return [];
+          if (!data || !data.items) return [];
           
-          return data.items || [];
+          return data.items as (Item | null)[];
       } catch (error) {
           console.error("Failed to fetch bank", error);
           return [];
