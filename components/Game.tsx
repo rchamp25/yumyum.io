@@ -12,7 +12,7 @@ import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
 import useGameLoop from '../hooks/useGameLoop';
 import useKeyboardInput from '../hooks/useKeyboardInput';
-import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES } from '../game/constants';
+import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES, BOSS_TYPES, GROVE_BOSSES } from '../game/constants';
 import { CRAFTING_RECIPES } from '../game/items';
 import { getDistance } from '../game/math';
 import HUD from './HUD';
@@ -39,6 +39,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const localSpawnTimerRef = useRef(0);
+  const localBossCooldownRef = useRef(0);
   
   const [player, setPlayer] = useState<Player | null>(null);
   const playerRef = useRef<Player | null>(null);
@@ -131,29 +132,41 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
   const spawnLocalEnemies = (worldId: string) => {
       setEnemies(prev => {
-          if (prev.length >= 50) return prev; // Local cap
+          if (prev.length >= GAME_CONFIG.MAX_ENEMIES) return prev; // Local cap
           
           // Use same spawn logic as server but simplified for local
           const angle = Math.random() * Math.PI * 2;
           const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 100;
           const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
           const dist = minR + Math.random() * (maxR - minR);
-          const pos = {
+          const packCenter = {
                x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
                y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
           };
 
           let inBossZone = false;
           for (const zone of BOSS_ZONES) {
-              if (getDistance(pos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
+              if (getDistance(packCenter, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
                   inBossZone = true;
                   break;
               }
           }
           if (inBossZone) return prev;
 
-          const level = worldId === WORLD_IDS.WORLD_2 ? GAME_CONFIG.MAX_LEVEL : Math.floor(Math.random() * 15) + 1;
+          let level = 1;
+          if (worldId === WORLD_IDS.WORLD_2) {
+              level = GAME_CONFIG.MAX_LEVEL;
+          } else {
+              const safeZone = GAME_CONFIG.SAFE_ZONE_RADIUS;
+              const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
+              // Calculate Level based on Distance
+              const progress = Math.max(0, (distFromCenter - safeZone) / (maxR - safeZone));
+              level = Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1));
+              level = Math.min(GAME_CONFIG.MAX_LEVEL, Math.max(1, level));
+          }
+
           let typeId: string;
+          const packSize = Math.floor(Math.random() * 3) + 3; // 3 to 5 mobs
           
           if (worldId === WORLD_IDS.WORLD_2) {
               const typeKeys = Object.keys(GROVE_ENEMIES);
@@ -163,7 +176,42 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
               typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
           }
 
-          return [...prev, new Enemy(pos, level, undefined, `local_${Date.now()}_${Math.random()}`, typeId)];
+          const newEnemies: Enemy[] = [];
+          for(let i=0; i<packSize; i++) {
+              const offset = { x: (Math.random()-0.5)*120, y: (Math.random()-0.5)*120 };
+              const pos = { x: packCenter.x + offset.x, y: packCenter.y + offset.y };
+              newEnemies.push(new Enemy(pos, level, undefined, `local_${Date.now()}_${Math.random()}`, typeId));
+          }
+
+          return [...prev, ...newEnemies];
+      });
+  };
+
+  const spawnLocalBoss = (worldId: string) => {
+      setEnemies(prev => {
+          const activeBosses = prev.filter(e => e.isBoss);
+          if (activeBosses.length >= BOSS_CONFIG.MAX_ACTIVE_BOSSES) return prev;
+          if (Date.now() < localBossCooldownRef.current) return prev;
+
+          // Try to spawn a boss
+          const occupiedZones = activeBosses.map(e => e.bossZoneId);
+          const availableZones = BOSS_ZONES.filter(z => !occupiedZones.includes(z.id));
+          
+          if (availableZones.length === 0) return prev;
+          
+          const zone = availableZones[Math.floor(Math.random() * availableZones.length)];
+          let typeId = zone.id; // ID matches
+          
+          // World 2 Override
+          if (worldId === WORLD_IDS.WORLD_2) {
+              // Keys for Grove bosses match zone IDs in constants
+          }
+
+          // Spawn Boss
+          const boss = new Enemy({ x: zone.x, y: zone.y }, GAME_CONFIG.MAX_LEVEL, zone.id, `boss_${Date.now()}`, typeId);
+          
+          localBossCooldownRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
+          return [...prev, boss];
       });
   };
 
@@ -254,11 +302,15 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           setOtherPlayers([]);
           
           // Spawn initial batch
-          for(let i=0; i<20; i++) {
+          for(let i=0; i<10; i++) {
               setTimeout(() => {
                   if (playerRef.current) spawnLocalEnemies(playerRef.current.currentWorldId);
               }, i * 100);
           }
+          // Ensure initial boss check
+          setTimeout(() => {
+              if (playerRef.current) spawnLocalBoss(playerRef.current.currentWorldId);
+          }, 1000);
       }
   }, [difficulty, isDevMode, isOnlineMode, onReturnToSelect]);
 
@@ -344,6 +396,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         localSpawnTimerRef.current++;
         if (localSpawnTimerRef.current > 60) { // Check every second (approx)
              spawnLocalEnemies(player.currentWorldId);
+             spawnLocalBoss(player.currentWorldId);
              localSpawnTimerRef.current = 0;
         }
     }

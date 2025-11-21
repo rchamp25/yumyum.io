@@ -289,7 +289,22 @@ function spawnMobPacks(room: RoomState) {
     const packCenter = getRandomPositionOutsideSafeZone();
     if (!packCenter) return; // Failed to find spot outside boss zones
 
-    const level = room.worldId === WORLD_IDS.WORLD_2 ? GAME_CONFIG.MAX_LEVEL : Math.floor(Math.random() * 15) + 1;
+    // Calculate Level based on Distance from Center
+    let level = 1;
+    if (room.worldId === WORLD_IDS.WORLD_2) {
+        level = GAME_CONFIG.MAX_LEVEL;
+    } else {
+        const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
+        const safeZone = GAME_CONFIG.SAFE_ZONE_RADIUS;
+        const maxDist = Math.max(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100; // Approx edge
+        
+        // Scale 0 to 1
+        const progress = Math.max(0, (distFromCenter - safeZone) / (maxDist - safeZone));
+        
+        // Scale level from 1 to MAX_LEVEL
+        level = Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1));
+        level = Math.min(GAME_CONFIG.MAX_LEVEL, Math.max(1, level));
+    }
     
     if (room.worldId === WORLD_IDS.WORLD_2) {
         // --- THE GROVE (World 2) SPAWN LOGIC ---
@@ -318,16 +333,17 @@ function spawnMobPacks(room: RoomState) {
 
     } else {
         // --- THE RAT (World 1) SPAWN LOGIC ---
-        // Random assortment via KEYS to be safe
         const typeKeys = Object.keys(ENEMY_TYPES);
         if (typeKeys.length === 0) return;
 
         const typeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
         const type = ENEMY_TYPES[typeKey];
-        const packSize = Math.floor(Math.random() * 3) + 1;
+        
+        // Pack Size: 3 to 5
+        const packSize = Math.floor(Math.random() * 3) + 3; 
         
         for(let i=0; i<packSize; i++) {
-            const offset = { x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*80 };
+            const offset = { x: (Math.random()-0.5)*120, y: (Math.random()-0.5)*120 };
             spawnEnemy(room, type, { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, typeKey);
         }
     }
@@ -340,6 +356,8 @@ function spawnBosses(room: RoomState) {
         const activeBosses = Array.from(room.enemies.values()).filter(e => e.isBoss);
         const isCooldownReady = Date.now() > room.globalBossCooldown;
 
+        // Ensure at least 1 boss spawns initially if none exist, ignoring cooldown if it's the first one
+        // Or obey max count
         if (activeBosses.length < BOSS_CONFIG.MAX_ACTIVE_BOSSES && isCooldownReady) {
             const occupiedZoneIds = activeBosses.map(e => e.bossZoneId);
             const availableZones = BOSS_ZONES.filter(z => !occupiedZoneIds.includes(z.id));
