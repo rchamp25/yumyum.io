@@ -221,16 +221,37 @@ function getDifficultyMultipliers(difficulty: Difficulty) {
 }
 
 function getRandomPositionOutsideSafeZone(): Vector2D {
-    const angle = Math.random() * Math.PI * 2;
-    // Spawn between safe zone edge and map edge (minus buffer)
-    const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 100;
-    const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
-    const dist = minR + Math.random() * (maxR - minR);
+    let pos: Vector2D = { x: 0, y: 0 };
+    let valid = false;
+    let attempts = 0;
+
+    while (!valid && attempts < 10) {
+        attempts++;
+        const angle = Math.random() * Math.PI * 2;
+        const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 100;
+        const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
+        const dist = minR + Math.random() * (maxR - minR);
+        
+        pos = {
+            x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
+            y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
+        };
+
+        // Check if inside any boss zone
+        let inBossZone = false;
+        for (const zone of BOSS_ZONES) {
+            if (getDistance(pos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
+                inBossZone = true;
+                break;
+            }
+        }
+        
+        if (!inBossZone) {
+            valid = true;
+        }
+    }
     
-    return {
-        x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
-        y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
-    };
+    return pos;
 }
 
 function spawnEnemy(room: RoomState, type: EnemyType, position: Vector2D, level: number, typeId: string) {

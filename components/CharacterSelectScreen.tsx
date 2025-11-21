@@ -142,7 +142,7 @@ const ModeToggle: React.FC<{ isOnline: boolean, onToggle: (isOnline: boolean) =>
                     className={`w-1/2 h-full rounded-full flex items-center justify-center font-bold text-sm transition-colors duration-300
                     ${!isOnline ? 'bg-teal-500 text-white' : 'text-gray-400'}`}
                 >
-                    Private
+                    Solo
                 </button>
                 <button
                     onClick={() => onToggle(true)}

@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType } from '../game/types';
+import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType, EnemyType } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -12,7 +12,7 @@ import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
 import useGameLoop from '../hooks/useGameLoop';
 import useKeyboardInput from '../hooks/useKeyboardInput';
-import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS } from '../game/constants';
+import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES } from '../game/constants';
 import { CRAFTING_RECIPES } from '../game/items';
 import { getDistance } from '../game/math';
 import HUD from './HUD';
@@ -38,6 +38,7 @@ interface GameProps {
 const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId, difficulty, isDevMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
+  const localSpawnTimerRef = useRef(0);
   
   const [player, setPlayer] = useState<Player | null>(null);
   const playerRef = useRef<Player | null>(null);
@@ -128,6 +129,46 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       }
   }, [isOnlineMode]);
 
+  const spawnLocalEnemies = (worldId: string) => {
+      setEnemies(prev => {
+          if (prev.length >= 50) return prev; // Local cap
+          
+          // Use same spawn logic as server but simplified for local
+          const angle = Math.random() * Math.PI * 2;
+          const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 100;
+          const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
+          const dist = minR + Math.random() * (maxR - minR);
+          const pos = {
+               x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
+               y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
+          };
+
+          let inBossZone = false;
+          for (const zone of BOSS_ZONES) {
+              if (getDistance(pos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
+                  inBossZone = true;
+                  break;
+              }
+          }
+          if (inBossZone) return prev;
+
+          const level = worldId === WORLD_IDS.WORLD_2 ? GAME_CONFIG.MAX_LEVEL : Math.floor(Math.random() * 15) + 1;
+          let type: EnemyType;
+          
+          if (worldId === WORLD_IDS.WORLD_2) {
+              const typeKeys = Object.keys(GROVE_ENEMIES);
+              const typeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+              type = GROVE_ENEMIES[typeKey];
+          } else {
+              const typeKeys = Object.keys(ENEMY_TYPES);
+              const typeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+              type = ENEMY_TYPES[typeKey];
+          }
+
+          return [...prev, new Enemy(pos, level, undefined, `local_${Date.now()}_${Math.random()}`)];
+      });
+  };
+
   const initializeGame = useCallback((updatedCharData: CharacterData) => {
       const newPlayer = new Player(updatedCharData);
       
@@ -210,7 +251,16 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         });
           // ... rest of socket setup ...
       } else {
-          // Offline mode setup (stripped for brevity as prompt focuses on Online World 2 mostly)
+          // Solo Mode Initial Spawning
+          setEnemies([]); // Clear online enemies
+          setOtherPlayers([]);
+          
+          // Spawn initial batch
+          for(let i=0; i<20; i++) {
+              setTimeout(() => {
+                  if (playerRef.current) spawnLocalEnemies(playerRef.current.currentWorldId);
+              }, i * 100);
+          }
       }
   }, [difficulty, isDevMode, isOnlineMode, onReturnToSelect]);
 
@@ -290,6 +340,15 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             setInteractingNPC(null);
         }
     }
+    
+    // Solo Mode Spawning Loop
+    if (!isOnlineMode) {
+        localSpawnTimerRef.current++;
+        if (localSpawnTimerRef.current > 60) { // Check every second (approx)
+             spawnLocalEnemies(player.currentWorldId);
+             localSpawnTimerRef.current = 0;
+        }
+    }
 
     if (isOnlineMode) {
         socketService.sendInput(Array.from(pressedKeys));
@@ -338,6 +397,16 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                         socketService.damageEnemy(enemy.id as string, p.damage);
                     } else {
                         p.onHit(enemy, gameContext);
+                        // Local Death Check
+                        if (enemy.health <= 0 && !enemy.isDead) {
+                            enemy.isDead = true;
+                            const drops = enemy.dropLoot(player);
+                            drops.forEach(d => addDroppedItem(d));
+                            player.gainXP(enemy.xpValue, addFloatingText, enemy.level);
+                            player.gainGold(enemy.goldValue, addFloatingText);
+                            player.kills++;
+                            playSound('level_up'); // Reuse or change
+                        }
                     }
                     if (!p.piercing && p.bounces <= 0) p.expire();
                 }
@@ -349,6 +418,14 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
              }
         }
     });
+
+    // Clean up dead enemies locally
+    if (!isOnlineMode) {
+        const aliveEnemies = updatedEnemies.filter(e => !e.isDead);
+        if (aliveEnemies.length !== enemies.length) {
+            setEnemies(aliveEnemies);
+        }
+    }
 
     // Item Pickup...
     const remainingItems: DroppedItem[] = [];
