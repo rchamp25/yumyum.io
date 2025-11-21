@@ -8,7 +8,13 @@ export class NPC extends Character {
     interactionRadius: number = 50;
 
     constructor(position: Vector2D, name: string, type: NPCType) {
-        super(position, 18, 9999, '#fbbf24', 0);
+        // Default color
+        let color = '#fbbf24'; // yellow-400
+        if (type === NPCType.Banker) {
+            color = '#94a3b8'; // slate-400 (Silver/Gray)
+        }
+        
+        super(position, 18, 9999, color, 0);
         this.name = name;
         this.npcType = type;
     }

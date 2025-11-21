@@ -23,6 +23,7 @@ import FastTravelUI from './FastTravelUI';
 import PartyUI from './PartyUI';
 import TradeUI from './TradeUI';
 import { socketService } from '../services/socketService';
+import { storageService } from '../services/storage';
 
 interface GameProps {
   characterData: CharacterData;
@@ -30,9 +31,10 @@ interface GameProps {
   onReturnToSelect: (finalCharacterData: CharacterData) => void;
   isOnlineMode: boolean;
   isDevMode: boolean;
+  userId: string; // Added userId for Bank access
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode }) => {
+const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
   const bossSpawnTimerRef = useRef(0);
@@ -54,6 +56,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
   const [interactingWaypoint, setInteractingWaypoint] = useState<Waypoint | null>(null);
   
+  // Bank State
+  const [bankItems, setBankItems] = useState<(Item | null)[]>([]);
+
   // Multiplayer State
   const [party, setParty] = useState<Party | null>(null);
   const [isPartyUIOpen, setPartyUIOpen] = useState(false);
@@ -273,6 +278,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         new NPC({ x: cx - dist, y: cy }, 'Trevor', NPCType.Vendor),
         new NPC({ x: cx, y: cy - dist }, 'Jackson', NPCType.Seller),
         new NPC({ x: cx, y: cy + dist }, 'Rory', NPCType.WorldTraveler),
+        new NPC({ x: cx - dist, y: cy + dist }, 'Vault Master', NPCType.Banker), // Added Banker
     ]);
     setWaypoints(WAYPOINTS.map(data => new Waypoint(data)));
 
@@ -484,6 +490,68 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const handleDeclineInvite = (fromId: string) => {
        setPendingInvites(prev => prev.filter(i => i.fromId !== fromId));
   };
+
+  // Bank Logic
+  useEffect(() => {
+      if (interactingNPC?.npcType === NPCType.Banker) {
+          storageService.getBank(userId).then(items => {
+              setBankItems(items);
+          });
+      }
+  }, [interactingNPC, userId]);
+
+  const handleDeposit = (inventoryIndex: number) => {
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
+      const item = player.inventory[inventoryIndex];
+      if (!item) return;
+
+      const newBank = [...bankItems];
+      // Ensure bank is initialized with slots
+      while(newBank.length < 100) newBank.push(null);
+
+      const emptySlot = newBank.findIndex(s => s === null);
+      if (emptySlot !== -1) {
+          // Move
+          player.inventory[inventoryIndex] = null;
+          newBank[emptySlot] = item;
+          
+          // Update states and save
+          setBankItems(newBank);
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+          
+          storageService.saveBank(userId, newBank);
+          storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
+      } else {
+          addFloatingText(new FloatingText("Bank Full!", player.position, '#ef4444'));
+      }
+  };
+
+  const handleWithdraw = (bankIndex: number) => {
+      if (!player || !interactingNPC || interactingNPC.npcType !== NPCType.Banker) return;
+      const item = bankItems[bankIndex];
+      if (!item) return;
+
+      const emptySlot = player.inventory.findIndex(s => s === null);
+      if (emptySlot !== -1) {
+          // Move
+          const newBank = [...bankItems];
+          newBank[bankIndex] = null;
+          player.inventory[emptySlot] = item;
+
+          // Update states and save
+          setBankItems(newBank);
+          const updatedPlayer = new Player(player.toCharacterData());
+          setPlayer(updatedPlayer);
+          updateServerCharacter(updatedPlayer);
+
+          storageService.saveBank(userId, newBank);
+          storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
+      } else {
+          addFloatingText(new FloatingText("Inventory Full!", player.position, '#ef4444'));
+      }
+  }
 
   // Render
   useEffect(() => {
@@ -793,6 +861,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             onSell={handleSell}
             onBuy={handleBuyItem}
             onSellByRarity={handleSellByRarity}
+            bankItems={bankItems}
+            onDeposit={handleDeposit}
+            onWithdraw={handleWithdraw}
         />
       )}
       {interactingWaypoint && player && (

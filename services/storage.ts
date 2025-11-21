@@ -1,5 +1,5 @@
 
-import { CharacterClass, CharacterData, ItemSlot } from '../game/types';
+import { CharacterClass, CharacterData, ItemSlot, Item } from '../game/types';
 import { GAME_CONFIG } from '../game/constants';
 import { supabase } from './supabaseClient';
 
@@ -84,8 +84,6 @@ class StorageService {
     }
 
     // We don't generate ID here anymore, we let Supabase generate the UUID
-    // But to return a valid object immediately we can pass null ID and let DB handle it, 
-    // OR we can trust Supabase's response.
     
     const newCharPayload = {
       user_id: userId,
@@ -136,6 +134,42 @@ class StorageService {
         .delete()
         .eq('id', characterId)
         .eq('user_id', userId);
+  }
+
+  // --- BANK METHODS ---
+  async getBank(userId: string): Promise<Item[]> {
+      try {
+          const { data, error } = await supabase
+              .from('banks')
+              .select('items')
+              .eq('user_id', userId)
+              .single();
+          
+          if (error && error.code !== 'PGRST116') { // PGRST116 is "No rows found"
+              console.error("Supabase Bank Fetch Error:", error);
+              return [];
+          }
+          
+          // If no bank exists, return empty array (will be created on save)
+          if (!data) return [];
+          
+          return data.items || [];
+      } catch (error) {
+          console.error("Failed to fetch bank", error);
+          return [];
+      }
+  }
+
+  async saveBank(userId: string, items: (Item | null)[]): Promise<void> {
+      try {
+          const { error } = await supabase
+              .from('banks')
+              .upsert({ user_id: userId, items });
+          
+          if (error) console.error("Supabase Bank Save Error:", error);
+      } catch (error) {
+          console.error("Failed to save bank", error);
+      }
   }
 }
 

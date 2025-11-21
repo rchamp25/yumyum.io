@@ -206,12 +206,13 @@ const App: React.FC = () => {
                             onCancel={() => setGameState('char_select')} 
                         />;
             case 'in_game':
-                return currentCharacter && <Game 
+                return currentCharacter && user && <Game 
                                                 characterData={currentCharacter} 
                                                 onDeath={handleDeath}
                                                 onReturnToSelect={handleReturnToSelect}
                                                 isDevMode={isDevMode}
                                                 isOnlineMode={isOnlineMode}
+                                                userId={user.uid}
                                             />;
             case 'dead':
                 return <DeathScreen 

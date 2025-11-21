@@ -6,6 +6,7 @@ import CraftingUI from './CraftingUI';
 import VendorUI from './VendorUI';
 import MaterialVendorUI from './MaterialVendorUI';
 import WorldTravelUI from './WorldTravelUI';
+import BankUI from './BankUI';
 
 interface NPCInteractionProps {
     npc: NPC;
@@ -16,9 +17,16 @@ interface NPCInteractionProps {
     onSell: (item: Item, inventoryIndex: number, sellFullStack: boolean) => void;
     onBuy: (item: Item, cost: number) => void;
     onSellByRarity?: (rarity: ItemRarity) => void;
+    // Bank props
+    bankItems?: (Item | null)[];
+    onDeposit?: (inventoryIndex: number) => void;
+    onWithdraw?: (bankIndex: number) => void;
 }
 
-const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, characterData, recipes, onClose, onCraft, onSell, onBuy, onSellByRarity }) => {
+const NPCInteraction: React.FC<NPCInteractionProps> = ({ 
+    npc, characterData, recipes, onClose, onCraft, onSell, onBuy, onSellByRarity,
+    bankItems, onDeposit, onWithdraw
+}) => {
     
     const renderContent = () => {
         switch (npc.npcType) {
@@ -53,6 +61,19 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({ npc, characterData, rec
                         onClose={onClose}
                     />
                 );
+            case NPCType.Banker:
+                if (bankItems && onDeposit && onWithdraw) {
+                    return (
+                        <BankUI
+                            characterData={characterData}
+                            bankItems={bankItems}
+                            onDeposit={onDeposit}
+                            onWithdraw={onWithdraw}
+                            onClose={onClose}
+                        />
+                    );
+                }
+                return null;
             case NPCType.QuestGiver:
                  return (
                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto" onClick={onClose}>
