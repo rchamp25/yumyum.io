@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType, EnemyType } from '../game/types';
+import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty, NPCType } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
