@@ -18,8 +18,10 @@ export const GAME_CONFIG = {
     ENEMY_PACK_SIZE_MIN: 3,
     ENEMY_PACK_SIZE_MAX: 5,
     ENEMY_PACK_RADIUS: 75,
-    ENEMY_AGGRO_RANGE: 180, // How far an enemy can see the player
-    ENEMY_LEASH_RANGE: 600, // How far from spawn an enemy will chase
+    ENEMY_AGGRO_RANGE: 90, // Halved from 180
+    ENEMY_LEASH_RANGE: 300, // Halved from 600
+    BOSS_AGGRO_RANGE: 180, // Kept original
+    BOSS_LEASH_RANGE: 600, // Kept original
 };
 
 export const BOSS_CONFIG = {

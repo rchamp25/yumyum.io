@@ -115,11 +115,13 @@ export class Enemy extends Character {
         const { player } = game;
         const distToPlayer = getDistance(this.position, player.position);
         const distToSpawn = getDistance(this.position, this.spawnPosition);
-        const leashRange = this.isBoss ? BOSS_CONFIG.ZONE_RADIUS : GAME_CONFIG.ENEMY_LEASH_RANGE;
+        
+        // Use Boss Leash for Bosses, Enemy Leash for Mobs
+        const leashRange = this.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
 
         if (this.state !== 'returning') {
              const playerInSafeZone = player.isInSafeZone;
-             const outsideLeash = distToSpawn > leashRange + 200; 
+             const outsideLeash = distToSpawn > leashRange; 
              
              let shouldDeAggro = false;
              if (!this.isBoss) {
@@ -134,7 +136,8 @@ export class Enemy extends Character {
         }
 
         if (this.state === 'idle') {
-            const aggroRange = this.isBoss ? BOSS_CONFIG.ZONE_RADIUS : GAME_CONFIG.ENEMY_AGGRO_RANGE;
+            // Use Boss Aggro for Bosses, Enemy Aggro for Mobs
+            const aggroRange = this.isBoss ? GAME_CONFIG.BOSS_AGGRO_RANGE : GAME_CONFIG.ENEMY_AGGRO_RANGE;
             if (distToPlayer <= aggroRange) {
                 this.state = 'chasing';
                 this.wanderTarget = null;

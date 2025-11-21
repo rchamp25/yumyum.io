@@ -161,26 +161,32 @@ const PartyFrame: React.FC<{ member: Party['members'][0], currentUserId: string,
     
     const colorClass = classColors[member.characterClass] || 'text-gray-400 border-gray-500';
     const healthPct = (member.health / member.maxHealth) * 100;
+    const isOnline = member.isOnline !== false; // Default true if undefined
 
     return (
-        <div className={`bg-gray-900/80 backdrop-blur-sm border-l-4 p-2 rounded mb-2 w-48 pointer-events-auto group relative ${colorClass.split(' ')[1]}`}>
+        <div className={`bg-gray-900/80 backdrop-blur-sm border-l-4 p-2 rounded mb-2 w-48 pointer-events-auto group relative ${isOnline ? colorClass.split(' ')[1] : 'border-gray-600 opacity-70'}`}>
              <div className="flex justify-between items-center">
-                 <span className={`font-bold text-sm ${colorClass.split(' ')[0]}`}>{member.name}</span>
+                 <div className="flex flex-col">
+                     <span className={`font-bold text-sm ${isOnline ? colorClass.split(' ')[0] : 'text-gray-500'}`}>{member.name}</span>
+                     {!isOnline && <span className="text-[10px] text-red-400 font-bold uppercase tracking-wide">(Offline)</span>}
+                 </div>
                  <span className="text-xs text-gray-400">Lv {member.level}</span>
              </div>
              <div className="w-full bg-gray-800 h-2 mt-1 rounded-full overflow-hidden">
-                 <div className="h-full bg-green-500 transition-all duration-300" style={{ width: `${healthPct}%`}}></div>
+                 <div className={`h-full transition-all duration-300 ${isOnline ? 'bg-green-500' : 'bg-gray-600'}`} style={{ width: `${healthPct}%`}}></div>
              </div>
              
-             {/* Trade Button Overlay */}
-             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded">
-                 <button 
-                    onClick={() => onRequestTrade(member.id)}
-                    className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded"
-                 >
-                    Trade
-                 </button>
-             </div>
+             {/* Trade Button Overlay - Only if online */}
+             {isOnline && (
+                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded">
+                     <button 
+                        onClick={() => onRequestTrade(member.id)}
+                        className="bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold px-3 py-1 rounded"
+                     >
+                        Trade
+                     </button>
+                 </div>
+             )}
         </div>
     );
 };

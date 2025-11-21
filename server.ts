@@ -47,14 +47,17 @@ function broadcastPartyUpdate(partyId: string) {
     const party = parties.get(partyId);
     if (party) {
         party.members.forEach(m => {
-            // Update health info before sending
-            const p = players.get(m.id);
-            if (p) {
-                m.health = p.characterData.stats.health;
-                m.maxHealth = p.characterData.stats.maxHealth;
-                m.level = p.characterData.level;
+            // Only send to online members
+            if (m.isOnline) {
+                // Update health info for online members before sending
+                const p = players.get(m.id);
+                if (p) {
+                    m.health = p.characterData.stats.health;
+                    m.maxHealth = p.characterData.stats.maxHealth;
+                    m.level = p.characterData.level;
+                }
+                io.to(m.id).emit('party_update', party);
             }
-            io.to(m.id).emit('party_update', party);
         });
     }
 }
@@ -67,6 +70,7 @@ function leaveParty(playerId: string) {
     const party = parties.get(partyId);
     
     if (party) {
+        // Actually remove the member
         party.members = party.members.filter(m => m.id !== playerId);
         player.partyId = null;
         io.to(playerId).emit('party_update', null);
@@ -75,7 +79,9 @@ function leaveParty(playerId: string) {
             parties.delete(partyId);
         } else {
             if (party.leaderId === playerId) {
-                party.leaderId = party.members[0].id;
+                // Pass leadership to first online member, or first member if all offline
+                const nextLeader = party.members.find(m => m.isOnline) || party.members[0];
+                if (nextLeader) party.leaderId = nextLeader.id;
             }
             broadcastPartyUpdate(partyId);
         }
@@ -118,10 +124,14 @@ function processTrade(session: TradeSession) {
         return;
     }
     
+    // Verify Items existence
+    
     // Execute Swap
+    // 1. Deduct Gold
     p1.characterData.gold -= session.player1Offer.gold;
     p2.characterData.gold -= session.player2Offer.gold;
     
+    // 2. Remove Items (Set to null in inventory)
     session.player1Offer.items.forEach(i => {
         if (p1.characterData.inventory[i.inventoryIndex]) {
             p1.characterData.inventory[i.inventoryIndex] = null;
@@ -133,9 +143,11 @@ function processTrade(session: TradeSession) {
         }
     });
     
+    // 3. Add Gold
     p1.characterData.gold += session.player2Offer.gold;
     p2.characterData.gold += session.player1Offer.gold;
 
+    // 4. Add Items (Find empty slots)
     const addItem = (player: ServerPlayer, item: any) => {
         const emptyIdx = player.characterData.inventory.findIndex(s => s === null);
         if (emptyIdx !== -1) {
@@ -220,6 +232,19 @@ io.on('connection', (socket: Socket) => {
 
         const stats = calculateFinalStats(characterData.stats, characterData.equipment, undefined, true); 
 
+        // Check if reconnecting to party
+        let partyId: string | null = null;
+        for (const [pid, party] of parties.entries()) {
+            const member = party.members.find(m => m.characterId === characterData.id);
+            if (member) {
+                partyId = pid;
+                member.id = socket.id; // Update socket ID
+                member.isOnline = true;
+                broadcastPartyUpdate(pid);
+                break;
+            }
+        }
+
         players.set(socket.id, {
             id: socket.id,
             socketId: socket.id,
@@ -228,10 +253,14 @@ io.on('connection', (socket: Socket) => {
             input: new Set<string>(),
             speed: stats.speed,
             radius: GAME_CONFIG.PLAYER_RADIUS,
-            partyId: null,
+            partyId: partyId,
             tradeSessionId: null
         });
         console.log(`Player ${characterData.name} (${socket.id}) joined.`);
+        
+        if (partyId) {
+             io.to(socket.id).emit('party_update', parties.get(partyId));
+        }
     });
     
     socket.on('update_character', (characterData: CharacterData) => {
@@ -291,11 +320,13 @@ io.on('connection', (socket: Socket) => {
             sender.partyId = partyId;
             newParty.members.push({
                 id: sender.id,
+                characterId: sender.characterData.id,
                 name: sender.characterData.name,
                 level: sender.characterData.level,
                 characterClass: sender.characterData.characterClass,
                 health: sender.characterData.stats.health,
-                maxHealth: sender.characterData.stats.maxHealth
+                maxHealth: sender.characterData.stats.maxHealth,
+                isOnline: true
             });
         }
         
@@ -304,11 +335,13 @@ io.on('connection', (socket: Socket) => {
             acceptor.partyId = partyId;
             party.members.push({
                 id: acceptor.id,
+                characterId: acceptor.characterData.id,
                 name: acceptor.characterData.name,
                 level: acceptor.characterData.level,
                 characterClass: acceptor.characterData.characterClass,
                 health: acceptor.characterData.stats.health,
-                maxHealth: acceptor.characterData.stats.maxHealth
+                maxHealth: acceptor.characterData.stats.maxHealth,
+                isOnline: true
             });
             broadcastPartyUpdate(partyId);
         }
@@ -486,8 +519,19 @@ io.on('connection', (socket: Socket) => {
 
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
-        leaveParty(socket.id);
+        // Mark as offline in party but do NOT leave
         const p = players.get(socket.id);
+        if (p && p.partyId) {
+            const party = parties.get(p.partyId);
+            if (party) {
+                const member = party.members.find(m => m.id === socket.id);
+                if (member) {
+                    member.isOnline = false;
+                    broadcastPartyUpdate(p.partyId);
+                }
+            }
+        }
+        
         if (p && p.tradeSessionId) endTrade(p.tradeSessionId, false);
         players.delete(socket.id);
     });
@@ -526,8 +570,11 @@ setInterval(() => {
         const type = BOSS_TYPES[enemy.typeId];
         const speed = type ? type.speed : 2;
 
-        // Check if we should leash (using standard mob leash range 600)
-        if (enemy.spawnPosition && distToSpawn > GAME_CONFIG.ENEMY_LEASH_RANGE) { 
+        // BOSS USES BOSS CONSTANTS
+        // Mobs don't exist here in online mode, but if they did, they'd use ENEMY_ constants.
+        const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
+
+        if (enemy.spawnPosition && distToSpawn > leashRange) { 
              const dx = spawnPos.x - enemy.position.x;
              const dy = spawnPos.y - enemy.position.y;
              const len = Math.sqrt(dx*dx + dy*dy);
@@ -553,11 +600,10 @@ setInterval(() => {
             }
         }
         
-        // Use standard mob aggro range (180) so they behave like mobs
-        const chaseRange = GAME_CONFIG.ENEMY_AGGRO_RANGE;
+        // Use BOSS CONSTANTS for bosses, regular constants for mobs
+        const chaseRange = enemy.isBoss ? GAME_CONFIG.BOSS_AGGRO_RANGE : GAME_CONFIG.ENEMY_AGGRO_RANGE;
         const attackRange = type ? type.attackRange : 30; 
         
-        // Stop chasing when slightly inside range to allow attacking
         const stopDistance = attackRange * 0.8;
 
         if (nearestPlayer && nearestDist < chaseRange && nearestDist > stopDistance) {

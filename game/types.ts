@@ -166,12 +166,14 @@ export interface ServerEnemy {
 }
 
 export interface PartyMember {
-    id: string;
+    id: string; // Socket ID (or active ID)
+    characterId: string; // Stable ID for reconnects
     name: string;
     level: number;
     characterClass: CharacterClass;
     health: number;
     maxHealth: number;
+    isOnline: boolean;
 }
 
 export interface Party {
