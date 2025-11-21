@@ -12,9 +12,9 @@ export function calculateFinalStats(
 ): CharacterData['stats'] & { maxInventorySlots: number } {
     const final = { ...baseStats, maxInventorySlots: 0 };
     
-    // Default values if missing (for backward compatibility)
-    if (final.healthRegen === undefined) final.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
+    // Ensure itemFind is treated as a number to prevent TS 'number | undefined' errors
     if (final.itemFind === undefined) final.itemFind = GAME_CONFIG.PLAYER_ITEM_FIND;
+    if (final.healthRegen === undefined) final.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
     if (final.bossDamageMultiplier === undefined) final.bossDamageMultiplier = 1;
 
     // Sum up equipment stats
@@ -55,8 +55,11 @@ export function calculateFinalStats(
 
             // World 2 Overrides
             if (currentWorldId === WORLD_IDS.WORLD_2) {
-                bonus = WORLD_CONFIGS[WORLD_IDS.WORLD_2].bossItemFindValue;
-                cap = WORLD_CONFIGS[WORLD_IDS.WORLD_2].itemFindCap;
+                const w2Config = WORLD_CONFIGS[WORLD_IDS.WORLD_2];
+                if (w2Config) {
+                    bonus = w2Config.bossItemFindValue;
+                    cap = w2Config.itemFindCap;
+                }
             }
 
             final.itemFind = (final.itemFind || 0) + bonus;

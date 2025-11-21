@@ -654,13 +654,30 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       )}
 
       {pendingInvites.length > 0 && (
-           <div className="absolute top-20 center-x flex flex-col space-y-2 items-center z-50 w-full pointer-events-none">
+           <div className="absolute top-20 left-1/2 -translate-x-1/2 flex flex-col space-y-2 items-center z-50 w-auto pointer-events-none">
                 {pendingInvites.map((invite, index) => (
-                    <div key={index} className="bg-gray-900/90 border border-teal-500 p-4 rounded-lg shadow-xl pointer-events-auto flex items-center space-x-4">
-                        <div className="text-white">
+                    <div key={index} className="bg-gray-900/95 border border-teal-500 p-4 rounded-lg shadow-xl pointer-events-auto flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                        <div className="text-white text-center sm:text-left">
                             <span className="font-bold text-teal-400">{invite.fromName}</span> invited you to {invite.type === 'party' ? 'a party' : 'trade'}.
                         </div>
-                        {/* Handlers */}
+                        <div className="flex space-x-2">
+                            <button 
+                                onClick={() => {
+                                    if (invite.type === 'party') socketService.acceptPartyInvite(invite.fromId);
+                                    else socketService.acceptTradeRequest(invite.fromId);
+                                    setPendingInvites(prev => prev.filter((_, i) => i !== index));
+                                }}
+                                className="bg-teal-600 hover:bg-teal-500 text-white font-bold py-1 px-3 rounded text-sm transition-colors"
+                            >
+                                Accept
+                            </button>
+                            <button 
+                                onClick={() => setPendingInvites(prev => prev.filter((_, i) => i !== index))}
+                                className="bg-red-600 hover:bg-red-500 text-white font-bold py-1 px-3 rounded text-sm transition-colors"
+                            >
+                                Decline
+                            </button>
+                        </div>
                     </div>
                 ))}
            </div>
