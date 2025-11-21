@@ -25,6 +25,11 @@ interface ServerPlayer {
     tradeSessionId: string | null;
 }
 
+// Extend ServerEnemy interface locally to include server-only state
+interface ExtendedServerEnemy extends ServerEnemy {
+    isReturning: boolean;
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -35,7 +40,7 @@ const io = new Server(server, {
 });
 
 const players = new Map<string, ServerPlayer>();
-const enemies = new Map<string, ServerEnemy>();
+const enemies = new Map<string, ExtendedServerEnemy>();
 const parties = new Map<string, Party>();
 const tradeSessions = new Map<string, TradeSession>();
 
@@ -124,8 +129,6 @@ function processTrade(session: TradeSession) {
         return;
     }
     
-    // Verify Items existence
-    
     // Execute Swap
     // 1. Deduct Gold
     p1.characterData.gold -= session.player1Offer.gold;
@@ -207,7 +210,8 @@ function spawnEnemies() {
                         typeId: zone.id,
                         radius: radius,
                         damage: damage,
-                        damageTakenMap: {} // Initialize damage tracker
+                        damageTakenMap: {}, // Initialize damage tracker
+                        isReturning: false // New state flag
                     });
                     globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
@@ -451,6 +455,9 @@ io.on('connection', (socket: Socket) => {
         const attacker = players.get(socket.id);
         
         if (enemy && attacker) {
+            // Cannot damage enemy while returning/leashed
+            if (enemy.isReturning) return;
+
             enemy.health -= payload.damage;
             
             // Track damage for loot contribution and AGGRO
@@ -624,69 +631,75 @@ setInterval(() => {
     
     const playerList = Array.from(players.values());
     for (const enemy of enemies.values()) {
-        // Leashing Logic
-        let spawnPos = enemy.spawnPosition;
-        if (!spawnPos) spawnPos = { x: 0, y: 0 }; 
+        // --- LEASH LOGIC ---
+        // If already returning, continue returning until healed and at spawn
+        if (enemy.isReturning) {
+            const dx = enemy.spawnPosition!.x - enemy.position.x;
+            const dy = enemy.spawnPosition!.y - enemy.position.y;
+            const distToSpawn = Math.sqrt(dx*dx + dy*dy);
+            
+            const type = BOSS_TYPES[enemy.typeId];
+            const speed = (type ? type.speed : 2) * 2; // Return fast
 
-        const distToSpawn = getDistance(enemy.position, spawnPos);
+            if (distToSpawn > 5) {
+                enemy.position.x += (dx / distToSpawn) * speed;
+                enemy.position.y += (dy / distToSpawn) * speed;
+                enemy.health = Math.min(enemy.maxHealth, enemy.health + enemy.maxHealth * 0.02); // Rapid heal
+            } else {
+                // Reset
+                enemy.isReturning = false;
+                enemy.health = enemy.maxHealth;
+                enemy.damageTakenMap = {};
+            }
+            continue; // Skip aggro/attack logic while returning
+        }
+
+        // Check if we need to START returning
+        const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
+        const distFromSpawn = getDistance(enemy.position, enemy.spawnPosition || {x:0,y:0});
+        
+        if (distFromSpawn > leashRange) {
+            enemy.isReturning = true;
+            enemy.damageTakenMap = {}; // Clear aggro immediately
+            continue;
+        }
+
+        // --- AGGRO LOGIC ---
         const type = BOSS_TYPES[enemy.typeId];
         const speed = type ? type.speed : 2;
-
-        const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
-
-        if (enemy.spawnPosition && distToSpawn > leashRange) { 
-             const dx = spawnPos.x - enemy.position.x;
-             const dy = spawnPos.y - enemy.position.y;
-             const len = Math.sqrt(dx*dx + dy*dy);
-             if (len > 0) {
-                 enemy.position.x += (dx/len) * speed * 3;
-                 enemy.position.y += (dy/len) * speed * 3;
-             }
-             enemy.health = Math.min(enemy.maxHealth, enemy.health + enemy.maxHealth * 0.01);
-             if (len < 10) {
-                 enemy.health = enemy.maxHealth;
-                 // Clear damage map on leash reset
-                 enemy.damageTakenMap = {};
-             }
-             continue;
-        }
-
-        // Aggro Logic
-        let activeChaseRange = GAME_CONFIG.ENEMY_AGGRO_RANGE;
-        let isAggroed = false;
-        
-        if (enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0) {
-            isAggroed = true;
-        }
-
-        if (enemy.isBoss) {
-            if (!isAggroed) {
-                // Boss ignores players until damaged (FIXED)
-                continue;
-            }
-            // Once aggroed, chase anywhere in the leash zone
-            activeChaseRange = GAME_CONFIG.BOSS_LEASH_RANGE;
-        } else {
-            if (isAggroed) {
-                activeChaseRange = GAME_CONFIG.ENEMY_LEASH_RANGE;
-            }
-        }
-
-        const attackRange = type ? type.attackRange : 30; 
+        const attackRange = type ? type.attackRange : 30;
         const stopDistance = attackRange * 0.8;
 
         let nearestDist = 99999;
         let nearestPlayer: ServerPlayer | null = null;
 
-        for (const p of playerList) {
+        // For bosses, we only target players who have dealt damage (aggro'd)
+        // For normal mobs, we target closest
+        let potentialTargets = playerList;
+        
+        if (enemy.isBoss) {
+             const hasAggro = enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0;
+             if (!hasAggro) continue; // Boss stands still until damaged
+        }
+
+        for (const p of potentialTargets) {
             const d = getDistance(enemy.position, p.position);
             if (d < nearestDist) {
                 nearestDist = d;
                 nearestPlayer = p;
             }
         }
+        
+        // Move towards target if not in attack range
+        // Normal mobs check AGGRO_RANGE before chasing. Bosses chase infinitely within leash if aggro'd.
+        let canChase = false;
+        if (enemy.isBoss) {
+            canChase = true; // Already checked aggro above
+        } else {
+            canChase = nearestDist < GAME_CONFIG.ENEMY_AGGRO_RANGE;
+        }
 
-        if (nearestPlayer && nearestDist < activeChaseRange && nearestDist > stopDistance) {
+        if (nearestPlayer && canChase && nearestDist > stopDistance) {
             const dx = nearestPlayer.position.x - enemy.position.x;
             const dy = nearestPlayer.position.y - enemy.position.y;
             const len = Math.sqrt(dx*dx + dy*dy);
@@ -706,6 +719,7 @@ setInterval(() => {
         };
     });
 
+    // Filter sensitive server data
     const safeEnemies = Array.from(enemies.values()).map(({ damageTakenMap, ...e }) => e);
 
     io.emit('game_state', { 
