@@ -65,13 +65,13 @@ export const ITEMS_DB: { [key: string]: Item } = { ...WEAPONS_DB, ...ARMOR_DB, .
 export const ALL_EQUIPMENT = Object.values(ITEMS_DB);
 export const ALL_MYTHICS = ALL_EQUIPMENT.filter(i => i.rarity === ItemRarity.Mythic);
 
-// Recipe Costs (Doubled from previous Mythic Weapon requirement)
+// Recipe Costs (Increased 5x as requested)
 const MYTHIC_RECIPE_COST = [
-    { materialId: 'mat_leg', quantity: 60 }, 
-    { materialId: 'mat_epi', quantity: 120 },
-    { materialId: 'mat_rar', quantity: 200 },
-    { materialId: 'mat_unc', quantity: 400 },
-    { materialId: 'mat_com', quantity: 1000 }
+    { materialId: 'mat_leg', quantity: 300 }, 
+    { materialId: 'mat_epi', quantity: 600 },
+    { materialId: 'mat_rar', quantity: 1000 },
+    { materialId: 'mat_unc', quantity: 2000 },
+    { materialId: 'mat_com', quantity: 5000 }
 ];
 
 export const CRAFTING_RECIPES: Recipe[] = [

@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty } from '../game/types';
 import { Player } from '../game/entities/Player';
@@ -22,6 +21,7 @@ import NPCInteraction from './NPCInteraction';
 import FastTravelUI from './FastTravelUI';
 import PartyUI from './PartyUI';
 import TradeUI from './TradeUI';
+import EnemyTooltip from './EnemyTooltip';
 import { socketService } from '../services/socketService';
 import { storageService } from '../services/storage';
 
@@ -64,6 +64,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
   const [interactingWaypoint, setInteractingWaypoint] = useState<Waypoint | null>(null);
   
+  // Tooltip State
+  const [hoveredEnemy, setHoveredEnemy] = useState<Enemy | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{x: number, y: number}>({ x: 0, y: 0 });
+
   // Multiplayer State
   const [party, setParty] = useState<Party | null>(null);
   const [isPartyUIOpen, setPartyUIOpen] = useState(false);
@@ -505,6 +509,29 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
   useGameLoop(gameLoop);
   
+  // Handle Canvas Mouse Move for Tooltip
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!canvasRef.current) return;
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Convert to world space using current camera state
+    const worldX = mouseX + camera.x;
+    const worldY = mouseY + camera.y;
+    
+    // Find enemy under cursor (giving a generous hit box for hovering)
+    const target = enemies.find(enemy => {
+        if (enemy.isDead) return false;
+        // Use simple circle collision + buffer
+        return getDistance({ x: worldX, y: worldY }, enemy.position) <= enemy.radius + 15;
+    });
+    
+    setHoveredEnemy(target || null);
+    setTooltipPos({ x: e.clientX, y: e.clientY });
+  };
+
   // Invite Handlers
   const handleAcceptInvite = (invite: {type: 'party'|'trade', fromId: string}) => {
       if (invite.type === 'party') {
@@ -839,7 +866,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
   return (
     <div className="w-screen h-screen relative">
-      <canvas ref={canvasRef} className="w-full h-full" />
+      <canvas ref={canvasRef} className="w-full h-full" onMouseMove={handleMouseMove} />
       <HUD 
         player={player} 
         enemies={enemies} 
@@ -855,6 +882,11 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         otherPlayers={otherPlayers} 
       />
       
+      {/* Enemy Tooltip */}
+      {hoveredEnemy && (
+          <EnemyTooltip enemy={hoveredEnemy} position={tooltipPos} />
+      )}
+
       {/* Invites */}
       {pendingInvites.length > 0 && (
            <div className="absolute top-20 center-x flex flex-col space-y-2 items-center z-50 w-full pointer-events-none">
