@@ -8,7 +8,7 @@ import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
 import { GAME_CONFIG, BOSS_CONFIG } from '../game/constants';
 import { getDistance } from '../game/math';
-import { Party, CharacterClass } from '../game/types';
+import { Party, CharacterClass, StatusEffect } from '../game/types';
 
 interface HUDProps {
   player: Player | null;
@@ -24,6 +24,38 @@ interface HUDProps {
   onRequestTrade: (targetId: string) => void;
   otherPlayers: any[]; // New prop for multiplayer
 }
+
+const StatusEffectIcon: React.FC<{ effect: StatusEffect }> = ({ effect }) => {
+    const remaining = Math.max(0, effect.duration - (Date.now() - effect.startTime));
+    if (remaining <= 0) return null;
+    
+    const pct = (remaining / effect.duration) * 100;
+    
+    let icon = '';
+    let colorClass = '';
+    let name = '';
+    
+    switch(effect.type) {
+        case 'stun': icon = '💫'; colorClass = 'border-yellow-400 text-yellow-400 shadow-yellow-400/20'; name = 'Stunned'; break;
+        case 'slow': icon = '❄️'; colorClass = 'border-blue-400 text-blue-400 shadow-blue-400/20'; name = 'Slowed'; break;
+        case 'haste': icon = '⚡'; colorClass = 'border-green-400 text-green-400 shadow-green-400/20'; name = 'Haste'; break;
+        case 'empowered': icon = '⚔️'; colorClass = 'border-red-500 text-red-500 shadow-red-500/20'; name = 'Empowered'; break;
+        case 'shield': icon = '🛡️'; colorClass = 'border-gray-300 text-gray-300 shadow-gray-300/20'; name = 'Shielded'; break;
+        case 'dot': icon = '☠️'; colorClass = 'border-purple-500 text-purple-500 shadow-purple-500/20'; name = 'DoT'; break;
+        case 'whirlwind_active': icon = '🌪️'; colorClass = 'border-white text-white shadow-white/20'; name = 'Whirlwind'; break;
+        default: icon = '✨'; colorClass = 'border-white text-white'; name = 'Effect';
+    }
+
+    return (
+        <div className={`relative w-10 h-10 bg-gray-900/90 rounded-md border-2 ${colorClass} flex items-center justify-center shadow-lg group pointer-events-auto`}>
+            <div className="text-xl drop-shadow-md">{icon}</div>
+            <div className="absolute inset-0 bg-current opacity-10 origin-bottom pointer-events-none" style={{ transform: `scaleY(${pct/100})` }}></div>
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 border border-gray-700 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                {name} ({Math.ceil(remaining/1000)}s)
+            </div>
+        </div>
+    );
+};
 
 const StatBar: React.FC<{ value: number; maxValue: number; color: string; label: string }> = ({ value, maxValue, color, label }) => {
   const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
@@ -269,6 +301,13 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
             <p className="font-bold text-lg">Press [E] to talk to {nearbyNPC.name}</p>
         </div>
       )}
+      
+      {/* Status Effects List - Centered above Skill Bar */}
+      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 flex items-end justify-center space-x-2 z-40 pointer-events-none">
+        {player.statusEffects.map((effect, index) => (
+            <StatusEffectIcon key={`${effect.type}_${effect.startTime}`} effect={effect} />
+        ))}
+      </div>
       
       {/* Bottom Center - Skill Bar */}
       {player.skills && <SkillBar player={player} onUseSkill={onUseSkill} />}

@@ -7,6 +7,11 @@ class StorageService {
 
   // Helper to convert DB Snake_Case to App CamelCase
   private mapFromDB(row: any): CharacterData {
+    // Fallback: Check 'stats' JSON for bank data if top-level columns are missing/empty
+    // This is crucial for persistence if the database schema lacks 'bank' columns
+    const bankItems = (row.stats && row.stats.bank) ? row.stats.bank : (row.bank || []);
+    const bankGoldVal = (row.stats && row.stats.bankGold) !== undefined ? row.stats.bankGold : (row.bank_gold || 0);
+
     return {
         id: row.id,
         name: row.name,
@@ -18,8 +23,8 @@ class StorageService {
         stats: row.stats,
         inventory: row.inventory,
         equipment: row.equipment,
-        bank: row.bank || [], // Load bank from character row
-        bankGold: row.bank_gold || 0, // Load bank gold from character row
+        bank: bankItems, 
+        bankGold: bankGoldVal,
         position: row.position,
         discoveredWaypoints: row.discovered_waypoints,
         hasClaimedDevRewards: row.has_claimed_dev_rewards
@@ -28,6 +33,16 @@ class StorageService {
 
   // Helper to convert App CamelCase to DB Snake_Case
   private mapToDB(userId: string, data: CharacterData) {
+      // EMBED BANK IN STATS:
+      // Since we cannot easily add columns to the DB schema in this environment,
+      // we store bank data inside the 'stats' JSONB column which always exists.
+      // This prevents save failures (which cause gold rollbacks) when 'bank' column is missing.
+      const statsWithBank = {
+          ...data.stats,
+          bank: data.bank,
+          bankGold: data.bankGold
+      };
+
       return {
         id: data.id,
         user_id: userId,
@@ -37,11 +52,10 @@ class StorageService {
         xp: data.xp,
         gold: data.gold,
         kills: data.kills,
-        stats: data.stats,
+        stats: statsWithBank, // Storing extended stats here
         inventory: data.inventory,
         equipment: data.equipment,
-        bank: data.bank, // Save bank to character row
-        bank_gold: data.bankGold, // Save bank gold to character row
+        // We do not try to save to 'bank' or 'bank_gold' columns directly to avoid errors
         position: data.position,
         discovered_waypoints: data.discoveredWaypoints,
         has_claimed_dev_rewards: data.hasClaimedDevRewards
@@ -69,7 +83,6 @@ class StorageService {
   async saveCharacter(userId: string, characterData: CharacterData): Promise<void> {
     try {
       const dbPayload = this.mapToDB(userId, characterData);
-      // Use upsert to update if exists, insert if not
       const { error } = await supabase
         .from('characters')
         .upsert(dbPayload);
@@ -86,8 +99,6 @@ class StorageService {
       alert("You can only have a maximum of 3 characters.");
       return null;
     }
-
-    // We don't generate ID here anymore, we let Supabase generate the UUID
     
     const newCharPayload = {
       user_id: userId,
@@ -105,6 +116,9 @@ class StorageService {
         healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
         itemFind: GAME_CONFIG.PLAYER_ITEM_FIND,
         bossDamageMultiplier: 1,
+        // Initialize bank in stats
+        bank: Array(100).fill(null),
+        bankGold: 0
       },
       inventory: Array(GAME_CONFIG.DEFAULT_INVENTORY_SIZE).fill(null),
       equipment: {
@@ -114,8 +128,6 @@ class StorageService {
           [ItemSlot.Accessory]: null,
           [ItemSlot.Bag]: null,
       },
-      bank: Array(100).fill(null), // Initialize empty bank
-      bank_gold: 0,
       discovered_waypoints: ['wp_spawn'],
       has_claimed_dev_rewards: false
     };
@@ -141,8 +153,6 @@ class StorageService {
         .eq('id', characterId)
         .eq('user_id', userId);
   }
-
-  // NOTE: Deprecated shared bank methods. Bank is now per-character in the 'characters' table.
 }
 
 export const storageService = new StorageService();

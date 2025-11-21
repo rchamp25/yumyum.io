@@ -34,6 +34,9 @@ const CharacterCard: React.FC<{ character: CharacterData, onSelect: () => void, 
         [CharacterClass.Archer]: { text: 'text-green-400', border: 'hover:border-green-500' },
     };
     const colors = classColors[character.characterClass];
+    
+    // Calculate Total Wealth (Inventory + Stash)
+    const totalGold = character.gold + (character.bankGold || 0);
 
     return (
         <div className={`bg-gray-800 border-2 border-gray-700 rounded-lg p-4 flex flex-col justify-between transform hover:-translate-y-1 transition-transform duration-300 ease-in-out ${colors.border}`}>
@@ -47,7 +50,12 @@ const CharacterCard: React.FC<{ character: CharacterData, onSelect: () => void, 
                 </div>
                 <div className="text-left text-sm text-gray-400 space-y-1">
                     <p>Kills: <span className="font-semibold text-white">{character.kills}</span></p>
-                    <p>Gold: <span className="font-semibold text-yellow-400">{character.gold.toLocaleString()}</span></p>
+                    <p>Total Gold: <span className="font-semibold text-yellow-400">{totalGold.toLocaleString()}</span></p>
+                    {character.bankGold > 0 && (
+                        <p className="text-xs text-gray-500 ml-2">
+                            (Inv: {character.gold.toLocaleString()} + Vault: {character.bankGold.toLocaleString()})
+                        </p>
+                    )}
                 </div>
             </div>
             <div className="mt-4 flex space-x-2">
