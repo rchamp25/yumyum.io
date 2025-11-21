@@ -1,3 +1,4 @@
+
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Party, TradeSession, Difficulty } from '../game/types';
 import { Player } from '../game/entities/Player';
@@ -378,6 +379,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     
     if (!player || player.isDead) return;
 
+    // Auto-close NPC interaction if player moves out of range
+    if (interactingNPC) {
+        if (getDistance(player.position, interactingNPC.position) > 100) { // 100px leash for interaction
+            setInteractingNPC(null);
+        }
+    }
+
     if (isOnlineMode) {
         socketService.sendInput(Array.from(pressedKeys));
         
@@ -505,13 +513,19 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }));
     }
 
-  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers]);
+  }, [player, enemies, projectiles, floatingTexts, visualEffects, groundEffects, droppedItems, npcs, camera, waypoints, otherPlayers, interactingNPC]);
 
   useGameLoop(gameLoop);
   
   // Handle Canvas Mouse Move for Tooltip
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
+
+    // Prevent tooltip if interacting with NPC
+    if (interactingNPC) {
+        if (hoveredEnemy) setHoveredEnemy(null);
+        return;
+    }
     
     const rect = canvasRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -767,7 +781,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             if (nearbyNPC) {
                 setInteractingNPC(nearbyNPC);
                 setInventoryOpen(false);
+                setPartyUIOpen(false);
                 setInteractingWaypoint(null);
+                setHoveredEnemy(null); // Clear tooltip on interaction
             } else if (nearbyWaypoint) {
                 setInteractingWaypoint(nearbyWaypoint);
                 setInventoryOpen(false);
@@ -882,8 +898,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         otherPlayers={otherPlayers} 
       />
       
-      {/* Enemy Tooltip */}
-      {hoveredEnemy && (
+      {/* Enemy Tooltip - Only show if NOT interacting with NPC */}
+      {hoveredEnemy && !interactingNPC && (
           <EnemyTooltip enemy={hoveredEnemy} position={tooltipPos} />
       )}
 
