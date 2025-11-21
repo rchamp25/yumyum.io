@@ -665,14 +665,14 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                                 onClick={() => {
                                     if (invite.type === 'party') socketService.acceptPartyInvite(invite.fromId);
                                     else socketService.acceptTradeRequest(invite.fromId);
-                                    setPendingInvites(prev => prev.filter((_, i) => i !== index));
+                                    setPendingInvites(prev => prev.filter((_, idx) => idx !== index));
                                 }}
                                 className="bg-teal-600 hover:bg-teal-500 text-white font-bold py-1 px-3 rounded text-sm transition-colors"
                             >
                                 Accept
                             </button>
                             <button 
-                                onClick={() => setPendingInvites(prev => prev.filter((_, i) => i !== index))}
+                                onClick={() => setPendingInvites(prev => prev.filter((_, idx) => idx !== index))}
                                 className="bg-red-600 hover:bg-red-500 text-white font-bold py-1 px-3 rounded text-sm transition-colors"
                             >
                                 Decline

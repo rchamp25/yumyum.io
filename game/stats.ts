@@ -10,12 +10,14 @@ export function calculateFinalStats(
     isOnline: boolean = false,
     currentWorldId: string = WORLD_IDS.WORLD_1
 ): CharacterData['stats'] & { maxInventorySlots: number } {
-    const final = { ...baseStats, maxInventorySlots: 0 };
+    const final: CharacterData['stats'] & { maxInventorySlots: number } = { 
+        ...baseStats, 
+        maxInventorySlots: 0,
+        itemFind: baseStats.itemFind || 0, // Ensure itemFind is initialized as number
+        bossDamageMultiplier: baseStats.bossDamageMultiplier || 1
+    };
     
-    // Ensure itemFind is treated as a number to prevent TS 'number | undefined' errors
-    if (final.itemFind === undefined) final.itemFind = GAME_CONFIG.PLAYER_ITEM_FIND;
     if (final.healthRegen === undefined) final.healthRegen = GAME_CONFIG.PLAYER_HEALTH_REGEN;
-    if (final.bossDamageMultiplier === undefined) final.bossDamageMultiplier = 1;
 
     // Sum up equipment stats
     Object.values(equipment).forEach(item => {
@@ -26,7 +28,7 @@ export function calculateFinalStats(
             final.healthRegen += item.stats.healthRegen || 0;
             final.maxInventorySlots += item.stats.maxInventorySlots || 0;
             final.itemFind = (final.itemFind || 0) + (item.stats.itemFind || 0);
-            final.bossDamageMultiplier += item.stats.bossDamageMultiplier || 0;
+            final.bossDamageMultiplier = (final.bossDamageMultiplier || 1) + (item.stats.bossDamageMultiplier || 0);
         }
     });
 
