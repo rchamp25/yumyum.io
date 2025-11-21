@@ -31,14 +31,23 @@ export class Enemy extends Character {
     private specialAttackCooldown: number = 0;
     private lastPosition: Vector2D; // Track last pos for online movement detection
 
-    constructor(position: Vector2D, level: number, bossZoneId?: string, id?: string) {
+    constructor(position: Vector2D, level: number, bossZoneId?: string, id?: string, typeId?: string) {
         let type: EnemyType;
         let isBoss = false;
 
         if (bossZoneId && BOSS_TYPES[bossZoneId]) {
             type = BOSS_TYPES[bossZoneId];
             isBoss = true;
+        } else if (typeId) {
+            // Explicit type passed (Online sync or controlled local spawn)
+            type = ENEMY_TYPES[typeId] || GROVE_ENEMIES[typeId] || BOSS_TYPES[typeId] || GROVE_BOSSES[typeId] || ENEMY_TYPES['slime'];
+            // If it matches a boss ID, mark as boss
+            if (BOSS_TYPES[typeId] || GROVE_BOSSES[typeId]) {
+                isBoss = true;
+                bossZoneId = typeId;
+            }
         } else {
+            // Fallback Random selection
             const typeKey = Object.keys(ENEMY_TYPES)[Math.floor(Math.random() * Object.keys(ENEMY_TYPES).length)];
             type = ENEMY_TYPES[typeKey];
         }
@@ -55,6 +64,7 @@ export class Enemy extends Character {
         this.attackRange = type.attackRange;
         this.isBoss = isBoss;
         this.bossZoneId = bossZoneId;
+        this.typeId = typeId;
         
         let xpBase = 15 * level + Math.pow(level, 2.1);
         if (isBoss) xpBase *= 10;
@@ -91,6 +101,7 @@ export class Enemy extends Character {
                 this.radius = newType.radius;
                 this.speed = newType.speed;
                 this.attackRange = newType.attackRange;
+                // Note: We don't overwrite maxHealth here as server dictates health
             }
         }
     }

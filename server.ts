@@ -220,7 +220,7 @@ function getDifficultyMultipliers(difficulty: Difficulty) {
     }
 }
 
-function getRandomPositionOutsideSafeZone(): Vector2D {
+function getRandomPositionOutsideSafeZone(): Vector2D | null {
     let pos: Vector2D = { x: 0, y: 0 };
     let valid = false;
     let attempts = 0;
@@ -251,7 +251,7 @@ function getRandomPositionOutsideSafeZone(): Vector2D {
         }
     }
     
-    return pos;
+    return valid ? pos : null;
 }
 
 function spawnEnemy(room: RoomState, type: EnemyType, position: Vector2D, level: number, typeId: string) {
@@ -287,6 +287,8 @@ function spawnMobPacks(room: RoomState) {
     room.mobSpawnTimer = 0;
 
     const packCenter = getRandomPositionOutsideSafeZone();
+    if (!packCenter) return; // Failed to find spot outside boss zones
+
     const level = room.worldId === WORLD_IDS.WORLD_2 ? GAME_CONFIG.MAX_LEVEL : Math.floor(Math.random() * 15) + 1;
     
     if (room.worldId === WORLD_IDS.WORLD_2) {

@@ -153,19 +153,17 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           if (inBossZone) return prev;
 
           const level = worldId === WORLD_IDS.WORLD_2 ? GAME_CONFIG.MAX_LEVEL : Math.floor(Math.random() * 15) + 1;
-          let type: EnemyType;
+          let typeId: string;
           
           if (worldId === WORLD_IDS.WORLD_2) {
               const typeKeys = Object.keys(GROVE_ENEMIES);
-              const typeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-              type = GROVE_ENEMIES[typeKey];
+              typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
           } else {
               const typeKeys = Object.keys(ENEMY_TYPES);
-              const typeKey = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-              type = ENEMY_TYPES[typeKey];
+              typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
           }
 
-          return [...prev, new Enemy(pos, level, undefined, `local_${Date.now()}_${Math.random()}`)];
+          return [...prev, new Enemy(pos, level, undefined, `local_${Date.now()}_${Math.random()}`, typeId)];
       });
   };
 
