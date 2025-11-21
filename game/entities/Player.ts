@@ -459,10 +459,10 @@ export class Player extends Character {
     }
 
     toCharacterData(): CharacterData {
-        // We export THIS.BASESTATS. This is critical.
-        // The server or game reload will re-apply equipment bonuses.
-        // We do NOT export 'finalStats' into the 'stats' field, or we get double-stats bug.
-        
+        // We export base stats, but we MUST sync current health.
+        // Create a copy of baseStats to avoid mutating the original, and overwrite 'health' with current health.
+        const syncedStats = { ...this.baseStats, health: this.health };
+
         // Note: We do not export the temporary stat nerfs from Insane mode here, 
         // so saving the character preserves their real stats.
         
@@ -474,7 +474,7 @@ export class Player extends Character {
             xp: this.xp,
             gold: this.gold,
             kills: this.kills,
-            stats: this.baseStats, // <--- FIXED: Export clean base stats only
+            stats: syncedStats, 
             inventory: this.inventory,
             equipment: this.equipment,
             position: this.position,

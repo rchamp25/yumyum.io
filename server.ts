@@ -73,13 +73,6 @@ function getPlayer(id: string): ServerPlayer | undefined {
     return undefined;
 }
 
-function getRoomByPlayerId(id: string): RoomState | undefined {
-    for (const room of Object.values(GAME_ROOMS)) {
-        if (room.players.has(id)) return room;
-    }
-    return undefined;
-}
-
 // --- Party Helpers ---
 function broadcastPartyUpdate(partyId: string) {
     const party = parties.get(partyId);
@@ -317,6 +310,10 @@ io.on('connection', (socket: Socket) => {
                 player.position = characterData.position;
             }
             const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position, true);
+            
+            // Note: We do NOT reduce speed here for Insane mode anymore, 
+            // keeping movement consistent with offline/client.
+            
             player.speed = stats.speed;
             if (player.partyId) broadcastPartyUpdate(player.partyId);
         }
