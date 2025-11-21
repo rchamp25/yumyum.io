@@ -38,7 +38,6 @@ interface GameProps {
 const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, isOnlineMode, userId, difficulty, isDevMode }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameTimeRef = useRef(0);
-  const bossSpawnTimerRef = useRef(0);
   
   const [player, setPlayer] = useState<Player | null>(null);
   const playerRef = useRef<Player | null>(null);
@@ -656,8 +655,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
       {pendingInvites.length > 0 && (
            <div className="absolute top-20 center-x flex flex-col space-y-2 items-center z-50 w-full pointer-events-none">
-                {pendingInvites.map((invite, i) => (
-                    <div key={i} className="bg-gray-900/90 border border-teal-500 p-4 rounded-lg shadow-xl pointer-events-auto flex items-center space-x-4">
+                {pendingInvites.map((invite, index) => (
+                    <div key={index} className="bg-gray-900/90 border border-teal-500 p-4 rounded-lg shadow-xl pointer-events-auto flex items-center space-x-4">
                         <div className="text-white">
                             <span className="font-bold text-teal-400">{invite.fromName}</span> invited you to {invite.type === 'party' ? 'a party' : 'trade'}.
                         </div>

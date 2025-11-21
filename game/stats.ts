@@ -25,7 +25,7 @@ export function calculateFinalStats(
             final.speed += item.stats.speed || 0;
             final.healthRegen += item.stats.healthRegen || 0;
             final.maxInventorySlots += item.stats.maxInventorySlots || 0;
-            final.itemFind += item.stats.itemFind || 0;
+            final.itemFind = (final.itemFind || 0) + (item.stats.itemFind || 0);
             final.bossDamageMultiplier += item.stats.bossDamageMultiplier || 0;
         }
     });
