@@ -1,5 +1,5 @@
 
-import { CharacterClass, CharacterData, ItemSlot, Item } from '../game/types';
+import { CharacterClass, CharacterData, ItemSlot } from '../game/types';
 import { GAME_CONFIG } from '../game/constants';
 import { supabase } from './supabaseClient';
 
