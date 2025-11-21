@@ -2,7 +2,7 @@
 import { Character } from './Character';
 import { CharacterData, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity } from '../types';
 import { normalizeVector, getDistance } from '../math';
-import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS } from '../constants';
+import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, WORLD_IDS } from '../constants';
 import { SKILLS_DB } from '../skills';
 import { FloatingText } from './FloatingText';
 import { calculateFinalStats } from '../stats';
@@ -24,7 +24,8 @@ export class Player extends Character {
     baseStats: CharacterData['stats'];
     skills: SkillState[];
     discoveredWaypoints: string[];
-    hasClaimedDevRewards: boolean; 
+    hasClaimedDevRewards: boolean;
+    currentWorldId: string; 
     
     lastAttackTime: number = 0;
     attackCooldown: number = 500;
@@ -43,10 +44,9 @@ export class Player extends Character {
 
     constructor(data: CharacterData) {
         // SANITIZATION: Recalculate base stats from level to fix any DB corruption / exploits.
-        // This ensures base stats are always "Clean" (Level 1 Base + Level Ups), ignoring any previous bad saves.
         const cleanBaseStats = {
             maxHealth: GAME_CONFIG.PLAYER_HEALTH + (data.level - 1) * 10,
-            health: GAME_CONFIG.PLAYER_HEALTH + (data.level - 1) * 10, // Placeholder for max calculation
+            health: GAME_CONFIG.PLAYER_HEALTH + (data.level - 1) * 10,
             damage: GAME_CONFIG.PLAYER_DAMAGE + (data.level - 1) * 2,
             speed: GAME_CONFIG.PLAYER_SPEED,
             healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
@@ -54,7 +54,7 @@ export class Player extends Character {
             bossDamageMultiplier: 1,
         };
 
-        // Use shared calculation with the clean base stats to get Final Stats (Base + Gear)
+        // Use shared calculation with the clean base stats
         const finalStats = calculateFinalStats(cleanBaseStats, data.equipment);
         
         super(data.position || { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 }, GAME_CONFIG.PLAYER_RADIUS, finalStats.maxHealth, '#4299e1', finalStats.damage, data.level);
@@ -68,21 +68,17 @@ export class Player extends Character {
         this.inventory = [...data.inventory];
         this.equipment = { ...data.equipment };
         
-        // Initialize Bank
         this.bank = data.bank ? [...data.bank] : Array(100).fill(null);
-        while(this.bank.length < 100) this.bank.push(null); // Ensure minimum size
+        while(this.bank.length < 100) this.bank.push(null);
         this.bankGold = data.bankGold || 0;
         
-        // Set the sanitized base stats to property
         this.baseStats = cleanBaseStats;
         
-        // FORCE FULL HEALTH ON LOGIN
-        // We set current health to the calculated Final Max Health (which includes gear).
-        // Previous logic relied on 'data.stats.health' which only held base health, causing HP to be capped low on login.
         this.health = finalStats.maxHealth;
         
         this.discoveredWaypoints = data.discoveredWaypoints || ['wp_spawn'];
         this.hasClaimedDevRewards = data.hasClaimedDevRewards || false;
+        this.currentWorldId = data.currentWorldId || WORLD_IDS.WORLD_1;
 
         this.skills = SKILLS_DB[this.characterClass].map(def => ({
             definition: def,
@@ -96,12 +92,11 @@ export class Player extends Character {
     applyInsaneModeNerfs() {
         this.statMultiplier = 0.5;
         this.recalculateStats();
-        // Also cut current health
         this.health = Math.min(this.health, this.maxHealth);
     }
 
     getFinalStats(isOnline: boolean = false) {
-        const stats = calculateFinalStats(this.baseStats, this.equipment, this.position, isOnline);
+        const stats = calculateFinalStats(this.baseStats, this.equipment, this.position, isOnline, this.currentWorldId);
         if (this.statMultiplier !== 1) {
             stats.maxHealth *= this.statMultiplier;
             stats.damage *= this.statMultiplier;
@@ -423,12 +418,10 @@ export class Player extends Character {
     
     recalculateStats() {
         const finalStats = this.getFinalStats();
-        // Preserve health percentage
         const healthPercentage = this.maxHealth > 0 ? this.health / this.maxHealth : 1;
         
         this.maxHealth = finalStats.maxHealth;
         this.damage = finalStats.damage;
-        // Update current health based on new max
         this.health = Math.floor(this.maxHealth * healthPercentage);
     }
 
@@ -446,8 +439,6 @@ export class Player extends Character {
     
     respawn() {
         this.gold = Math.floor(this.gold * 0.9);
-        // Note: We do NOT touch bankGold here. It is safe.
-        
         this.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
         this.isDead = false;
         this.recalculateStats();
@@ -471,13 +462,7 @@ export class Player extends Character {
     }
 
     toCharacterData(): CharacterData {
-        // We export base stats, but we MUST sync current health.
-        // Create a copy of baseStats to avoid mutating the original, and overwrite 'health' with current health.
         const syncedStats = { ...this.baseStats, health: this.health };
-
-        // Note: We do not export the temporary stat nerfs from Insane mode here, 
-        // so saving the character preserves their real stats.
-        
         return {
             id: this.id as string,
             name: this.name,
@@ -493,7 +478,8 @@ export class Player extends Character {
             bankGold: this.bankGold,
             position: this.position,
             discoveredWaypoints: this.discoveredWaypoints,
-            hasClaimedDevRewards: this.hasClaimedDevRewards
+            hasClaimedDevRewards: this.hasClaimedDevRewards,
+            currentWorldId: this.currentWorldId
         };
     }
 }

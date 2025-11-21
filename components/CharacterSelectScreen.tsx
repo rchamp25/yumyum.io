@@ -75,7 +75,7 @@ const EmptySlotCard: React.FC<{ onCreate: () => void }> = ({ onCreate }) => (
 
 const DevModeToggle: React.FC<{ isDevMode: boolean, onSetDevMode: (isDev: boolean) => void }> = ({ isDevMode, onSetDevMode }) => {
     const [code, setCode] = useState('');
-    const [isServerLocked, setServerLocked] = useState(false);
+    const [isServerLocked, setServerLocked] = useState(true);
 
     useEffect(() => {
         // Connect first to ensure socket exists

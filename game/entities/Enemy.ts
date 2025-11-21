@@ -1,9 +1,9 @@
 
 import { Character } from './Character';
-import { Vector2D, GameContext, ServerEnemy } from '../types';
+import { Vector2D, GameContext, ServerEnemy, EnemyType } from '../types';
 import { normalizeVector, getDistance } from '../math';
 import { DroppedItem } from './DroppedItem';
-import { GAME_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES, EnemyType } from '../constants';
+import { GAME_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES } from '../constants';
 import { Projectile } from './Projectile';
 import { FloatingText } from './FloatingText';
 import { Player } from './Player';

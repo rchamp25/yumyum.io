@@ -24,11 +24,13 @@ interface NPCInteractionProps {
     onDepositGold?: (amount: number) => void;
     onWithdrawGold?: (amount: number) => void;
     isBankLoading?: boolean;
+    // Travel props
+    onTravelToWorld: (worldId: string) => void;
 }
 
 const NPCInteraction: React.FC<NPCInteractionProps> = ({ 
     npc, characterData, recipes, onClose, onCraft, onSell, onBuy, onSellByRarity,
-    bankItems, onDeposit, onWithdraw, onDepositGold, onWithdrawGold, isBankLoading
+    bankItems, onDeposit, onWithdraw, onDepositGold, onWithdrawGold, isBankLoading, onTravelToWorld
 }) => {
     
     const renderContent = () => {
@@ -62,6 +64,8 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
                 return (
                     <WorldTravelUI 
                         onClose={onClose}
+                        onTravelToWorld={onTravelToWorld}
+                        currentWorldId={characterData.currentWorldId || 'world_1'}
                     />
                 );
             case NPCType.Banker:

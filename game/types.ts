@@ -17,6 +17,18 @@ export enum CharacterClass {
   Archer,
 }
 
+export interface EnemyType {
+    name: string;
+    radius: number;
+    healthMultiplier: number;
+    damageMultiplier: number;
+    speed: number;
+    color: string;
+    attackRange: number;
+    attackCooldown: number;
+    attackType: 'melee' | 'ranged';
+}
+
 export enum Difficulty {
     Normal = 'Normal',
     Hard = 'Hard',
@@ -85,6 +97,7 @@ export interface CharacterData {
   bank: (Item | null)[];
   bankGold: number;
   position?: Vector2D; // For online mode
+  currentWorldId?: string; // world_1 or world_2
   discoveredWaypoints?: string[];
   hasClaimedDevRewards?: boolean; // Tracks if dev mode items have been granted
 }

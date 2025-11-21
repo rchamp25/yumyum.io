@@ -1,6 +1,6 @@
 
 import { CharacterClass, CharacterData, ItemSlot } from '../game/types';
-import { GAME_CONFIG } from '../game/constants';
+import { GAME_CONFIG, WORLD_IDS } from '../game/constants';
 import { supabase } from './supabaseClient';
 
 class StorageService {
@@ -8,9 +8,9 @@ class StorageService {
   // Helper to convert DB Snake_Case to App CamelCase
   private mapFromDB(row: any): CharacterData {
     // Fallback: Check 'stats' JSON for bank data if top-level columns are missing/empty
-    // This is crucial for persistence if the database schema lacks 'bank' columns
     const bankItems = (row.stats && row.stats.bank) ? row.stats.bank : (row.bank || []);
     const bankGoldVal = (row.stats && row.stats.bankGold) !== undefined ? row.stats.bankGold : (row.bank_gold || 0);
+    const worldId = (row.stats && row.stats.currentWorldId) ? row.stats.currentWorldId : WORLD_IDS.WORLD_1;
 
     return {
         id: row.id,
@@ -27,20 +27,18 @@ class StorageService {
         bankGold: bankGoldVal,
         position: row.position,
         discoveredWaypoints: row.discovered_waypoints,
-        hasClaimedDevRewards: row.has_claimed_dev_rewards
+        hasClaimedDevRewards: row.has_claimed_dev_rewards,
+        currentWorldId: worldId
     };
   }
 
   // Helper to convert App CamelCase to DB Snake_Case
   private mapToDB(userId: string, data: CharacterData) {
-      // EMBED BANK IN STATS:
-      // Since we cannot easily add columns to the DB schema in this environment,
-      // we store bank data inside the 'stats' JSONB column which always exists.
-      // This prevents save failures (which cause gold rollbacks) when 'bank' column is missing.
       const statsWithBank = {
           ...data.stats,
           bank: data.bank,
-          bankGold: data.bankGold
+          bankGold: data.bankGold,
+          currentWorldId: data.currentWorldId
       };
 
       return {
@@ -52,10 +50,9 @@ class StorageService {
         xp: data.xp,
         gold: data.gold,
         kills: data.kills,
-        stats: statsWithBank, // Storing extended stats here
+        stats: statsWithBank, 
         inventory: data.inventory,
         equipment: data.equipment,
-        // We do not try to save to 'bank' or 'bank_gold' columns directly to avoid errors
         position: data.position,
         discovered_waypoints: data.discoveredWaypoints,
         has_claimed_dev_rewards: data.hasClaimedDevRewards
@@ -116,9 +113,9 @@ class StorageService {
         healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
         itemFind: GAME_CONFIG.PLAYER_ITEM_FIND,
         bossDamageMultiplier: 1,
-        // Initialize bank in stats
         bank: Array(100).fill(null),
-        bankGold: 0
+        bankGold: 0,
+        currentWorldId: WORLD_IDS.WORLD_1
       },
       inventory: Array(GAME_CONFIG.DEFAULT_INVENTORY_SIZE).fill(null),
       equipment: {

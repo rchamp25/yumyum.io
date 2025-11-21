@@ -4,8 +4,8 @@ import http from 'http';
 import { Server, Socket } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Vector2D, CharacterData, ServerEnemy, Party, TradeSession, Difficulty } from './game/types';
-import { GAME_CONFIG, BOSS_TYPES, BOSS_ZONES, BOSS_CONFIG, ONLINE_BOSS_CONFIG } from './game/constants';
+import { Vector2D, CharacterData, ServerEnemy, Party, TradeSession, Difficulty, EnemyType } from './game/types';
+import { GAME_CONFIG, BOSS_TYPES, BOSS_ZONES, BOSS_CONFIG, ONLINE_BOSS_CONFIG, WORLD_IDS, GROVE_ENEMIES, GROVE_BOSSES, ENEMY_TYPES } from './game/constants';
 import { calculateFinalStats } from './game/stats';
 import { generateLoot } from './game/lootUtils';
 import { getDistance } from './game/math';
@@ -24,6 +24,7 @@ interface ServerPlayer {
     partyId: string | null;
     tradeSessionId: string | null;
     difficulty: Difficulty;
+    worldId: string;
 }
 
 // Extend ServerEnemy interface locally to include server-only state
@@ -36,6 +37,9 @@ interface RoomState {
     enemies: Map<string, ExtendedServerEnemy>;
     bossSpawnTimer: number;
     globalBossCooldown: number;
+    difficulty: Difficulty;
+    worldId: string;
+    mobSpawnTimer: number;
 }
 
 const app = express();
@@ -48,14 +52,26 @@ const io = new Server(server, {
 });
 
 // GLOBAL SERVER STATE
-let isWorldLocked = false;
+let isWorldLocked = true;
 
-// GAME ROOMS based on Difficulty
-const GAME_ROOMS: Record<Difficulty, RoomState> = {
-    [Difficulty.Normal]: { players: new Map(), enemies: new Map(), bossSpawnTimer: 0, globalBossCooldown: 0 },
-    [Difficulty.Hard]: { players: new Map(), enemies: new Map(), bossSpawnTimer: 0, globalBossCooldown: 0 },
-    [Difficulty.Insane]: { players: new Map(), enemies: new Map(), bossSpawnTimer: 0, globalBossCooldown: 0 },
-};
+// GAME ROOMS: Key is `${worldId}_${difficulty}`
+const GAME_ROOMS: Record<string, RoomState> = {};
+
+// Initialize rooms
+Object.values(WORLD_IDS).forEach(worldId => {
+    Object.values(Difficulty).forEach(diff => {
+        const key = `${worldId}_${diff}`;
+        GAME_ROOMS[key] = {
+            players: new Map(),
+            enemies: new Map(),
+            bossSpawnTimer: 0,
+            globalBossCooldown: 0,
+            difficulty: diff as Difficulty,
+            worldId: worldId,
+            mobSpawnTimer: 0
+        };
+    });
+});
 
 const parties = new Map<string, Party>();
 const tradeSessions = new Map<string, TradeSession>();
@@ -74,6 +90,10 @@ function getPlayer(id: string): ServerPlayer | undefined {
         if (room.players.has(id)) return room.players.get(id);
     }
     return undefined;
+}
+
+function getRoomKey(worldId: string, difficulty: Difficulty) {
+    return `${worldId}_${difficulty}`;
 }
 
 // --- Party Helpers ---
@@ -200,7 +220,94 @@ function getDifficultyMultipliers(difficulty: Difficulty) {
     }
 }
 
-function spawnEnemies(difficulty: Difficulty, room: RoomState) {
+function getRandomPositionOutsideSafeZone(): Vector2D {
+    const angle = Math.random() * Math.PI * 2;
+    // Spawn between safe zone edge and map edge (minus buffer)
+    const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 100;
+    const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
+    const dist = minR + Math.random() * (maxR - minR);
+    
+    return {
+        x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
+        y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
+    };
+}
+
+function spawnEnemy(room: RoomState, type: EnemyType, position: Vector2D, level: number) {
+    const id = `enemy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const multipliers = getDifficultyMultipliers(room.difficulty);
+
+    const health = Math.floor(20 * type.healthMultiplier * (1 + level * 0.2) * multipliers.health);
+    const damage = Math.floor(0.75 * type.damageMultiplier * (1 + level * 0.15) * multipliers.damage);
+
+    room.enemies.set(id, {
+        id,
+        position: { ...position },
+        spawnPosition: { ...position },
+        health: health,
+        maxHealth: health,
+        level: level,
+        isBoss: false,
+        typeId: Object.keys(room.worldId === WORLD_IDS.WORLD_2 ? GROVE_ENEMIES : ENEMY_TYPES).find(key => (room.worldId === WORLD_IDS.WORLD_2 ? GROVE_ENEMIES[key] : ENEMY_TYPES[key]) === type) || 'unknown',
+        radius: type.radius,
+        damage: damage,
+        damageTakenMap: {},
+        isReturning: false
+    });
+}
+
+function spawnMobPacks(room: RoomState) {
+    // Cap check
+    if (room.enemies.size >= GAME_CONFIG.MAX_ENEMIES) return;
+    
+    // Throttle spawning (1 pack per tick check if under cap)
+    room.mobSpawnTimer++;
+    if (room.mobSpawnTimer < 10) return; 
+    room.mobSpawnTimer = 0;
+
+    const packCenter = getRandomPositionOutsideSafeZone();
+    const level = room.worldId === WORLD_IDS.WORLD_2 ? GAME_CONFIG.MAX_LEVEL : Math.floor(Math.random() * 15) + 1;
+    
+    if (room.worldId === WORLD_IDS.WORLD_2) {
+        // --- THE GROVE (World 2) SPAWN LOGIC ---
+        const packRoll = Math.random();
+        
+        if (packRoll < 0.4) {
+            // 40% Chance: Wolf Pack (3-5 Fast Wolves)
+            const packSize = Math.floor(Math.random() * 3) + 3;
+            for(let i=0; i<packSize; i++) {
+                const offset = { x: (Math.random()-0.5)*100, y: (Math.random()-0.5)*100 };
+                spawnEnemy(room, GROVE_ENEMIES['wolf'], { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level);
+            }
+        } else if (packRoll < 0.7) {
+            // 30% Chance: Forest Guardians (1 Treant + 2 Dryads)
+            spawnEnemy(room, GROVE_ENEMIES['treant'], packCenter, level);
+            spawnEnemy(room, GROVE_ENEMIES['dryad'], { x: packCenter.x + 50, y: packCenter.y + 50 }, level);
+            spawnEnemy(room, GROVE_ENEMIES['dryad'], { x: packCenter.x - 50, y: packCenter.y - 50 }, level);
+        } else {
+            // 30% Chance: Bear Ambush (1-2 Bears)
+             const count = Math.random() > 0.5 ? 2 : 1;
+             for(let i=0; i<count; i++) {
+                const offset = { x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*80 };
+                spawnEnemy(room, GROVE_ENEMIES['bear'], { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level);
+            }
+        }
+
+    } else {
+        // --- THE RAT (World 1) SPAWN LOGIC ---
+        // Random assortment
+        const types = Object.values(ENEMY_TYPES);
+        const type = types[Math.floor(Math.random() * types.length)];
+        const packSize = Math.floor(Math.random() * 3) + 1;
+        
+        for(let i=0; i<packSize; i++) {
+            const offset = { x: (Math.random()-0.5)*80, y: (Math.random()-0.5)*80 };
+            spawnEnemy(room, type, { x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level);
+        }
+    }
+}
+
+function spawnBosses(room: RoomState) {
     room.bossSpawnTimer++;
     if (room.bossSpawnTimer >= 60) { 
         room.bossSpawnTimer = 0;
@@ -213,10 +320,17 @@ function spawnEnemies(difficulty: Difficulty, room: RoomState) {
 
             if (availableZones.length > 0) {
                 const zone = availableZones[Math.floor(Math.random() * availableZones.length)];
-                const type = BOSS_TYPES[zone.id];
+                
+                let type = BOSS_TYPES[zone.id];
+                
+                // WORLD 2 BOSS OVERRIDE
+                if (room.worldId === WORLD_IDS.WORLD_2) {
+                    type = GROVE_BOSSES[zone.id];
+                }
+
                 if (type) {
                     const id = `boss_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                    const multipliers = getDifficultyMultipliers(difficulty);
+                    const multipliers = getDifficultyMultipliers(room.difficulty);
 
                     // APPLY ONLINE BOSS BUFFS * DIFFICULTY
                     const baseHealth = 20 * type.healthMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.2);
@@ -258,22 +372,18 @@ app.get('*', (_req: Request, res: Response) => {
 io.on('connection', (socket: Socket) => {
     console.log(`Player connected: ${socket.id}`);
 
-    // --- SERVER STATUS & ADMIN ---
     socket.on('check_status', () => {
         socket.emit('status_response', isWorldLocked);
     });
 
     socket.on('admin_toggle_lock', (locked: boolean) => {
-        // In a real app, you would check for an admin secret here.
-        // For this demo, we rely on the client identifying as a dev through the UI logic.
         isWorldLocked = locked;
         console.log(`Server Online Mode Locked: ${isWorldLocked}`);
-        io.emit('status_response', isWorldLocked); // Broadcast new status
+        io.emit('status_response', isWorldLocked); 
     });
 
     socket.on('join_game', ({ characterData, difficulty, isDev }: { characterData: CharacterData, difficulty?: Difficulty, isDev?: boolean }) => {
         
-        // LOCK CHECK
         if (isWorldLocked && !isDev) {
             console.log(`Rejected join for ${characterData.name} (Server Locked)`);
             socket.emit('join_error', 'Online world is currently unavailable.');
@@ -281,13 +391,15 @@ io.on('connection', (socket: Socket) => {
         }
         
         const selectedDifficulty = difficulty || Difficulty.Normal;
+        const currentWorldId = characterData.currentWorldId || WORLD_IDS.WORLD_1;
+        const roomKey = getRoomKey(currentWorldId, selectedDifficulty);
         
         const startPosition = characterData.position || { 
             x: GAME_CONFIG.WORLD_WIDTH / 2, 
             y: GAME_CONFIG.WORLD_HEIGHT / 2 
         };
 
-        const stats = calculateFinalStats(characterData.stats, characterData.equipment, undefined, true); 
+        const stats = calculateFinalStats(characterData.stats, characterData.equipment, undefined, true, currentWorldId); 
 
         // Handle Party Logic (Reconnect)
         let partyId: string | null = null;
@@ -302,9 +414,14 @@ io.on('connection', (socket: Socket) => {
             }
         }
         
-        // Join Room
-        socket.join(selectedDifficulty); 
-        const room = GAME_ROOMS[selectedDifficulty];
+        socket.join(roomKey); 
+        const room = GAME_ROOMS[roomKey];
+
+        if (!room) {
+            // Should not happen if rooms initialized
+             console.error("Invalid room key:", roomKey);
+             return;
+        }
 
         room.players.set(socket.id, {
             id: socket.id,
@@ -316,10 +433,11 @@ io.on('connection', (socket: Socket) => {
             radius: GAME_CONFIG.PLAYER_RADIUS,
             partyId: partyId,
             tradeSessionId: null,
-            difficulty: selectedDifficulty
+            difficulty: selectedDifficulty,
+            worldId: currentWorldId
         });
         
-        console.log(`Player ${characterData.name} (${socket.id}) joined [${selectedDifficulty}].`);
+        console.log(`Player ${characterData.name} (${socket.id}) joined [${roomKey}].`);
         
         if (partyId) {
              io.to(socket.id).emit('party_update', parties.get(partyId));
@@ -333,7 +451,7 @@ io.on('connection', (socket: Socket) => {
             if (characterData.position) {
                 player.position = characterData.position;
             }
-            const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position, true);
+            const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position, true, player.worldId);
             
             player.speed = stats.speed;
             if (player.partyId) broadcastPartyUpdate(player.partyId);
@@ -358,7 +476,8 @@ io.on('connection', (socket: Socket) => {
         if (target) {
             if (target.id === sender.id) return; 
             if (target.partyId) return; 
-            if (target.difficulty !== sender.difficulty) return; // Must be in same room
+            if (target.difficulty !== sender.difficulty) return; // Must be in same difficulty
+            if (target.worldId !== sender.worldId) return; // Must be in same world
 
             io.to(target.socketId).emit('invite_received', {
                 fromId: sender.id,
@@ -375,6 +494,7 @@ io.on('connection', (socket: Socket) => {
         if (!acceptor || !sender) return;
         if (acceptor.partyId) return;
         if (acceptor.difficulty !== sender.difficulty) return;
+        if (acceptor.worldId !== sender.worldId) return;
 
         let partyId = sender.partyId;
         if (!partyId) {
@@ -429,6 +549,7 @@ io.on('connection', (socket: Socket) => {
         if (sender.tradeSessionId || target.tradeSessionId) return; 
         if (sender.partyId !== target.partyId || !sender.partyId) return; 
         if (sender.difficulty !== target.difficulty) return;
+        if (sender.worldId !== target.worldId) return;
 
         io.to(target.socketId).emit('invite_received', {
             fromId: sender.id,
@@ -519,7 +640,10 @@ io.on('connection', (socket: Socket) => {
         const attacker = getPlayer(socket.id);
         if (!attacker) return;
 
-        const room = GAME_ROOMS[attacker.difficulty];
+        const roomKey = getRoomKey(attacker.worldId, attacker.difficulty);
+        const room = GAME_ROOMS[roomKey];
+        if (!room) return;
+
         const enemy = room.enemies.get(payload.enemyId);
         
         if (enemy) {
@@ -564,7 +688,8 @@ io.on('connection', (socket: Socket) => {
                             recipient.characterData.stats, 
                             recipient.characterData.equipment, 
                             recipient.position,
-                            true 
+                            true,
+                            recipient.worldId
                         );
 
                         const drops = generateLoot(
@@ -573,7 +698,7 @@ io.on('connection', (socket: Socket) => {
                             enemy.isBoss, 
                             killerStats.itemFind || 0,
                             true,
-                            contribution * multipliers.loot // Apply Difficulty Loot Multiplier
+                            contribution * multipliers.loot 
                         );
 
                         if (drops.length > 0) {
@@ -622,7 +747,8 @@ io.on('connection', (socket: Socket) => {
                             recipient.characterData.stats, 
                             recipient.characterData.equipment, 
                             recipient.position,
-                            true 
+                            true,
+                            recipient.worldId
                         );
 
                         const drops = generateLoot(
@@ -631,7 +757,7 @@ io.on('connection', (socket: Socket) => {
                             enemy.isBoss, 
                             killerStats.itemFind || 0,
                             true,
-                            1.0 * multipliers.loot // Apply Difficulty Loot Multiplier
+                            1.0 * multipliers.loot 
                         );
 
                         const finalDrops = isPartyKill 
@@ -656,8 +782,9 @@ io.on('connection', (socket: Socket) => {
         
         if (p) {
             // Remove from room
-            const room = GAME_ROOMS[p.difficulty];
-            room.players.delete(socket.id);
+            const roomKey = getRoomKey(p.worldId, p.difficulty);
+            const room = GAME_ROOMS[roomKey];
+            if (room) room.players.delete(socket.id);
 
             // Mark offline in party
             if (p.partyId) {
@@ -677,9 +804,8 @@ io.on('connection', (socket: Socket) => {
 
 setInterval(() => {
     // Loop through ALL rooms
-    Object.entries(GAME_ROOMS).forEach(([difficultyStr, room]) => {
-        const difficulty = difficultyStr as Difficulty;
-
+    Object.entries(GAME_ROOMS).forEach(([roomKey, room]) => {
+        
         // 1. Update Players
         for (const player of room.players.values()) {
             let moveX = 0;
@@ -700,7 +826,8 @@ setInterval(() => {
         }
         
         // 2. Update Enemies for this room
-        spawnEnemies(difficulty, room);
+        spawnBosses(room);
+        spawnMobPacks(room);
         
         const playerList = Array.from(room.players.values());
         for (const enemy of room.enemies.values()) {
@@ -710,7 +837,7 @@ setInterval(() => {
                 const dy = enemy.spawnPosition!.y - enemy.position.y;
                 const distToSpawn = Math.sqrt(dx*dx + dy*dy);
                 
-                const type = BOSS_TYPES[enemy.typeId];
+                const type = BOSS_TYPES[enemy.typeId] || GROVE_BOSSES[enemy.typeId];
                 const speed = (type ? type.speed : 2) * 2; 
 
                 if (distToSpawn > 5) {
@@ -728,7 +855,6 @@ setInterval(() => {
             const leashRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
             const distFromSpawn = getDistance(enemy.position, enemy.spawnPosition || {x:0,y:0});
             
-            // Use strict leash logic to prevent edge glitching
             if (distFromSpawn > leashRange) {
                 enemy.isReturning = true;
                 enemy.damageTakenMap = {}; 
@@ -736,24 +862,28 @@ setInterval(() => {
             }
 
             // --- AGGRO LOGIC ---
-            const type = BOSS_TYPES[enemy.typeId];
+            let type = BOSS_TYPES[enemy.typeId];
+            if (room.worldId === WORLD_IDS.WORLD_2) type = GROVE_BOSSES[enemy.typeId]; // Use Grove stats
+            if (!type) {
+                // Fallback for normal mobs
+                const mobType = ENEMY_TYPES[enemy.typeId] || GROVE_ENEMIES[enemy.typeId];
+                type = mobType;
+            }
+
             const speed = type ? type.speed : 2;
             const attackRange = type ? type.attackRange : 30;
             const stopDistance = attackRange * 0.8;
 
             let nearestDist = 99999;
             let nearestPlayer: ServerPlayer | null = null;
-
-            let potentialTargets = playerList;
             
             // If boss, check if it has been damaged (aggroed)
             if (enemy.isBoss) {
                  const hasAggro = enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0;
-                 // Boss stays idle until hit
                  if (!hasAggro) continue; 
             }
 
-            for (const p of potentialTargets) {
+            for (const p of playerList) {
                 const d = getDistance(enemy.position, p.position);
                 if (d < nearestDist) {
                     nearestDist = d;
@@ -763,10 +893,8 @@ setInterval(() => {
             
             let canChase = false;
             if (enemy.isBoss) {
-                // Boss always chases if aggroed (checked above)
                 canChase = true; 
             } else {
-                // Regular mobs check aggro distance
                 canChase = nearestDist < GAME_CONFIG.ENEMY_AGGRO_RANGE;
             }
 
@@ -781,7 +909,7 @@ setInterval(() => {
             }
         }
 
-        // 3. Broadcast State to Room
+        // 3. Broadcast State to Room (Unique key)
         const playersObj: any = {};
         room.players.forEach((p, id) => {
             playersObj[id] = {
@@ -792,8 +920,7 @@ setInterval(() => {
 
         const safeEnemies = Array.from(room.enemies.values()).map(({ damageTakenMap, ...e }) => e);
 
-        // Broadcast to specific room/difficulty
-        io.to(difficulty).emit('game_state', { 
+        io.to(roomKey).emit('game_state', { 
             players: playersObj, 
             enemies: safeEnemies
         });

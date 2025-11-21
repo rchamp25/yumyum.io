@@ -1,14 +1,17 @@
 
 import React from 'react';
+import { WORLD_IDS } from '../game/constants';
 
 interface WorldTravelUIProps {
     onClose: () => void;
+    onTravelToWorld: (worldId: string) => void;
+    currentWorldId: string;
 }
 
-const WorldTravelUI: React.FC<WorldTravelUIProps> = ({ onClose }) => {
+const WorldTravelUI: React.FC<WorldTravelUIProps> = ({ onClose, onTravelToWorld, currentWorldId }) => {
     const worlds = [
-        { id: 'world_1', name: 'The Rat', isActive: true, description: 'A balanced land of monsters and adventure.' },
-        { id: 'world_2', name: 'The Grove', isActive: false, description: 'A dense forest overrun by nature\'s wrath. (Coming Soon)' },
+        { id: WORLD_IDS.WORLD_1, name: 'The Rat', isActive: true, description: 'A balanced land of monsters and adventure.' },
+        { id: WORLD_IDS.WORLD_2, name: 'The Grove', isActive: true, description: 'A dense forest overrun by nature\'s wrath. (HARD)' },
         { id: 'world_3', name: 'Red Jug', isActive: false, description: 'A volcanic wasteland where only the strong survive. (Coming Soon)' },
     ];
 
@@ -25,31 +28,42 @@ const WorldTravelUI: React.FC<WorldTravelUIProps> = ({ onClose }) => {
                 <p className="text-gray-300 mb-8 text-lg">"The realms are vast. Where would you like to go today?"</p>
 
                 <div className="grid grid-cols-1 gap-4">
-                    {worlds.map(world => (
-                        <div 
-                            key={world.id}
-                            className={`relative p-6 rounded-xl border-2 flex justify-between items-center transition-all duration-300
-                                ${world.isActive 
-                                    ? 'bg-indigo-900/30 border-indigo-500' 
-                                    : 'bg-gray-800/50 border-gray-700 grayscale opacity-70'}
-                            `}
-                        >
-                            <div>
-                                <h3 className={`text-2xl font-bold mb-1 ${world.isActive ? 'text-white' : 'text-gray-500'}`}>{world.name}</h3>
-                                <p className="text-gray-400">{world.description}</p>
-                            </div>
+                    {worlds.map(world => {
+                        const isCurrent = world.id === currentWorldId;
+                        
+                        return (
+                            <div 
+                                key={world.id}
+                                className={`relative p-6 rounded-xl border-2 flex justify-between items-center transition-all duration-300
+                                    ${world.isActive 
+                                        ? 'bg-indigo-900/30 border-indigo-500' 
+                                        : 'bg-gray-800/50 border-gray-700 grayscale opacity-70'}
+                                `}
+                            >
+                                <div>
+                                    <h3 className={`text-2xl font-bold mb-1 ${world.isActive ? 'text-white' : 'text-gray-500'}`}>{world.name}</h3>
+                                    <p className="text-gray-400">{world.description}</p>
+                                </div>
 
-                            {world.isActive ? (
-                                <span className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-full shadow-lg shadow-indigo-500/30">
-                                    Current World
-                                </span>
-                            ) : (
-                                <span className="bg-gray-700 text-gray-400 font-bold px-4 py-2 rounded-full flex items-center">
-                                    🔒 Locked
-                                </span>
-                            )}
-                        </div>
-                    ))}
+                                {isCurrent ? (
+                                    <span className="bg-indigo-600 text-white font-bold px-4 py-2 rounded-full shadow-lg shadow-indigo-500/30">
+                                        Current World
+                                    </span>
+                                ) : world.isActive ? (
+                                    <button 
+                                        onClick={() => onTravelToWorld(world.id)}
+                                        className="bg-green-600 hover:bg-green-500 text-white font-bold px-6 py-2 rounded-full shadow-lg hover:shadow-green-500/30 transition-colors"
+                                    >
+                                        Travel
+                                    </button>
+                                ) : (
+                                    <span className="bg-gray-700 text-gray-400 font-bold px-4 py-2 rounded-full flex items-center">
+                                        🔒 Locked
+                                    </span>
+                                )}
+                            </div>
+                        )
+                    })}
                 </div>
             </div>
         </div>

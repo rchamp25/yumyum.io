@@ -1,5 +1,5 @@
 
-import { ItemRarity, WaypointData } from './types';
+import { ItemRarity, WaypointData, EnemyType } from './types';
 
 export const GAME_CONFIG = {
     WORLD_WIDTH: 6000,
@@ -24,12 +24,37 @@ export const GAME_CONFIG = {
     BOSS_LEASH_RANGE: 600, // Kept original
 };
 
+export const WORLD_IDS = {
+    WORLD_1: 'world_1',
+    WORLD_2: 'world_2'
+};
+
+export const WORLD_CONFIGS = {
+    [WORLD_IDS.WORLD_1]: {
+        name: "The Rat",
+        bgColor: '#1a202c', // Gray 900
+        gridColor: '#2d3748', // Gray 700
+        itemFindCap: 15.0, // 1500%
+        bossItemFindBonus: 5.0, // 500%
+    },
+    [WORLD_IDS.WORLD_2]: {
+        name: "The Grove",
+        bgColor: '#052e16', // Dark Green (Emerald 950)
+        gridColor: '#14532d', // Green 900
+        itemFindCap: 20.0, // 2000%
+        bossItemFindBonus: 3.0, // +300% ON TOP of World 1, effectively 800% base in logic? 
+        // Wait, prompt says "add 300% more itemfind when in the boss ring than the world 1 bosses"
+        // World 1 boss bonus is 5.0 (500%). So World 2 should be 8.0 (800%).
+        bossItemFindValue: 8.0, 
+    }
+};
+
 export const BOSS_CONFIG = {
     ZONE_RADIUS: 600,
     SPAWN_COOLDOWN: 180000, // 3 Minutes
     MAX_ACTIVE_BOSSES: 2, // Only 2 bosses alive at once
     BOSS_DROP_BONUS: 10, // Extra items dropped by bosses
-    BOSS_ITEM_FIND_BONUS: 5.0, // +500% Item Find (Flat addition)
+    BOSS_ITEM_FIND_BONUS: 5.0, // +500% Item Find (Flat addition) - DEFAULT for World 1
 };
 
 export const ONLINE_BOSS_CONFIG = {
@@ -42,10 +67,10 @@ export const ONLINE_BOSS_CONFIG = {
 };
 
 export const BOSS_ZONES = [
-    { id: 'boss_nw', x: 250, y: 250, name: "Frozen Peak" },
-    { id: 'boss_ne', x: GAME_CONFIG.WORLD_WIDTH - 250, y: 250, name: "Burning Steppe" },
-    { id: 'boss_sw', x: 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "Toxic Bog" },
-    { id: 'boss_se', x: GAME_CONFIG.WORLD_WIDTH - 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "Crystal Cavern" },
+    { id: 'boss_nw', x: 250, y: 250, name: "North West Zone" },
+    { id: 'boss_ne', x: GAME_CONFIG.WORLD_WIDTH - 250, y: 250, name: "North East Zone" },
+    { id: 'boss_sw', x: 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "South West Zone" },
+    { id: 'boss_se', x: GAME_CONFIG.WORLD_WIDTH - 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "South East Zone" },
 ];
 
 export const LOOT_CONFIG = {
@@ -106,8 +131,6 @@ for (let i = 1; i <= GAME_CONFIG.MAX_LEVEL; i++) {
         xpNeeded = Math.floor(previousReq * 1.35) + 5000;
     }
 
-    // Accumulate to make total XP needed for next level (optional, usually game stores "current level xp")
-    // But here we are storing "XP needed to go from Current to Next"
     LEVEL_XP_REQUIREMENTS[i] = xpNeeded;
     previousReq = xpNeeded;
 }
@@ -132,17 +155,7 @@ export const WAYPOINTS: WaypointData[] = [
     { id: 'wp_se', name: 'Crystal Caverns', position: { x: GAME_CONFIG.WORLD_WIDTH - 800, y: GAME_CONFIG.WORLD_HEIGHT - 800 } },
 ];
 
-export interface EnemyType {
-    name: string;
-    radius: number;
-    healthMultiplier: number;
-    damageMultiplier: number;
-    speed: number;
-    color: string;
-    attackRange: number;
-    attackCooldown: number;
-    attackType: 'melee' | 'ranged';
-}
+// --- ENEMIES ---
 
 export const ENEMY_TYPES: { [key: string]: EnemyType } = {
     'slime': { 
@@ -191,49 +204,145 @@ export const ENEMY_TYPES: { [key: string]: EnemyType } = {
     },
 };
 
+export const GROVE_ENEMIES: { [key: string]: EnemyType } = {
+    'wolf': { 
+        name: 'Dire Wolf', 
+        radius: 20, 
+        healthMultiplier: 2.0, 
+        damageMultiplier: 3.0, 
+        speed: 4.5, // Very Fast
+        color: '#71717a', // Zinc
+        attackRange: 30, 
+        attackCooldown: 600, 
+        attackType: 'melee' 
+    },
+    'treant': { 
+        name: 'Rotting Treant', 
+        radius: 35, 
+        healthMultiplier: 5.0, 
+        damageMultiplier: 4.0, 
+        speed: 1.5, // Slow
+        color: '#3f6212', // Dark Olive
+        attackRange: 50, 
+        attackCooldown: 2000, 
+        attackType: 'melee' 
+    },
+    'bear': { 
+        name: 'Corrupted Bear', 
+        radius: 30, 
+        healthMultiplier: 4.0, 
+        damageMultiplier: 5.0, 
+        speed: 3.0, 
+        color: '#451a03', // Dark Brown
+        attackRange: 40, 
+        attackCooldown: 1500, 
+        attackType: 'melee' 
+    },
+    'dryad': { 
+        name: 'Vengeful Dryad', 
+        radius: 18, 
+        healthMultiplier: 2.5, 
+        damageMultiplier: 4.0, 
+        speed: 3.5, 
+        color: '#86efac', // Light Green
+        attackRange: 300, 
+        attackCooldown: 1000, 
+        attackType: 'ranged' 
+    },
+};
+
 export const BOSS_TYPES: { [key: string]: EnemyType } = {
-    'boss_nw': { // Frozen Peak
+    // World 1 Bosses
+    'boss_nw': { 
         name: 'Titan of the Deep',
         radius: 70,
         healthMultiplier: 80, 
-        damageMultiplier: 9.0, // Doubled
+        damageMultiplier: 9.0, 
         speed: 2.5,
-        color: '#0ea5e9', // Sky Blue
+        color: '#0ea5e9', 
         attackRange: 90,
         attackCooldown: 2000,
         attackType: 'melee'
     },
-    'boss_ne': { // Burning Steppe
+    'boss_ne': { 
         name: 'Infernal Warlord',
         radius: 60,
         healthMultiplier: 70,
-        damageMultiplier: 12.0, // Doubled
+        damageMultiplier: 12.0,
         speed: 3.0,
-        color: '#dc2626', // Red
+        color: '#dc2626', 
         attackRange: 80,
         attackCooldown: 1500,
         attackType: 'melee'
     },
-    'boss_sw': { // Toxic Bog
+    'boss_sw': { 
         name: 'Broodmother',
         radius: 65,
         healthMultiplier: 60,
-        damageMultiplier: 7.5, // Doubled
+        damageMultiplier: 7.5,
         speed: 3.5,
-        color: '#a3e635', // Lime
+        color: '#a3e635', 
         attackRange: 400,
         attackCooldown: 1200,
         attackType: 'ranged'
     },
-    'boss_se': { // Crystal Cavern
+    'boss_se': { 
         name: 'Void Weaver',
         radius: 55,
         healthMultiplier: 65,
-        damageMultiplier: 15.0, // Doubled
+        damageMultiplier: 15.0, 
         speed: 2.0,
-        color: '#7c3aed', // Violet
+        color: '#7c3aed', 
         attackRange: 500,
         attackCooldown: 2000,
+        attackType: 'ranged'
+    }
+};
+
+// World 2 Bosses (Used by server logic manually based on Zone ID)
+export const GROVE_BOSSES: { [key: string]: EnemyType } = {
+    'boss_nw': { 
+        name: 'Elder Barkskin',
+        radius: 80,
+        healthMultiplier: 80 * 20, // 20x World 1
+        damageMultiplier: 9.0, 
+        speed: 2.0,
+        color: '#365314', 
+        attackRange: 100,
+        attackCooldown: 2500,
+        attackType: 'melee'
+    },
+    'boss_ne': { 
+        name: 'Alpha Warg',
+        radius: 65,
+        healthMultiplier: 70 * 20,
+        damageMultiplier: 12.0,
+        speed: 5.0,
+        color: '#52525b', 
+        attackRange: 90,
+        attackCooldown: 800,
+        attackType: 'melee'
+    },
+    'boss_sw': { 
+        name: 'Spore Queen',
+        radius: 75,
+        healthMultiplier: 60 * 20,
+        damageMultiplier: 7.5,
+        speed: 3.0,
+        color: '#16a34a', 
+        attackRange: 450,
+        attackCooldown: 1200,
+        attackType: 'ranged'
+    },
+    'boss_se': { 
+        name: 'Corrupted Druid',
+        radius: 60,
+        healthMultiplier: 65 * 20,
+        damageMultiplier: 15.0, 
+        speed: 3.5,
+        color: '#14532d', 
+        attackRange: 600,
+        attackCooldown: 1800,
         attackType: 'ranged'
     }
 };
