@@ -121,7 +121,7 @@ export class Enemy extends Character {
 
         if (this.state !== 'returning') {
              const playerInSafeZone = player.isInSafeZone;
-             const outsideLeash = distToSpawn > leashRange; 
+             const outsideLeash = distToSpawn > leashRange + 200; 
              
              let shouldDeAggro = false;
              if (!this.isBoss) {

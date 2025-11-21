@@ -143,6 +143,7 @@ export enum NPCType {
     Crafter,
     Seller, // Renamed from MaterialVendor
     WorldTraveler,
+    Banker,
 }
 
 export interface WaypointData {
