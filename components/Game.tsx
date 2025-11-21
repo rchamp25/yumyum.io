@@ -62,6 +62,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
   const pressedKeys = useKeyboardInput();
   const playerIdRef = useRef<string>('');
+  const prevHealthRef = useRef<number>(0);
 
   const addProjectile = useCallback((p: Projectile) => setProjectiles(prev => [...prev, p]), []);
   const addFloatingText = useCallback((ft: FloatingText) => setFloatingTexts(prev => [...prev, ft]), []);
@@ -175,6 +176,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   useEffect(() => {
     const newPlayer = new Player(characterData);
     setPlayer(newPlayer);
+    prevHealthRef.current = newPlayer.health;
     setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
 
     if (isOnlineMode) {
@@ -285,15 +287,40 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         globalBossSpawnTimeRef.current = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
 
         let attempts = 0;
+        // Spawn in packs logic
         while (initialEnemies.length < targetInitialPopulation && attempts < 2000) {
             attempts++;
+            
             const angle = Math.random() * Math.PI * 2;
-            const radius = GAME_CONFIG.SAFE_ZONE_RADIUS + Math.random() * (3000 - GAME_CONFIG.SAFE_ZONE_RADIUS);
-            const ex = worldCenter.x + Math.cos(angle) * radius;
-            const ey = worldCenter.y + Math.sin(angle) * radius;
+            // Minimum distance: Safe Zone + 500 buffer
+            const minRadius = GAME_CONFIG.SAFE_ZONE_RADIUS + 500;
+            const maxRadius = Math.min(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT) / 2 - 100;
+            
+            const radius = minRadius + Math.random() * (maxRadius - minRadius);
+            const packX = worldCenter.x + Math.cos(angle) * radius;
+            const packY = worldCenter.y + Math.sin(angle) * radius;
 
-            if (ex > 100 && ex < GAME_CONFIG.WORLD_WIDTH - 100 && ey > 100 && ey < GAME_CONFIG.WORLD_HEIGHT - 100) {
-                initialEnemies.push(new Enemy({ x: ex, y: ey }, Math.floor(Math.random() * GAME_CONFIG.MAX_LEVEL) + 1));
+            if (packX > 100 && packX < GAME_CONFIG.WORLD_WIDTH - 100 && packY > 100 && packY < GAME_CONFIG.WORLD_HEIGHT - 100) {
+                
+                // Zone scaling
+                const distFactor = (radius - minRadius) / (maxRadius - minRadius);
+                let zoneLevel = 1 + Math.floor(distFactor * (GAME_CONFIG.MAX_LEVEL - 1));
+                zoneLevel = Math.max(1, Math.min(GAME_CONFIG.MAX_LEVEL, zoneLevel));
+
+                // Pack size 5-6
+                const packSize = 5 + Math.floor(Math.random() * 2);
+                
+                for(let i=0; i<packSize; i++) {
+                    if (initialEnemies.length >= targetInitialPopulation) break;
+                    
+                    // Scatter slightly around pack center
+                    const ex = packX + (Math.random() - 0.5) * 150;
+                    const ey = packY + (Math.random() - 0.5) * 150;
+                    
+                    if (ex > 50 && ex < GAME_CONFIG.WORLD_WIDTH - 50 && ey > 50 && ey < GAME_CONFIG.WORLD_HEIGHT - 50) {
+                        initialEnemies.push(new Enemy({ x: ex, y: ey }, zoneLevel));
+                    }
+                }
             }
         }
         setEnemies(initialEnemies);
@@ -315,6 +342,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
     if (isOnlineMode) {
         socketService.sendInput(Array.from(pressedKeys));
+        
+        // Check for damage taken and sync to server if significant change
+        if (Math.abs(player.health - prevHealthRef.current) > 1) {
+            updateServerCharacter(player);
+            prevHealthRef.current = player.health;
+        }
     }
 
     const playerDistFromCenter = getDistance(player.position, {x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2});
