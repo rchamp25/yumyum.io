@@ -160,6 +160,8 @@ export interface ServerEnemy {
     isBoss: boolean;
     bossZoneId?: string;
     typeId: string; // Key for ENEMY_TYPES or BOSS_TYPES
+    radius?: number; // Custom radius for online scaling
+    damage?: number; // Custom damage for online scaling
 }
 
 export interface PartyMember {

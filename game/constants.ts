@@ -30,6 +30,15 @@ export const BOSS_CONFIG = {
     BOSS_ITEM_FIND_BONUS: 5.0, // +500% Item Find (Flat addition)
 };
 
+export const ONLINE_BOSS_CONFIG = {
+    HEALTH_MULTIPLIER: 15,
+    DAMAGE_MULTIPLIER: 3,
+    SIZE_MULTIPLIER: 2,
+    DROP_COUNT_MULTIPLIER: 2,
+    ITEM_FIND_BONUS: 8.0, // +800%
+    ITEM_FIND_CAP: 15.0, // 1500%
+};
+
 export const BOSS_ZONES = [
     { id: 'boss_nw', x: 250, y: 250, name: "Frozen Peak" },
     { id: 'boss_ne', x: GAME_CONFIG.WORLD_WIDTH - 250, y: 250, name: "Burning Steppe" },

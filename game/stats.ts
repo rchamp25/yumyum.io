@@ -1,9 +1,9 @@
 
 import { CharacterData, ItemSlot, Item, ItemRarity, Vector2D } from './types';
-import { GAME_CONFIG, BOSS_ZONES, BOSS_CONFIG } from './constants';
+import { GAME_CONFIG, BOSS_ZONES, BOSS_CONFIG, ONLINE_BOSS_CONFIG } from './constants';
 import { getDistance } from './math';
 
-export function calculateFinalStats(baseStats: CharacterData['stats'], equipment: Record<ItemSlot, Item | null>, position?: Vector2D): CharacterData['stats'] & { maxInventorySlots: number } {
+export function calculateFinalStats(baseStats: CharacterData['stats'], equipment: Record<ItemSlot, Item | null>, position?: Vector2D, isOnline: boolean = false): CharacterData['stats'] & { maxInventorySlots: number } {
     const final = { ...baseStats, maxInventorySlots: 0 };
     
     // Default values if missing (for backward compatibility)
@@ -42,12 +42,15 @@ export function calculateFinalStats(baseStats: CharacterData['stats'], equipment
              }
         }
 
-        // Apply Boss Zone Item Find Bonus (Flat addition)
+        // Apply Boss Zone Item Find Bonus
         if (inBossZone) {
-            final.itemFind = (final.itemFind || 0) + BOSS_CONFIG.BOSS_ITEM_FIND_BONUS;
-            // Cap at 1000%
-            if (final.itemFind > 10.0) {
-                final.itemFind = 10.0;
+            const bonus = isOnline ? ONLINE_BOSS_CONFIG.ITEM_FIND_BONUS : BOSS_CONFIG.BOSS_ITEM_FIND_BONUS;
+            const cap = isOnline ? ONLINE_BOSS_CONFIG.ITEM_FIND_CAP : 10.0;
+
+            final.itemFind = (final.itemFind || 0) + bonus;
+            
+            if (final.itemFind > cap) {
+                final.itemFind = cap;
             }
         }
     }

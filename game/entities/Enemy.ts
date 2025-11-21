@@ -70,6 +70,8 @@ export class Enemy extends Character {
         this.health = data.health;
         this.maxHealth = data.maxHealth;
         this.level = data.level;
+        if (data.radius) this.radius = data.radius;
+        if (data.damage) this.damage = data.damage;
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
@@ -290,7 +292,8 @@ export class Enemy extends Character {
         const finalStats = player.getFinalStats();
         const itemFind = finalStats.itemFind || 0;
         
-        const items = generateLoot(this.level, this.position, this.isBoss, itemFind);
+        // Client-side dropLoot (Offline Only) does not pass isOnline=true
+        const items = generateLoot(this.level, this.position, this.isBoss, itemFind, false);
         
         return items.map(item => new DroppedItem(this.position, item));
     }

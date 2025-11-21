@@ -80,8 +80,8 @@ export class Player extends Character {
         this.updateInventoryCapacity();
     }
 
-    getFinalStats() {
-        return calculateFinalStats(this.baseStats, this.equipment, this.position);
+    getFinalStats(isOnline: boolean = false) {
+        return calculateFinalStats(this.baseStats, this.equipment, this.position, isOnline);
     }
 
     getMaxInventorySize(): number {
@@ -120,7 +120,7 @@ export class Player extends Character {
             return;
         }
 
-        const stats = this.getFinalStats();
+        const stats = this.getFinalStats(game.isOnlineMode);
         
         let currentSpeed = stats.speed;
         if (this.hasStatus('slow')) {
@@ -198,7 +198,7 @@ export class Player extends Character {
         const now = Date.now();
         if (now - this.lastRegenTime >= 1000) {
             this.lastRegenTime = now;
-            const regenStats = this.getFinalStats(); 
+            const regenStats = this.getFinalStats(game.isOnlineMode); 
             if (this.health < regenStats.maxHealth && !this.isDead && regenStats.healthRegen > 0) {
                 this.health = Math.min(regenStats.maxHealth, this.health + regenStats.healthRegen);
             }

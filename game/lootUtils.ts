@@ -1,6 +1,6 @@
 
 import { Item, ItemRarity, Vector2D } from './types';
-import { LOOT_CONFIG, BOSS_CONFIG } from './constants';
+import { LOOT_CONFIG, BOSS_CONFIG, ONLINE_BOSS_CONFIG } from './constants';
 import { ALL_EQUIPMENT, ALL_MYTHICS, MATERIALS_DB } from './items';
 
 export interface LootResult {
@@ -12,7 +12,8 @@ export function generateLoot(
     enemyLevel: number, 
     _enemyPosition: Vector2D, 
     isBoss: boolean, 
-    playerItemFind: number
+    playerItemFind: number,
+    isOnline: boolean = false
 ): Item[] {
     const drops: Item[] = [];
     
@@ -23,9 +24,13 @@ export function generateLoot(
     
     // Drop materials
     const matDropChance = (LOOT_CONFIG.MATERIAL_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
+    
+    const onlineMultiplier = (isOnline && isBoss) ? ONLINE_BOSS_CONFIG.DROP_COUNT_MULTIPLIER : 1;
 
     if (Math.random() < matDropChance) {
-            const numMaterials = Math.floor(Math.random() * (LOOT_CONFIG.MATERIAL_QUANTITY_MAX - LOOT_CONFIG.MATERIAL_QUANTITY_MIN + 1)) + LOOT_CONFIG.MATERIAL_QUANTITY_MIN;
+            let numMaterials = Math.floor(Math.random() * (LOOT_CONFIG.MATERIAL_QUANTITY_MAX - LOOT_CONFIG.MATERIAL_QUANTITY_MIN + 1)) + LOOT_CONFIG.MATERIAL_QUANTITY_MIN;
+            numMaterials *= onlineMultiplier;
+
             for (let i = 0; i < numMaterials; i++) {
                 const matRoll = Math.random();
                 
@@ -57,16 +62,20 @@ export function generateLoot(
     // Boss Specific Mythic Drop
     if (isBoss) {
             const mythicChance = 0.01 * itemFindMultiplier; // 1% base chance scaled by item find
-            if (Math.random() < mythicChance) {
-                if (ALL_MYTHICS.length > 0) {
-                    const randomMythic = ALL_MYTHICS[Math.floor(Math.random() * ALL_MYTHICS.length)];
-                    drops.push({ ...randomMythic });
+            
+            for(let m=0; m<onlineMultiplier; m++) {
+                if (Math.random() < mythicChance) {
+                    if (ALL_MYTHICS.length > 0) {
+                        const randomMythic = ALL_MYTHICS[Math.floor(Math.random() * ALL_MYTHICS.length)];
+                        drops.push({ ...randomMythic });
+                    }
                 }
             }
     }
 
     // Drop equipment
-    const dropLoopCount = isBoss ? (BOSS_CONFIG.BOSS_DROP_BONUS + 1) : 1;
+    let dropLoopCount = isBoss ? (BOSS_CONFIG.BOSS_DROP_BONUS + 1) : 1;
+    dropLoopCount *= onlineMultiplier;
 
     for(let i=0; i<dropLoopCount; i++) {
         const equipDropChance = (LOOT_CONFIG.EQUIPMENT_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
