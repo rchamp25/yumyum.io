@@ -200,8 +200,20 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const spawnLocalEnemies = useCallback((worldId: string) => {
       setEnemies(prev => {
           if (prev.length >= GAME_CONFIG.MAX_ENEMIES) return prev; 
-          const newPack = generateEnemyPack(worldId);
-          return [...prev, ...newPack];
+          
+          const needed = GAME_CONFIG.MAX_ENEMIES - prev.length;
+          const packsNeeded = Math.ceil(needed / 4); // Approx pack size
+          const newEnemies: Enemy[] = [];
+          
+          // Spawn up to 5 packs at a time to avoid lag spikes
+          const loops = Math.min(packsNeeded, 5);
+          
+          for(let i=0; i<loops; i++) {
+              const newPack = generateEnemyPack(worldId);
+              newEnemies.push(...newPack);
+          }
+          
+          return [...prev, ...newEnemies];
       });
   }, [generateEnemyPack]);
 
@@ -319,11 +331,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           const currentWorldId = newPlayer.currentWorldId;
           
           // SYNCHRONOUS SPAWNING TO FILL MAP INSTANTLY
-          // Instead of timeout loop, generate state immediately
+          // Use while loop to strictly fill to max capacity
           const initialEnemies: Enemy[] = [];
+          let attempts = 0;
           
-          // 1. Generate Mobs (~70 packs * 4 mobs avg = 280 mobs)
-          for(let i=0; i<70; i++) {
+          // Fill map up to MAX_ENEMIES
+          while (initialEnemies.length < GAME_CONFIG.MAX_ENEMIES && attempts < 500) {
+              attempts++;
               const pack = generateEnemyPack(currentWorldId);
               initialEnemies.push(...pack);
           }
@@ -485,6 +499,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
     // GLOBAL DEATH HANDLER (Solo Mode)
     if (!isOnlineMode) {
+        // Use a local array to batch new drops from this frame
+        const frameDrops: DroppedItem[] = [];
+
         updatedEnemies.forEach(enemy => {
             if (enemy.health <= 0) {
                 if (!enemy.isDead) enemy.isDead = true;
@@ -494,7 +511,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                     // Critical: Ensure drops are generated and added immediately
                     const drops = enemy.dropLoot(player);
                     if (drops.length > 0) {
-                        drops.forEach(d => addDroppedItem(d));
+                        // Push to local frame batch instead of calling setState immediately
+                        frameDrops.push(...drops);
                     }
                 }
                 
@@ -513,24 +531,47 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         if (aliveEnemies.length !== enemies.length) {
             setEnemies(aliveEnemies);
         }
-    }
 
-    // Item Pickup
-    const remainingItems: DroppedItem[] = [];
-    droppedItems.forEach(di => {
-        if(getDistance(di.position, player.position) < player.radius) {
-            if (player.pickupItem(di.item)) {
-                 addFloatingText(new FloatingText(`+ ${di.item.name}`, player.position, '#ffd700'));
-                 updateServerCharacter(player);
+        // Item Pickup & New Drop merging
+        const remainingItems: DroppedItem[] = [];
+        droppedItems.forEach(di => {
+            if(getDistance(di.position, player.position) < player.radius) {
+                if (player.pickupItem(di.item)) {
+                     addFloatingText(new FloatingText(`+ ${di.item.name}`, player.position, '#ffd700'));
+                     updateServerCharacter(player);
+                } else {
+                     addFloatingText(new FloatingText(`Inventory Full!`, player.position, '#ff4d4d'));
+                     remainingItems.push(di);
+                }
             } else {
-                 addFloatingText(new FloatingText(`Inventory Full!`, player.position, '#ff4d4d'));
-                 remainingItems.push(di);
+                remainingItems.push(di);
             }
-        } else {
-            remainingItems.push(di);
+        });
+        
+        // BATCH UPDATE: Merge existing remaining items with new frame drops
+        if (frameDrops.length > 0 || remainingItems.length !== droppedItems.length) {
+            setDroppedItems([...remainingItems, ...frameDrops]);
         }
-    });
-    setDroppedItems(remainingItems);
+    } else {
+        // Online mode just handles pickups, drops come via socket
+        const remainingItems: DroppedItem[] = [];
+        droppedItems.forEach(di => {
+            if(getDistance(di.position, player.position) < player.radius) {
+                if (player.pickupItem(di.item)) {
+                     addFloatingText(new FloatingText(`+ ${di.item.name}`, player.position, '#ffd700'));
+                     updateServerCharacter(player);
+                } else {
+                     addFloatingText(new FloatingText(`Inventory Full!`, player.position, '#ff4d4d'));
+                     remainingItems.push(di);
+                }
+            } else {
+                remainingItems.push(di);
+            }
+        });
+        if (remainingItems.length !== droppedItems.length) {
+            setDroppedItems(remainingItems);
+        }
+    }
 
     if (player.health <= 0) {
         const stats: GameStats = {
