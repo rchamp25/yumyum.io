@@ -194,7 +194,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Titan of the Deep',
         radius: 70,
         healthMultiplier: 80, 
-        damageMultiplier: 4.5, // Buffed from 3.0
+        damageMultiplier: 9.0, // Doubled from 4.5
         speed: 2.5,
         color: '#0ea5e9', // Sky Blue
         attackRange: 90,
@@ -205,7 +205,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Infernal Warlord',
         radius: 60,
         healthMultiplier: 70,
-        damageMultiplier: 6.0, // Buffed from 4.0
+        damageMultiplier: 12.0, // Doubled from 6.0
         speed: 3.0,
         color: '#dc2626', // Red
         attackRange: 80,
@@ -216,7 +216,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Broodmother',
         radius: 65,
         healthMultiplier: 60,
-        damageMultiplier: 3.75, // Buffed from 2.5
+        damageMultiplier: 7.5, // Doubled from 3.75
         speed: 3.5,
         color: '#a3e635', // Lime
         attackRange: 400,
@@ -227,7 +227,7 @@ export const BOSS_TYPES: { [key: string]: EnemyType } = {
         name: 'Void Weaver',
         radius: 55,
         healthMultiplier: 65,
-        damageMultiplier: 7.5, // Buffed from 5.0
+        damageMultiplier: 15.0, // Doubled from 7.5
         speed: 2.0,
         color: '#7c3aed', // Violet
         attackRange: 500,

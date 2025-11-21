@@ -150,20 +150,32 @@ export class Enemy extends Character {
 
         this.isMoving = false;
 
+        // IN ONLINE MODE:
+        // We run state logic to trigger attacks (animations/projectiles), 
+        // but we DO NOT modify this.position directly. Position updates come via sync().
+        const applyMovement = !game.isOnlineMode;
+
         switch(this.state) {
             case 'idle':
-                this.performWander(currentSpeed);
-                this.isMoving = this.wanderTarget !== null;
+                if (applyMovement) {
+                    this.performWander(currentSpeed);
+                    this.isMoving = this.wanderTarget !== null;
+                }
                 break;
                 
             case 'chasing':
-                const chaseDir = normalizeVector({
-                    x: player.position.x - this.position.x,
-                    y: player.position.y - this.position.y
-                });
-                this.position.x += chaseDir.x * currentSpeed;
-                this.position.y += chaseDir.y * currentSpeed;
-                this.isMoving = true;
+                if (applyMovement) {
+                    const chaseDir = normalizeVector({
+                        x: player.position.x - this.position.x,
+                        y: player.position.y - this.position.y
+                    });
+                    this.position.x += chaseDir.x * currentSpeed;
+                    this.position.y += chaseDir.y * currentSpeed;
+                    this.isMoving = true;
+                } else {
+                    // Just trigger animation, assume server handles position
+                    this.isMoving = true; 
+                }
                 break;
                 
             case 'attacking':
@@ -180,19 +192,25 @@ export class Enemy extends Character {
                 
             case 'returning':
                 if (distToSpawn < 10) {
-                    this.position = { ...this.spawnPosition };
-                    this.health = this.maxHealth;
-                    this.state = 'idle';
-                    this.wanderTarget = null;
-                    this.nextWanderTime = Date.now() + 1000;
+                    if (applyMovement) {
+                        this.position = { ...this.spawnPosition };
+                        this.health = this.maxHealth;
+                        this.state = 'idle';
+                        this.wanderTarget = null;
+                        this.nextWanderTime = Date.now() + 1000;
+                    }
                 } else {
-                    const returnDir = normalizeVector({
-                        x: this.spawnPosition.x - this.position.x,
-                        y: this.spawnPosition.y - this.position.y
-                    });
-                    this.position.x += returnDir.x * (currentSpeed * 1.5);
-                    this.position.y += returnDir.y * (currentSpeed * 1.5);
-                    this.isMoving = true;
+                    if (applyMovement) {
+                        const returnDir = normalizeVector({
+                            x: this.spawnPosition.x - this.position.x,
+                            y: this.spawnPosition.y - this.position.y
+                        });
+                        this.position.x += returnDir.x * (currentSpeed * 1.5);
+                        this.position.y += returnDir.y * (currentSpeed * 1.5);
+                        this.isMoving = true;
+                    } else {
+                        this.isMoving = true;
+                    }
                 }
                 break;
         }

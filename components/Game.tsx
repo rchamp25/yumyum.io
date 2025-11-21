@@ -335,8 +335,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     });
 
     const updatedEnemies = [...enemies]; 
+    
+    // IMPORTANT: Always run update for enemies so animations/attacks trigger.
+    // In online mode, the Enemy.update method handles skipping position updates.
+    updatedEnemies.forEach(e => e.update(gameContext));
+
     if (!isOnlineMode) {
-        updatedEnemies.forEach(e => e.update(gameContext));
         bossSpawnTimerRef.current++;
     }
 

@@ -47,6 +47,7 @@ function broadcastPartyUpdate(partyId: string) {
     const party = parties.get(partyId);
     if (party) {
         party.members.forEach(m => {
+            // Update health info before sending
             const p = players.get(m.id);
             if (p) {
                 m.health = p.characterData.stats.health;
@@ -111,14 +112,20 @@ function processTrade(session: TradeSession) {
         return;
     }
 
+    // Verify gold
     if (p1.characterData.gold < session.player1Offer.gold || p2.characterData.gold < session.player2Offer.gold) {
         endTrade(session.id, false);
         return;
     }
     
+    // Verify Items existence
+    
+    // Execute Swap
+    // 1. Deduct Gold
     p1.characterData.gold -= session.player1Offer.gold;
     p2.characterData.gold -= session.player2Offer.gold;
     
+    // 2. Remove Items (Set to null in inventory)
     session.player1Offer.items.forEach(i => {
         if (p1.characterData.inventory[i.inventoryIndex]) {
             p1.characterData.inventory[i.inventoryIndex] = null;
@@ -130,9 +137,11 @@ function processTrade(session: TradeSession) {
         }
     });
     
+    // 3. Add Gold
     p1.characterData.gold += session.player2Offer.gold;
     p2.characterData.gold += session.player1Offer.gold;
 
+    // 4. Add Items (Find empty slots)
     const addItem = (player: ServerPlayer, item: any) => {
         const emptyIdx = player.characterData.inventory.findIndex(s => s === null);
         if (emptyIdx !== -1) {
@@ -145,6 +154,7 @@ function processTrade(session: TradeSession) {
     session.player1Offer.items.forEach(i => addItem(p2, i.item));
     session.player2Offer.items.forEach(i => addItem(p1, i.item));
 
+    // Sync updates to clients
     io.to(p1.socketId).emit('update_character', p1.characterData);
     io.to(p2.socketId).emit('update_character', p2.characterData);
     
@@ -153,13 +163,14 @@ function processTrade(session: TradeSession) {
 
 
 function spawnEnemies() {
-    // ONLINE MODE: BOSS RUSH
-    // No regular mobs spawned.
+    // ONLINE MODE SPAWN LOGIC: BOSS RUSH
+    // No regular mobs. Just bosses.
 
     bossSpawnTimer++;
     if (bossSpawnTimer >= 60) { 
         bossSpawnTimer = 0;
         const activeBosses = Array.from(enemies.values()).filter(e => e.isBoss);
+        
         const isCooldownReady = Date.now() > globalBossCooldown;
 
         if (activeBosses.length < BOSS_CONFIG.MAX_ACTIVE_BOSSES && isCooldownReady) {
@@ -172,11 +183,11 @@ function spawnEnemies() {
                 if (type) {
                     const id = `boss_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
                     
-                    // APPLY ONLINE BOSS STATS
+                    // APPLY ONLINE BOSS BUFFS
                     const baseHealth = 20 * type.healthMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.2);
                     const health = baseHealth * ONLINE_BOSS_CONFIG.HEALTH_MULTIPLIER;
                     
-                    const baseDamage = 0.75 * type.damageMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.15);
+                    const baseDamage = 0.75 * type.damageMultiplier * (1 + GAME_CONFIG.MAX_LEVEL * 0.15); // Base dmg formula from Enemy.ts
                     const damage = baseDamage * ONLINE_BOSS_CONFIG.DAMAGE_MULTIPLIER;
                     
                     const radius = type.radius * ONLINE_BOSS_CONFIG.SIZE_MULTIPLIER;
@@ -215,7 +226,7 @@ io.on('connection', (socket: Socket) => {
             y: GAME_CONFIG.WORLD_HEIGHT / 2 
         };
 
-        const stats = calculateFinalStats(characterData.stats, characterData.equipment, undefined, true); // isOnline=true
+        const stats = calculateFinalStats(characterData.stats, characterData.equipment, undefined, true); // isOnline = true
 
         players.set(socket.id, {
             id: socket.id,
@@ -235,7 +246,7 @@ io.on('connection', (socket: Socket) => {
         const player = players.get(socket.id);
         if (player) {
             player.characterData = characterData;
-            const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position, true); // isOnline=true
+            const stats = calculateFinalStats(characterData.stats, characterData.equipment, player.position, true);
             player.speed = stats.speed;
             if (player.partyId) broadcastPartyUpdate(player.partyId);
         }
@@ -257,8 +268,8 @@ io.on('connection', (socket: Socket) => {
         const target = Array.from(players.values()).find(p => p.characterData.name.toLowerCase() === targetName.toLowerCase());
         
         if (target) {
-            if (target.id === sender.id) return;
-            if (target.partyId) return;
+            if (target.id === sender.id) return; // Can't invite self
+            if (target.partyId) return; // Already in party (could send error)
             
             io.to(target.socketId).emit('invite_received', {
                 fromId: sender.id,
@@ -277,6 +288,7 @@ io.on('connection', (socket: Socket) => {
 
         let partyId = sender.partyId;
         if (!partyId) {
+            // Create new party
             partyId = `party_${Date.now()}_${Math.random()}`;
             const newParty: Party = {
                 id: partyId,
@@ -285,6 +297,7 @@ io.on('connection', (socket: Socket) => {
             };
             parties.set(partyId, newParty);
             
+            // Add sender
             sender.partyId = partyId;
             newParty.members.push({
                 id: sender.id,
@@ -321,8 +334,8 @@ io.on('connection', (socket: Socket) => {
         const target = players.get(targetId);
         if (!sender || !target) return;
         
-        if (sender.tradeSessionId || target.tradeSessionId) return;
-        if (sender.partyId !== target.partyId || !sender.partyId) return;
+        if (sender.tradeSessionId || target.tradeSessionId) return; // Busy
+        if (sender.partyId !== target.partyId || !sender.partyId) return; // Must be in party
 
         io.to(target.socketId).emit('invite_received', {
             fromId: sender.id,
@@ -332,8 +345,8 @@ io.on('connection', (socket: Socket) => {
     });
 
     socket.on('trade_accept', (fromId: string) => {
-        const p2 = players.get(socket.id);
-        const p1 = players.get(fromId);
+        const p2 = players.get(socket.id); // Acceptor
+        const p1 = players.get(fromId); // Initiator
         
         if (!p1 || !p2) return;
         if (p1.tradeSessionId || p2.tradeSessionId) return;
@@ -367,11 +380,12 @@ io.on('connection', (socket: Socket) => {
         const isP1 = session.player1Id === player.id;
         const offer = isP1 ? session.player1Offer : session.player2Offer;
         
-        if (offer.isLocked) return;
+        if (offer.isLocked) return; // Can't update if locked
 
         offer.gold = payload.gold;
         offer.items = payload.items;
         
+        // Reset locks if offers change
         session.player1Offer.isLocked = false;
         session.player2Offer.isLocked = false;
 
@@ -415,10 +429,12 @@ io.on('connection', (socket: Socket) => {
             if (enemy.health <= 0) {
                 enemies.delete(payload.enemyId);
                 
+                // Boss Logic
                 if (enemy.isBoss) {
                      globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
 
+                // Determine reward recipients
                 const recipients: ServerPlayer[] = [];
                 if (attacker.partyId) {
                     const party = parties.get(attacker.partyId);
@@ -440,6 +456,7 @@ io.on('connection', (socket: Socket) => {
                 const multiplier = isPartyKill ? 0.8 : 1.0;
 
                 recipients.forEach(recipient => {
+                     // Reward Logic
                     let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
                     if (enemy.isBoss) xpValue *= 10;
                     const xpReward = Math.floor(xpValue * multiplier);
@@ -452,11 +469,12 @@ io.on('connection', (socket: Socket) => {
                         enemyLevel: enemy.level
                     });
 
+                    // Loot Generation (Instanced per player)
                     const killerStats = calculateFinalStats(
                         recipient.characterData.stats, 
                         recipient.characterData.equipment, 
                         recipient.position,
-                        true // isOnline=true
+                        true // isOnline = true
                     );
 
                     const drops = generateLoot(
@@ -464,9 +482,11 @@ io.on('connection', (socket: Socket) => {
                         enemy.position, 
                         enemy.isBoss, 
                         killerStats.itemFind || 0,
-                        true // isOnline=true (Double Drops)
+                        true // isOnline = true, Double Loot
                     );
 
+                    // Apply Party Penalty to Drop Quantity/Rate
+                    // Since generateLoot determines *if* items drop, we can filter the result array
                     const finalDrops = isPartyKill 
                         ? drops.filter(() => Math.random() < 0.8) 
                         : drops;
@@ -511,7 +531,7 @@ setInterval(() => {
         }
     }
     
-    // 2. Update Enemies (Boss Only)
+    // 2. Update Enemies
     spawnEnemies();
     
     const playerList = Array.from(players.values());
@@ -528,8 +548,9 @@ setInterval(() => {
         }
         
         const chaseRange = BOSS_CONFIG.ZONE_RADIUS;
-        const attackRange = 30; 
         const type = BOSS_TYPES[enemy.typeId];
+        // FIX: Use the type-specific attack range instead of hardcoded 30 to prevent merging
+        const attackRange = type ? type.attackRange : 30; 
         const speed = type ? type.speed : 2;
 
         if (nearestPlayer && nearestDist < chaseRange && nearestDist > attackRange) {
