@@ -13,7 +13,8 @@ export function generateLoot(
     _enemyPosition: Vector2D, 
     isBoss: boolean, 
     playerItemFind: number,
-    isOnline: boolean = false
+    isOnline: boolean = false,
+    quantityScale: number = 1.0 // New parameter: % of total drops to award (0.0 - 1.0)
 ): Item[] {
     const drops: Item[] = [];
     
@@ -30,6 +31,8 @@ export function generateLoot(
     if (Math.random() < matDropChance) {
             let numMaterials = Math.floor(Math.random() * (LOOT_CONFIG.MATERIAL_QUANTITY_MAX - LOOT_CONFIG.MATERIAL_QUANTITY_MIN + 1)) + LOOT_CONFIG.MATERIAL_QUANTITY_MIN;
             numMaterials *= onlineMultiplier;
+            // Scale materials by contribution
+            numMaterials = Math.ceil(numMaterials * quantityScale);
 
             for (let i = 0; i < numMaterials; i++) {
                 const matRoll = Math.random();
@@ -63,7 +66,14 @@ export function generateLoot(
     if (isBoss) {
             const mythicChance = 0.01 * itemFindMultiplier; // 1% base chance scaled by item find
             
-            for(let m=0; m<onlineMultiplier; m++) {
+            // Determine how many checks to run based on contribution
+            const mythicChecks = onlineMultiplier * quantityScale;
+            const guaranteedChecks = Math.floor(mythicChecks);
+            const remainderProb = mythicChecks - guaranteedChecks;
+            
+            const totalChecks = guaranteedChecks + (Math.random() < remainderProb ? 1 : 0);
+
+            for(let m=0; m<totalChecks; m++) {
                 if (Math.random() < mythicChance) {
                     if (ALL_MYTHICS.length > 0) {
                         const randomMythic = ALL_MYTHICS[Math.floor(Math.random() * ALL_MYTHICS.length)];
@@ -76,10 +86,16 @@ export function generateLoot(
     // Drop equipment
     let dropLoopCount = isBoss ? (BOSS_CONFIG.BOSS_DROP_BONUS + 1) : 1;
     dropLoopCount *= onlineMultiplier;
+    
+    // Scale equipment drops by contribution
+    const scaledLoopCount = dropLoopCount * quantityScale;
+    const finalLoopCount = Math.floor(scaledLoopCount) + (Math.random() < (scaledLoopCount % 1) ? 1 : 0);
 
-    for(let i=0; i<dropLoopCount; i++) {
+    for(let i=0; i<finalLoopCount; i++) {
         const equipDropChance = (LOOT_CONFIG.EQUIPMENT_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
-        const shouldDrop = i > 0 || Math.random() < equipDropChance;
+        
+        // If contribution is high (>10%), ensure the "first drop" logic still applies to guarantee *something* usually drops if luck allows.
+        const shouldDrop = (i === 0 && quantityScale >= 0.1) || Math.random() < equipDropChance;
 
         if (shouldDrop) {
             const item = getRandomItemWithGating(enemyLevel, itemFindMultiplier);

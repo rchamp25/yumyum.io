@@ -206,7 +206,8 @@ function spawnEnemies() {
                         bossZoneId: zone.id,
                         typeId: zone.id,
                         radius: radius,
-                        damage: damage
+                        damage: damage,
+                        damageTakenMap: {} // Initialize damage tracker
                     });
                     globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
@@ -447,6 +448,12 @@ io.on('connection', (socket: Socket) => {
         
         if (enemy && attacker) {
             enemy.health -= payload.damage;
+            
+            // Track damage for loot contribution
+            if (!enemy.damageTakenMap) enemy.damageTakenMap = {};
+            if (!enemy.damageTakenMap[socket.id]) enemy.damageTakenMap[socket.id] = 0;
+            enemy.damageTakenMap[socket.id] += payload.damage;
+
             if (enemy.health <= 0) {
                 enemies.delete(payload.enemyId);
                 
@@ -454,65 +461,116 @@ io.on('connection', (socket: Socket) => {
                      globalBossCooldown = Date.now() + BOSS_CONFIG.SPAWN_COOLDOWN;
                 }
 
-                const recipients: ServerPlayer[] = [];
-                if (attacker.partyId) {
-                    const party = parties.get(attacker.partyId);
-                    if (party) {
-                        party.members.forEach(m => {
-                            const p = players.get(m.id);
-                            if (p && getDistance(p.position, enemy.position) < 1500) {
-                                recipients.push(p);
-                            }
+                // BOSS LOGIC: Distribution by contribution
+                if (enemy.isBoss && enemy.damageTakenMap) {
+                    const totalDamage = Object.values(enemy.damageTakenMap).reduce((a, b) => a + b, 0);
+                    
+                    Object.entries(enemy.damageTakenMap).forEach(([pid, dmg]) => {
+                        const recipient = players.get(pid);
+                        if (!recipient) return;
+
+                        // Calculate Contribution % (0.0 to 1.0)
+                        const contribution = Math.min(1.0, Math.max(0.0, dmg / totalDamage));
+                        
+                        // Base Rewards
+                        let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
+                        if (enemy.isBoss) xpValue *= 10;
+                        const goldReward = Math.floor((Math.random() * enemy.level + 1) * (enemy.isBoss ? 20 : 1));
+                        
+                        io.to(recipient.socketId).emit('enemy_killed', {
+                            enemyId: payload.enemyId,
+                            xp: Math.floor(xpValue), 
+                            gold: Math.floor(goldReward),
+                            enemyLevel: enemy.level
                         });
+
+                        // Loot Generation (Scaled by contribution)
+                        const killerStats = calculateFinalStats(
+                            recipient.characterData.stats, 
+                            recipient.characterData.equipment, 
+                            recipient.position,
+                            true 
+                        );
+
+                        const drops = generateLoot(
+                            enemy.level, 
+                            enemy.position, 
+                            enemy.isBoss, 
+                            killerStats.itemFind || 0,
+                            true, // isOnline
+                            contribution // Scale quantity
+                        );
+
+                        if (drops.length > 0) {
+                            io.to(recipient.socketId).emit('loot_dropped', drops.map(item => ({
+                                item,
+                                position: enemy.position
+                            })));
+                        }
+                    });
+
+                } else {
+                    // MOB LOGIC (Existing logic for non-bosses)
+                    const recipients: ServerPlayer[] = [];
+                    if (attacker.partyId) {
+                        const party = parties.get(attacker.partyId);
+                        if (party) {
+                            party.members.forEach(m => {
+                                const p = players.get(m.id);
+                                if (p && getDistance(p.position, enemy.position) < 1500) {
+                                    recipients.push(p);
+                                }
+                            });
+                        } else {
+                            recipients.push(attacker);
+                        }
                     } else {
                         recipients.push(attacker);
                     }
-                } else {
-                    recipients.push(attacker);
-                }
 
-                const isPartyKill = recipients.length > 1;
-                const multiplier = isPartyKill ? 0.8 : 1.0;
+                    const isPartyKill = recipients.length > 1;
+                    const multiplier = isPartyKill ? 0.8 : 1.0;
 
-                recipients.forEach(recipient => {
-                    let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
-                    if (enemy.isBoss) xpValue *= 10;
-                    const xpReward = Math.floor(xpValue * multiplier);
-                    const goldReward = Math.floor((Math.random() * enemy.level + 1) * (enemy.isBoss ? 20 : 1) * multiplier);
+                    recipients.forEach(recipient => {
+                        let xpValue = 15 * enemy.level + Math.pow(enemy.level, 2.1);
+                        const xpReward = Math.floor(xpValue * multiplier);
+                        const goldReward = Math.floor((Math.random() * enemy.level + 1) * multiplier);
 
-                    io.to(recipient.socketId).emit('enemy_killed', {
-                        enemyId: payload.enemyId,
-                        xp: xpReward,
-                        gold: goldReward,
-                        enemyLevel: enemy.level
+                        io.to(recipient.socketId).emit('enemy_killed', {
+                            enemyId: payload.enemyId,
+                            xp: xpReward,
+                            gold: goldReward,
+                            enemyLevel: enemy.level
+                        });
+
+                        const killerStats = calculateFinalStats(
+                            recipient.characterData.stats, 
+                            recipient.characterData.equipment, 
+                            recipient.position,
+                            true 
+                        );
+
+                        const drops = generateLoot(
+                            enemy.level, 
+                            enemy.position, 
+                            enemy.isBoss, 
+                            killerStats.itemFind || 0,
+                            true,
+                            1.0
+                        );
+
+                        const finalDrops = isPartyKill 
+                            ? drops.filter(() => Math.random() < 0.8) 
+                            : drops;
+
+                        if (finalDrops.length > 0) {
+                            io.to(recipient.socketId).emit('loot_dropped', finalDrops.map(item => ({
+                                item,
+                                position: enemy.position
+                            })));
+                        }
                     });
-
-                    const killerStats = calculateFinalStats(
-                        recipient.characterData.stats, 
-                        recipient.characterData.equipment, 
-                        recipient.position,
-                        true 
-                    );
-
-                    const drops = generateLoot(
-                        enemy.level, 
-                        enemy.position, 
-                        enemy.isBoss, 
-                        killerStats.itemFind || 0,
-                        true 
-                    );
-
-                    const finalDrops = isPartyKill 
-                        ? drops.filter(() => Math.random() < 0.8) 
-                        : drops;
-
-                    if (finalDrops.length > 0) {
-                        io.to(recipient.socketId).emit('loot_dropped', finalDrops.map(item => ({
-                            item,
-                            position: enemy.position
-                        })));
-                    }
-                });
+                }
             }
         }
     });
@@ -585,6 +643,8 @@ setInterval(() => {
              enemy.health = Math.min(enemy.maxHealth, enemy.health + enemy.maxHealth * 0.01);
              if (len < 10) {
                  enemy.health = enemy.maxHealth;
+                 // Clear damage map on leash reset
+                 enemy.damageTakenMap = {};
              }
              continue;
         }
@@ -618,6 +678,7 @@ setInterval(() => {
     }
 
     // 3. Broadcast State
+    // Do not send damageTakenMap to clients
     const playersObj: any = {};
     players.forEach((p, id) => {
         playersObj[id] = {
@@ -626,9 +687,12 @@ setInterval(() => {
         };
     });
 
+    // Strip internal data
+    const safeEnemies = Array.from(enemies.values()).map(({ damageTakenMap, ...e }) => e);
+
     io.emit('game_state', { 
         players: playersObj, 
-        enemies: Array.from(enemies.values()) 
+        enemies: safeEnemies
     });
 
 }, 1000 / 60);
