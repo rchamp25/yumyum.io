@@ -251,6 +251,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const initializeGame = useCallback((updatedCharData: CharacterData) => {
       const newPlayer = new Player(updatedCharData);
       
+      // Grant immunity on initial world load (removed from constructor to prevent exploit)
+      newPlayer.setInvulnerable(3000);
+
       if (isOnlineMode && difficulty === Difficulty.Insane) {
           newPlayer.applyInsaneModeNerfs();
       }

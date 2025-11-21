@@ -156,6 +156,8 @@ const App: React.FC = () => {
             await storageService.saveCharacter(user.uid, finalCharacterData);
             await refreshCharacters(user.uid);
         }
+        // Critical Fix: Update local state so respawn uses the latest data (XP, Items, etc.)
+        setCurrentCharacter(finalCharacterData);
         setDeathStats(stats);
         setGameState('dead');
     };

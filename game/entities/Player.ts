@@ -74,7 +74,16 @@ export class Player extends Character {
         
         this.baseStats = cleanBaseStats;
         
-        this.health = finalStats.maxHealth;
+        // FIX: Robust health initialization.
+        // If data.stats.health is a valid number, use it.
+        // Otherwise (new character or corrupted data), use full maxHealth.
+        // This is critical for preventing the "Full Heal" exploit on item swap (which creates a new Player instance).
+        const storedHealth = data.stats && data.stats.health;
+        if (typeof storedHealth === 'number' && !isNaN(storedHealth)) {
+            this.health = Math.min(storedHealth, finalStats.maxHealth);
+        } else {
+            this.health = finalStats.maxHealth;
+        }
         
         this.discoveredWaypoints = data.discoveredWaypoints || ['wp_spawn'];
         this.hasClaimedDevRewards = data.hasClaimedDevRewards || false;
@@ -85,7 +94,8 @@ export class Player extends Character {
             lastUsed: 0,
         }));
 
-        this.setInvulnerable(3000);
+        // Removed automatic setInvulnerable(3000) from constructor to prevent immunity exploit on item swap.
+        // Immunity must be called explicitly by spawners.
         this.updateInventoryCapacity();
     }
 
@@ -189,29 +199,32 @@ export class Player extends Character {
 
             if (now - whirlwindEffect.lastTick >= 250) {
                 whirlwindEffect.lastTick = now;
-                let hitAny = false;
                 
-                game.enemies.forEach(enemy => {
-                    if (getDistance(this.position, enemy.position) < 120 + enemy.radius) {
-                        let dmg = this.damage * 0.5;
-                        if (enemy.isBoss) {
-                            dmg *= stats.bossDamageMultiplier;
+                // Whirlwind is an attack - disable damage if in safe zone
+                if (!this.isInSafeZone) {
+                    let hitAny = false;
+                    
+                    game.enemies.forEach(enemy => {
+                        if (getDistance(this.position, enemy.position) < 120 + enemy.radius) {
+                            let dmg = this.damage * 0.5;
+                            if (enemy.isBoss) {
+                                dmg *= stats.bossDamageMultiplier;
+                            }
+                            const ft = enemy.takeDamage(dmg, { name: this.name, level: this.level });
+                            
+                            if(ft) {
+                                game.addFloatingText(ft);
+                                hitAny = true;
+                            }
+                            if (game.isOnlineMode) {
+                                socketService.damageEnemy(enemy.id as string, dmg);
+                            }
                         }
-                        const ft = enemy.takeDamage(dmg, { name: this.name, level: this.level });
-                        
-                        if(ft) {
-                            game.addFloatingText(ft);
-                            hitAny = true;
-                        }
-                        // In Online Mode, we also need to tell the server we hit them with AoE
-                        if (game.isOnlineMode) {
-                             socketService.damageEnemy(enemy.id as string, dmg);
-                        }
+                    });
+                    
+                    if (hitAny) {
+                        game.playSound('hit');
                     }
-                });
-                
-                if (hitAny) {
-                    game.playSound('hit');
                 }
             }
         }
@@ -220,8 +233,15 @@ export class Player extends Character {
         if (now - this.lastRegenTime >= 1000) {
             this.lastRegenTime = now;
             const regenStats = this.getFinalStats(game.isOnlineMode); 
-            if (this.health < regenStats.maxHealth && !this.isDead && regenStats.healthRegen > 0) {
-                this.health = Math.min(regenStats.maxHealth, this.health + regenStats.healthRegen);
+            
+            // Safe Zone Regeneration Buff (3x)
+            let regenAmount = regenStats.healthRegen;
+            if (this.isInSafeZone) {
+                regenAmount *= 3;
+            }
+
+            if (this.health < regenStats.maxHealth && !this.isDead && regenAmount > 0) {
+                this.health = Math.min(regenStats.maxHealth, this.health + regenAmount);
             }
         }
     }
@@ -231,6 +251,12 @@ export class Player extends Character {
     }
     
     useSkill(index: number, game: GameContext) {
+        // Block attacks in Safe Zone
+        if (this.isInSafeZone) {
+            game.addFloatingText(new FloatingText("Can't attack in Safe Zone", { x: this.position.x, y: this.position.y - 40 }, '#ef4444', 20));
+            return;
+        }
+
         const skill = this.skills[index];
         if (skill && this.level >= skill.definition.unlockLevel && Date.now() - skill.lastUsed > skill.definition.cooldown) {
             skill.definition.use(this, game);
@@ -418,11 +444,16 @@ export class Player extends Character {
     
     recalculateStats() {
         const finalStats = this.getFinalStats();
-        const healthPercentage = this.maxHealth > 0 ? this.health / this.maxHealth : 1;
+        const oldMax = this.maxHealth;
         
         this.maxHealth = finalStats.maxHealth;
         this.damage = finalStats.damage;
-        this.health = Math.floor(this.maxHealth * healthPercentage);
+        
+        // FIX: Apply flat difference to current health.
+        // This preserves current damage taken while accounting for new max HP.
+        const diff = this.maxHealth - oldMax;
+        this.health = Math.max(1, this.health + diff);
+        this.health = Math.min(this.health, this.maxHealth);
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
@@ -445,6 +476,7 @@ export class Player extends Character {
         this.health = this.maxHealth;
         this.totalDamageTaken = 0;
         this.deathLog = [];
+        // Immunity on respawn only
         this.setInvulnerable(3000);
     }
 
