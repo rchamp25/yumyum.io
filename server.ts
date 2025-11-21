@@ -449,7 +449,7 @@ io.on('connection', (socket: Socket) => {
         if (enemy && attacker) {
             enemy.health -= payload.damage;
             
-            // Track damage for loot contribution
+            // Track damage for loot contribution and AGGRO
             if (!enemy.damageTakenMap) enemy.damageTakenMap = {};
             if (!enemy.damageTakenMap[socket.id]) enemy.damageTakenMap[socket.id] = 0;
             enemy.damageTakenMap[socket.id] += payload.damage;
@@ -649,24 +649,46 @@ setInterval(() => {
              continue;
         }
 
+        // Aggro Logic
+        const chaseRange = enemy.isBoss ? GAME_CONFIG.BOSS_AGGRO_RANGE : GAME_CONFIG.ENEMY_AGGRO_RANGE;
+        const attackRange = type ? type.attackRange : 30; 
+        const stopDistance = attackRange * 0.8;
+
+        let activeChaseRange = chaseRange;
+        let isAggroed = false;
+        
+        // Check aggro state
+        if (enemy.damageTakenMap && Object.keys(enemy.damageTakenMap).length > 0) {
+            isAggroed = true;
+        }
+
         let nearestDist = 99999;
         let nearestPlayer: ServerPlayer | null = null;
-        
+
         for (const p of playerList) {
             const d = getDistance(enemy.position, p.position);
+            
+            // Boss specific aggro overrides
+            if (enemy.isBoss) {
+                const distToSpawn = getDistance(p.position, enemy.spawnPosition || {x:0,y:0});
+                // If player is inside boss zone, force aggro range to leash range
+                if (distToSpawn < BOSS_CONFIG.ZONE_RADIUS) {
+                    activeChaseRange = GAME_CONFIG.BOSS_LEASH_RANGE;
+                }
+            }
+            
+            // If already aggroed (damaged), extend chase range to leash range
+            if (isAggroed) {
+                activeChaseRange = enemy.isBoss ? GAME_CONFIG.BOSS_LEASH_RANGE : GAME_CONFIG.ENEMY_LEASH_RANGE;
+            }
+
             if (d < nearestDist) {
                 nearestDist = d;
                 nearestPlayer = p;
             }
         }
-        
-        // Use BOSS CONSTANTS for bosses, regular constants for mobs
-        const chaseRange = enemy.isBoss ? GAME_CONFIG.BOSS_AGGRO_RANGE : GAME_CONFIG.ENEMY_AGGRO_RANGE;
-        const attackRange = type ? type.attackRange : 30; 
-        
-        const stopDistance = attackRange * 0.8;
 
-        if (nearestPlayer && nearestDist < chaseRange && nearestDist > stopDistance) {
+        if (nearestPlayer && nearestDist < activeChaseRange && nearestDist > stopDistance) {
             const dx = nearestPlayer.position.x - enemy.position.x;
             const dy = nearestPlayer.position.y - enemy.position.y;
             const len = Math.sqrt(dx*dx + dy*dy);

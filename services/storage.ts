@@ -143,18 +143,18 @@ class StorageService {
               .from('banks')
               .select('items')
               .eq('user_id', userId)
-              .maybeSingle(); // Use maybeSingle to avoid errors if no row exists
+              .maybeSingle();
           
           if (error) {
               console.error("Supabase Bank Fetch Error:", error);
               return [];
           }
           
-          // If no bank exists, return empty array (will be created on save)
           if (!data) return [];
           
-          // Explicit cast to avoid TS build errors with JSON types
-          return (data.items as (Item | null)[]) || [];
+          // Ensure we return a valid array even if JSON is null
+          const items = data.items as (Item | null)[] | null;
+          return items || [];
       } catch (error) {
           console.error("Failed to fetch bank", error);
           return [];
@@ -163,8 +163,8 @@ class StorageService {
 
   async saveBank(userId: string, items: (Item | null)[]): Promise<void> {
       try {
-          // Check for existing bank entry first to ensure we update rather than duplicate
-          // This guards against tables without proper unique constraints on user_id
+          // Using UPSERT logic based on user_id for simplicity and robustness
+          // Check if a bank entry exists
           const { data: existingBank } = await supabase
               .from('banks')
               .select('id')
@@ -180,13 +180,16 @@ class StorageService {
                   .eq('id', existingBank.id);
               error = result.error;
           } else {
+              // Try insert
               const result = await supabase
                   .from('banks')
                   .insert({ user_id: userId, items });
               error = result.error;
           }
           
-          if (error) console.error("Supabase Bank Save Error:", error);
+          if (error) {
+              console.error("Supabase Bank Save Error:", error);
+          }
       } catch (error) {
           console.error("Failed to save bank", error);
       }
