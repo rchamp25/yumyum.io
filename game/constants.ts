@@ -13,7 +13,7 @@ export const GAME_CONFIG = {
     PLAYER_RADIUS: 20,
     DEFAULT_INVENTORY_SIZE: 50,
     SAFE_ZONE_RADIUS: 250,
-    MAX_ENEMIES: 3150, // 350 * 9 for 9x area
+    MAX_ENEMIES: 1750, // 350 * 5 (Reduced from 9x to reduce lag)
     ENEMY_SPAWN_BUFFER: 100, // Distance from safe zone edge
     ENEMY_PACK_SIZE_MIN: 3,
     ENEMY_PACK_SIZE_MAX: 5,

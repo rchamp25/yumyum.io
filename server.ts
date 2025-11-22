@@ -227,15 +227,17 @@ function getRandomPositionOutsideSafeZone(): Vector2D | null {
 
     while (!valid && attempts < 10) {
         attempts++;
-        const angle = Math.random() * Math.PI * 2;
-        const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 100;
-        const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
-        const dist = minR + Math.random() * (maxR - minR);
         
-        pos = {
-            x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
-            y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
-        };
+        // Rectangular Random Logic to fill the map evenly
+        const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 200) + 100;
+        const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 200) + 100;
+        
+        pos = { x: randX, y: randY };
+
+        // Check Safe Zone
+        if (getDistance(pos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 100) {
+            continue;
+        }
 
         // Check if inside any boss zone
         let inBossZone = false;

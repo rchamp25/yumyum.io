@@ -134,19 +134,22 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         let packCenter = { x: 0, y: 0 };
         let validPosition = false;
 
-        // RETRY LOOP
+        // RECTANGULAR SPAWNING LOGIC to prevent center clustering
         while(!validPosition && attempts < 15) {
             attempts++;
-            const angle = Math.random() * Math.PI * 2;
-            const minR = GAME_CONFIG.SAFE_ZONE_RADIUS + 150;
-            const maxR = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 150;
-            const dist = minR + Math.random() * (maxR - minR);
             
-            const testPos = {
-                    x: GAME_CONFIG.WORLD_WIDTH/2 + Math.cos(angle) * dist,
-                    y: GAME_CONFIG.WORLD_HEIGHT/2 + Math.sin(angle) * dist
-            };
+            // Pick a random point in the world with a buffer from edges
+            const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 200) + 100;
+            const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 200) + 100;
+            
+            const testPos = { x: randX, y: randY };
 
+            // 1. Check Safe Zone
+            if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 100) {
+                continue;
+            }
+
+            // 2. Check Boss Zones
             let inBossZone = false;
             for (const zone of BOSS_ZONES) {
                 if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
@@ -203,8 +206,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           const packsNeeded = Math.ceil(needed / 4); // Approx pack size
           const newEnemies: Enemy[] = [];
           
-          // Spawn more packs at a time to fill the larger map faster
-          const loops = Math.min(packsNeeded, 25); 
+          // Spawn fewer packs per frame to prevent freezing, but frequently
+          const loops = Math.min(packsNeeded, 20); 
           
           for(let i=0; i<loops; i++) {
               const newPack = generateEnemyPack(worldId);
@@ -333,8 +336,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           const initialEnemies: Enemy[] = [];
           let attempts = 0;
           
-          // Optimization: Don't try to fill ALL 3150 mobs in one frame, it freezes.
-          // Spawn a good chunk (e.g., 500) to start, then let the loop fill the rest.
+          // Initial Burst Spawn
           while (initialEnemies.length < 500 && attempts < 200) {
               attempts++;
               const pack = generateEnemyPack(currentWorldId);
@@ -710,7 +712,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
     ctx.strokeStyle = currentWorldConfig.gridColor;
     ctx.lineWidth = 1;
-    const gridStep = 200; // Increased grid step for larger world performance
+    const gridStep = 50; // REVERTED TO 50
     const startX = Math.max(0, Math.floor(camera.x / gridStep) * gridStep);
     const endX = Math.min(GAME_CONFIG.WORLD_WIDTH, camera.x + canvas.width);
     const startY = Math.max(0, Math.floor(camera.y / gridStep) * gridStep);

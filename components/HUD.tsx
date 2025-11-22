@@ -162,14 +162,18 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
                 );
             })}
 
-            {/* Enemy Dots */}
-            {enemies.map(enemy => (
-                 <div 
-                    key={enemy.id}
-                    className={`absolute rounded-full -translate-x-1/2 -translate-y-1/2 z-10 ${enemy.isBoss ? 'w-3 h-3 bg-purple-500 animate-pulse' : 'w-1.5 h-1.5 bg-red-500'}`}
-                    style={{ left: `${enemy.position.x * scale}px`, top: `${enemy.position.y * scale}px` }}
-                ></div>
-            ))}
+            {/* Enemy Dots - OPTIMIZED: Only show nearby enemies or bosses */}
+            {enemies.map(enemy => {
+                 if (!enemy.isBoss && getDistance(player.position, enemy.position) > 3000) return null;
+                 
+                 return (
+                     <div 
+                        key={enemy.id}
+                        className={`absolute rounded-full -translate-x-1/2 -translate-y-1/2 z-10 ${enemy.isBoss ? 'w-3 h-3 bg-purple-500 animate-pulse' : 'w-1.5 h-1.5 bg-red-500'}`}
+                        style={{ left: `${enemy.position.x * scale}px`, top: `${enemy.position.y * scale}px` }}
+                    ></div>
+                 );
+            })}
              {/* NPC Dots */}
              {npcs.map(npc => (
                  <div 
