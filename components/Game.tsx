@@ -85,7 +85,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const addDroppedItem = useCallback((di: DroppedItem) => setDroppedItems(prev => [...prev, di]), []);
 
   const playSound = useCallback((type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => {
-    // Sound logic kept same...
     try {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         if (!AudioContext) return;
@@ -94,7 +93,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         masterGain.connect(ctx.destination);
         const t = ctx.currentTime;
 
-        // Minimal sound implementation for brevity in this large file
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
@@ -170,7 +168,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             level = GAME_CONFIG.MAX_LEVEL;
         } else {
             const safeZone = GAME_CONFIG.SAFE_ZONE_RADIUS;
-            const maxDist = Math.min(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
+            const maxDist = Math.max(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
             const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
             const progress = Math.max(0, (distFromCenter - safeZone) / (maxDist - safeZone));
             level = Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1));
@@ -205,8 +203,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           const packsNeeded = Math.ceil(needed / 4); // Approx pack size
           const newEnemies: Enemy[] = [];
           
-          // Spawn up to 5 packs at a time to avoid lag spikes
-          const loops = Math.min(packsNeeded, 5);
+          // Spawn more packs at a time to fill the larger map faster
+          const loops = Math.min(packsNeeded, 25); 
           
           for(let i=0; i<loops; i++) {
               const newPack = generateEnemyPack(worldId);
@@ -251,7 +249,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const initializeGame = useCallback((updatedCharData: CharacterData) => {
       const newPlayer = new Player(updatedCharData);
       
-      // Grant immunity on initial world load (removed from constructor to prevent exploit)
       newPlayer.setInvulnerable(3000);
 
       if (isOnlineMode && difficulty === Difficulty.Insane) {
@@ -333,13 +330,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           
           const currentWorldId = newPlayer.currentWorldId;
           
-          // SYNCHRONOUS SPAWNING TO FILL MAP INSTANTLY
-          // Use while loop to strictly fill to max capacity
           const initialEnemies: Enemy[] = [];
           let attempts = 0;
           
-          // Fill map up to MAX_ENEMIES
-          while (initialEnemies.length < GAME_CONFIG.MAX_ENEMIES && attempts < 500) {
+          // Optimization: Don't try to fill ALL 3150 mobs in one frame, it freezes.
+          // Spawn a good chunk (e.g., 500) to start, then let the loop fill the rest.
+          while (initialEnemies.length < 500 && attempts < 200) {
               attempts++;
               const pack = generateEnemyPack(currentWorldId);
               initialEnemies.push(...pack);
@@ -424,7 +420,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     
     if (!player || player.isDead) return;
 
-    // Auto-close NPC interaction
     if (interactingNPC) {
         if (getDistance(player.position, interactingNPC.position) > 100) {
             setInteractingNPC(null);
@@ -434,7 +429,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     // Solo Mode Spawning Loop (Maintenance)
     if (!isOnlineMode) {
         localSpawnTimerRef.current++;
-        if (localSpawnTimerRef.current > 60) { 
+        if (localSpawnTimerRef.current > 30) { // Faster spawn check (every 0.5s)
              spawnLocalEnemies(player.currentWorldId);
              spawnLocalBoss(player.currentWorldId);
              localSpawnTimerRef.current = 0;
@@ -475,7 +470,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     groundEffects.forEach(ge => ge.update(updatedEnemies, gameContext));
     droppedItems.forEach(di => di.update(player));
     
-    // Projectile Collisions
     projectiles.forEach(p => {
         if (p.ownerId === player.id || !p.isHostile) { 
             for (const enemy of updatedEnemies) {
@@ -500,26 +494,20 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     });
 
-    // GLOBAL DEATH HANDLER (Solo Mode)
     if (!isOnlineMode) {
-        // Use a local array to batch new drops from this frame
         const frameDrops: DroppedItem[] = [];
 
         updatedEnemies.forEach(enemy => {
             if (enemy.health <= 0) {
                 if (!enemy.isDead) enemy.isDead = true;
                 
-                // Attempt to drop loot
                 if (!enemy.lootDropped) {
-                    // Critical: Ensure drops are generated and added immediately
                     const drops = enemy.dropLoot(player);
                     if (drops.length > 0) {
-                        // Push to local frame batch instead of calling setState immediately
                         frameDrops.push(...drops);
                     }
                 }
                 
-                // Award XP/Gold
                 if (!enemy.xpGiven) {
                     enemy.xpGiven = true;
                     player.gainXP(enemy.xpValue, addFloatingText, enemy.level);
@@ -535,7 +523,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             setEnemies(aliveEnemies);
         }
 
-        // Item Pickup & New Drop merging
         const remainingItems: DroppedItem[] = [];
         droppedItems.forEach(di => {
             if(getDistance(di.position, player.position) < player.radius) {
@@ -551,12 +538,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             }
         });
         
-        // BATCH UPDATE: Merge existing remaining items with new frame drops
         if (frameDrops.length > 0 || remainingItems.length !== droppedItems.length) {
             setDroppedItems([...remainingItems, ...frameDrops]);
         }
     } else {
-        // Online mode just handles pickups, drops come via socket
         const remainingItems: DroppedItem[] = [];
         droppedItems.forEach(di => {
             if(getDistance(di.position, player.position) < player.radius) {
@@ -594,7 +579,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     setVisualEffects(prev => prev.filter(ve => !ve.isExpired()));
     setGroundEffects(prev => prev.filter(ge => !ge.isExpired()));
     
-    // Canvas Update
     const canvas = canvasRef.current;
     if (canvas) {
         const targetX = player.position.x - canvas.width / 2;
@@ -726,7 +710,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
     ctx.strokeStyle = currentWorldConfig.gridColor;
     ctx.lineWidth = 1;
-    const gridStep = 50;
+    const gridStep = 200; // Increased grid step for larger world performance
     const startX = Math.max(0, Math.floor(camera.x / gridStep) * gridStep);
     const endX = Math.min(GAME_CONFIG.WORLD_WIDTH, camera.x + canvas.width);
     const startY = Math.max(0, Math.floor(camera.y / gridStep) * gridStep);

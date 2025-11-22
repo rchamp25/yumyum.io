@@ -2,8 +2,8 @@
 import { ItemRarity, WaypointData, EnemyType } from './types';
 
 export const GAME_CONFIG = {
-    WORLD_WIDTH: 6000,
-    WORLD_HEIGHT: 6000,
+    WORLD_WIDTH: 18000, // Tripled from 6000
+    WORLD_HEIGHT: 18000, // Tripled from 6000
     MAX_LEVEL: 45,
     PLAYER_HEALTH: 100,
     PLAYER_DAMAGE: 5,
@@ -13,15 +13,15 @@ export const GAME_CONFIG = {
     PLAYER_RADIUS: 20,
     DEFAULT_INVENTORY_SIZE: 50,
     SAFE_ZONE_RADIUS: 250,
-    MAX_ENEMIES: 350, // Increased for larger map
+    MAX_ENEMIES: 3150, // 350 * 9 for 9x area
     ENEMY_SPAWN_BUFFER: 100, // Distance from safe zone edge
     ENEMY_PACK_SIZE_MIN: 3,
     ENEMY_PACK_SIZE_MAX: 5,
     ENEMY_PACK_RADIUS: 75,
-    ENEMY_AGGRO_RANGE: 90, // Halved from 180
-    ENEMY_LEASH_RANGE: 300, // Halved from 600
-    BOSS_AGGRO_RANGE: 180, // Kept original
-    BOSS_LEASH_RANGE: 600, // Kept original
+    ENEMY_AGGRO_RANGE: 90, 
+    ENEMY_LEASH_RANGE: 300, 
+    BOSS_AGGRO_RANGE: 180, 
+    BOSS_LEASH_RANGE: 600, 
 };
 
 export const WORLD_IDS = {
@@ -42,9 +42,7 @@ export const WORLD_CONFIGS = {
         bgColor: '#052e16', // Dark Green (Emerald 950)
         gridColor: '#14532d', // Green 900
         itemFindCap: 20.0, // 2000%
-        bossItemFindBonus: 3.0, // +300% ON TOP of World 1, effectively 800% base in logic? 
-        // Wait, prompt says "add 300% more itemfind when in the boss ring than the world 1 bosses"
-        // World 1 boss bonus is 5.0 (500%). So World 2 should be 8.0 (800%).
+        bossItemFindBonus: 3.0, 
         bossItemFindValue: 8.0, 
     }
 };
@@ -142,13 +140,13 @@ export const WAYPOINTS: WaypointData[] = [
     // Center
     { id: 'wp_spawn', name: 'Village Center', position: { x: WC, y: HC } },
     
-    // Cardinals
+    // Cardinals - Shifted to new edges (Same distance from absolute edge as before: 400px)
     { id: 'wp_north', name: 'Northern Citadel', position: { x: WC, y: 400 } },
     { id: 'wp_south', name: 'Southern Necropolis', position: { x: WC, y: GAME_CONFIG.WORLD_HEIGHT - 400 } },
     { id: 'wp_east', name: 'Eastern Glade', position: { x: GAME_CONFIG.WORLD_WIDTH - 400, y: HC } },
     { id: 'wp_west', name: 'Western Harbor', position: { x: 400, y: HC } },
     
-    // Diagonals (New Regions)
+    // Diagonals - Shifted to new corners (Same distance from absolute corner as before: 800px)
     { id: 'wp_nw', name: 'Frozen Peaks', position: { x: 800, y: 800 } },
     { id: 'wp_ne', name: 'Burning Steppes', position: { x: GAME_CONFIG.WORLD_WIDTH - 800, y: 800 } },
     { id: 'wp_sw', name: 'Toxic Bog', position: { x: 800, y: GAME_CONFIG.WORLD_HEIGHT - 800 } },
