@@ -152,14 +152,22 @@ const App: React.FC = () => {
     };
 
     const handleDeath = async (stats: GameStats, finalCharacterData: CharacterData) => {
-        if (user) {
-            await storageService.saveCharacter(user.uid, finalCharacterData);
-            await refreshCharacters(user.uid);
-        }
-        // Critical Fix: Update local state so respawn uses the latest data (XP, Items, etc.)
+        // 1. Immediate State Update: Crucial to prevent progress loss.
+        // We update currentCharacter immediately so any subsequent logic (like respawn) 
+        // uses the inventory/xp state exactly as it was at death.
         setCurrentCharacter(finalCharacterData);
         setDeathStats(stats);
         setGameState('dead');
+
+        // 2. Async Persistence: Save to DB in background
+        if (user) {
+            try {
+                await storageService.saveCharacter(user.uid, finalCharacterData);
+                await refreshCharacters(user.uid);
+            } catch (e) {
+                console.error("Failed to save character on death:", e);
+            }
+        }
     };
     
     const handleReturnToSelect = async (finalCharacterData: CharacterData) => {

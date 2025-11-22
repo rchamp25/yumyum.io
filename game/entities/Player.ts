@@ -77,7 +77,6 @@ export class Player extends Character {
         // FIX: Robust health initialization.
         // If data.stats.health is a valid number, use it.
         // Otherwise (new character or corrupted data), use full maxHealth.
-        // This is critical for preventing the "Full Heal" exploit on item swap (which creates a new Player instance).
         const storedHealth = data.stats && data.stats.health;
         if (typeof storedHealth === 'number' && !isNaN(storedHealth)) {
             this.health = Math.min(storedHealth, finalStats.maxHealth);
@@ -94,8 +93,7 @@ export class Player extends Character {
             lastUsed: 0,
         }));
 
-        // Removed automatic setInvulnerable(3000) from constructor to prevent immunity exploit on item swap.
-        // Immunity must be called explicitly by spawners.
+        // Removed setInvulnerable from constructor to prevent immunity exploit on item swap
         this.updateInventoryCapacity();
     }
 
@@ -200,7 +198,6 @@ export class Player extends Character {
             if (now - whirlwindEffect.lastTick >= 250) {
                 whirlwindEffect.lastTick = now;
                 
-                // Whirlwind is an attack - disable damage if in safe zone
                 if (!this.isInSafeZone) {
                     let hitAny = false;
                     
@@ -251,7 +248,6 @@ export class Player extends Character {
     }
     
     useSkill(index: number, game: GameContext) {
-        // Block attacks in Safe Zone
         if (this.isInSafeZone) {
             game.addFloatingText(new FloatingText("Can't attack in Safe Zone", { x: this.position.x, y: this.position.y - 40 }, '#ef4444', 20));
             return;
@@ -445,15 +441,20 @@ export class Player extends Character {
     recalculateStats() {
         const finalStats = this.getFinalStats();
         const oldMax = this.maxHealth;
+        const oldHealth = this.health; // Capture current health
         
         this.maxHealth = finalStats.maxHealth;
         this.damage = finalStats.damage;
         
-        // FIX: Apply flat difference to current health.
-        // This preserves current damage taken while accounting for new max HP.
-        const diff = this.maxHealth - oldMax;
-        this.health = Math.max(1, this.health + diff);
-        this.health = Math.min(this.health, this.maxHealth);
+        // FIX: Infinite Healing & Exploit Prevention
+        // 1. If player was fully healed (>= oldMax), update to new max (maintains full health).
+        // 2. If player was damaged, keep exact current health (clamped to new max).
+        // This prevents swapping items to gain free HP when injured.
+        if (oldHealth >= oldMax) {
+            this.health = this.maxHealth;
+        } else {
+            this.health = Math.min(oldHealth, this.maxHealth);
+        }
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
@@ -476,7 +477,7 @@ export class Player extends Character {
         this.health = this.maxHealth;
         this.totalDamageTaken = 0;
         this.deathLog = [];
-        // Immunity on respawn only
+        // Immunity on respawn only (Explicitly called here)
         this.setInvulnerable(3000);
     }
 
