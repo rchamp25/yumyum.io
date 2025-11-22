@@ -113,7 +113,6 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
             </div>
 
             {waypoints.map(wp => {
-                 const abbr = wp.data.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
                  const isDiscovered = player.discoveredWaypoints.includes(wp.data.id);
                  
                  return (
