@@ -22,6 +22,7 @@ import FastTravelUI from './FastTravelUI';
 import PartyUI from './PartyUI';
 import TradeUI from './TradeUI';
 import EnemyTooltip from './EnemyTooltip';
+import VirtualJoystick from './VirtualJoystick';
 import { socketService } from '../services/socketService';
 import { storageService } from '../services/storage';
 
@@ -73,6 +74,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   const [isPartyUIOpen, setPartyUIOpen] = useState(false);
   const [pendingInvites, setPendingInvites] = useState<{type: 'party'|'trade', fromId: string, fromName: string}[]>([]);
   const [activeTradeSession, setActiveTradeSession] = useState<TradeSession | null>(null);
+
+  // Mobile Controls
+  const joystickVectorRef = useRef<Vector2D>({ x: 0, y: 0 });
 
   const pressedKeys = useKeyboardInput();
   const playerIdRef = useRef<string>('');
@@ -134,11 +138,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         let packCenter = { x: 0, y: 0 };
         let validPosition = false;
 
-        // RECTANGULAR SPAWNING LOGIC to prevent center clustering
         while(!validPosition && attempts < 15) {
             attempts++;
             
-            // Pick a random point in the world with a buffer from edges
             const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 200) + 100;
             const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 200) + 100;
             
@@ -179,7 +181,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
 
         let typeId: string;
-        const packSize = Math.floor(Math.random() * 3) + 3; // 3 to 5 mobs
+        const packSize = Math.floor(Math.random() * 3) + 3; 
         
         if (worldId === WORLD_IDS.WORLD_2) {
             const typeKeys = Object.keys(GROVE_ENEMIES);
@@ -203,10 +205,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
           if (prev.length >= GAME_CONFIG.MAX_ENEMIES) return prev; 
           
           const needed = GAME_CONFIG.MAX_ENEMIES - prev.length;
-          const packsNeeded = Math.ceil(needed / 4); // Approx pack size
+          const packsNeeded = Math.ceil(needed / 4); 
           const newEnemies: Enemy[] = [];
           
-          // Spawn fewer packs per frame to prevent freezing, but frequently
           const loops = Math.min(packsNeeded, 20); 
           
           for(let i=0; i<loops; i++) {
@@ -228,7 +229,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       if (availableZones.length === 0) return null;
       
       const zone = availableZones[Math.floor(Math.random() * availableZones.length)];
-      let typeId = zone.id; // Default matches World 1 boss keys
+      let typeId = zone.id; 
       
       if (worldId === WORLD_IDS.WORLD_2) {
           typeId = `grove_${zone.id}`; 
@@ -414,7 +415,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
             socketService.offGameState();
         }
       };
-  }, []); // Run once on mount
+  }, []); 
 
   
   const gameLoop = useCallback(() => {
@@ -428,10 +429,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         }
     }
     
-    // Solo Mode Spawning Loop (Maintenance)
     if (!isOnlineMode) {
         localSpawnTimerRef.current++;
-        if (localSpawnTimerRef.current > 30) { // Faster spawn check (every 0.5s)
+        if (localSpawnTimerRef.current > 30) { 
              spawnLocalEnemies(player.currentWorldId);
              spawnLocalBoss(player.currentWorldId);
              localSpawnTimerRef.current = 0;
@@ -451,7 +451,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     
     const gameContext = { player, enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode };
     
-    player.update(pressedKeys, gameContext);
+    // Pass Joystick Vector to Player Update
+    player.update(pressedKeys, gameContext, joystickVectorRef.current);
 
     waypoints.forEach(wp => {
         if (getDistance(player.position, wp.data.position) < wp.unlockRadius) {
@@ -638,7 +639,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       storageService.saveCharacter(userId, updatedPlayer.toCharacterData());
   }, [userId, updateServerCharacter]);
 
-  // Handlers (Omitted logic same as original to save space, just ensuring bindings)
   const toggleInventory = useCallback(() => {
     if (interactingNPC || interactingWaypoint || activeTradeSession) return;
     setInventoryOpen(prev => !prev);
@@ -694,7 +694,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toggleInventory, nearbyNPC, nearbyWaypoint, activeTradeSession]);
 
-  // Drawing (Same as previous, just ensuring context correctness)
+  // Drawing
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
@@ -712,7 +712,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
 
     ctx.strokeStyle = currentWorldConfig.gridColor;
     ctx.lineWidth = 1;
-    const gridStep = 50; // REVERTED TO 50
+    const gridStep = 50; 
     const startX = Math.max(0, Math.floor(camera.x / gridStep) * gridStep);
     const endX = Math.min(GAME_CONFIG.WORLD_WIDTH, camera.x + canvas.width);
     const startY = Math.max(0, Math.floor(camera.y / gridStep) * gridStep);
@@ -816,6 +816,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
   return (
     <div className="w-screen h-screen relative">
       <canvas ref={canvasRef} className="w-full h-full" onMouseMove={handleMouseMove} />
+      
+      <VirtualJoystick onMove={(vector) => joystickVectorRef.current = vector} />
+
       <HUD 
         player={player} 
         enemies={enemies} 
@@ -833,6 +836,31 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       
       {hoveredEnemy && !interactingNPC && (
           <EnemyTooltip enemy={hoveredEnemy} position={tooltipPos} />
+      )}
+
+      {/* Interaction Button for Mobile (or Desktop) when near NPC/Waypoint */}
+      {(!interactingNPC && !interactingWaypoint && (nearbyNPC || nearbyWaypoint)) && (
+         <div className="absolute bottom-32 right-8 md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-24 z-50 pointer-events-auto">
+            <button
+                onClick={() => {
+                    if (nearbyNPC) {
+                        setInteractingNPC(nearbyNPC);
+                        setInventoryOpen(false);
+                        setPartyUIOpen(false);
+                        setInteractingWaypoint(null);
+                        setHoveredEnemy(null);
+                    } else if (nearbyWaypoint) {
+                        setInteractingWaypoint(nearbyWaypoint);
+                        setInventoryOpen(false);
+                        setInteractingNPC(null);
+                    }
+                }}
+                className="bg-cyan-600/90 hover:bg-cyan-500 text-white font-bold p-6 rounded-full shadow-xl border-2 border-cyan-300 animate-pulse md:animate-none md:bg-cyan-900/80 md:backdrop-blur-sm md:p-3 md:rounded-lg md:shadow-lg md:border-cyan-500"
+            >
+                <span className="text-2xl md:text-lg block">✋</span>
+                <span className="hidden md:block">Press [E] to Interact</span>
+            </button>
+        </div>
       )}
 
       {pendingInvites.length > 0 && (
@@ -863,12 +891,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
                     </div>
                 ))}
            </div>
-      )}
-
-      {!interactingNPC && !interactingWaypoint && nearbyWaypoint && (
-         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-24 bg-cyan-900/80 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-cyan-500">
-            <p className="font-bold text-lg text-cyan-100">Press [E] to Fast Travel ({nearbyWaypoint.data.name})</p>
-        </div>
       )}
       
       {isInventoryOpen && player && (
@@ -931,7 +953,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
       )}
       <button 
         onClick={() => onReturnToSelect(player!.toCharacterData())}
-        className="absolute top-4 right-[220px] bg-gray-800/80 p-2 rounded-lg pointer-events-auto hover:bg-gray-700/80 text-white"
+        className="absolute top-4 right-[220px] bg-gray-800/80 p-2 rounded-lg pointer-events-auto hover:bg-gray-700/80 text-white hidden md:block"
       >
         Return to Menu
       </button>

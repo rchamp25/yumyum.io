@@ -1,6 +1,6 @@
 
 import { Character } from './Character';
-import { CharacterData, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity } from '../types';
+import { CharacterData, ItemSlot, Item, GameContext, SkillState, DeathLogEvent, Recipe, ItemRarity, Vector2D } from '../types';
 import { normalizeVector, getDistance } from '../math';
 import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, WORLD_IDS } from '../constants';
 import { SKILLS_DB } from '../skills';
@@ -75,8 +75,6 @@ export class Player extends Character {
         this.baseStats = cleanBaseStats;
         
         // FIX: Robust health initialization.
-        // If data.stats.health is a valid number, use it.
-        // Otherwise (new character or corrupted data), use full maxHealth.
         const storedHealth = data.stats && data.stats.health;
         if (typeof storedHealth === 'number' && !isNaN(storedHealth)) {
             this.health = Math.min(storedHealth, finalStats.maxHealth);
@@ -93,7 +91,6 @@ export class Player extends Character {
             lastUsed: 0,
         }));
 
-        // Removed setInvulnerable from constructor to prevent immunity exploit on item swap
         this.updateInventoryCapacity();
     }
 
@@ -141,7 +138,8 @@ export class Player extends Character {
         return items;
     }
 
-    update(pressedKeys: Set<string>, game: GameContext) {
+    // MODIFIED: Accepts optional joystickVector
+    update(pressedKeys: Set<string>, game: GameContext, joystickVector?: Vector2D) {
         this.processStatusEffects(game);
         if (this.hasStatus('stun')) {
             this.isMoving = false;
@@ -170,18 +168,33 @@ export class Player extends Character {
         
         let moveX = 0;
         let moveY = 0;
-        if (pressedKeys.has('w')) moveY -= 1;
-        if (pressedKeys.has('s')) moveY += 1;
-        if (pressedKeys.has('a')) moveX -= 1;
-        if (pressedKeys.has('d')) moveX += 1;
+
+        // Prioritize Joystick if active
+        if (joystickVector && (joystickVector.x !== 0 || joystickVector.y !== 0)) {
+            moveX = joystickVector.x;
+            moveY = joystickVector.y;
+        } else {
+            // Fallback to Keyboard
+            if (pressedKeys.has('w')) moveY -= 1;
+            if (pressedKeys.has('s')) moveY += 1;
+            if (pressedKeys.has('a')) moveX -= 1;
+            if (pressedKeys.has('d')) moveX += 1;
+        }
         
-        this.isMoving = (moveX !== 0 || moveY !== 0);
+        this.isMoving = (Math.abs(moveX) > 0.01 || Math.abs(moveY) > 0.01);
         this.updateAnimation();
 
         if (this.isMoving) {
-            const normalized = normalizeVector({ x: moveX, y: moveY });
-            this.position.x += normalized.x * currentSpeed;
-            this.position.y += normalized.y * currentSpeed;
+            // Normalize only if using keys (joystick is already normalized 0-1)
+            if (!joystickVector || (joystickVector.x === 0 && joystickVector.y === 0)) {
+                const normalized = normalizeVector({ x: moveX, y: moveY });
+                this.position.x += normalized.x * currentSpeed;
+                this.position.y += normalized.y * currentSpeed;
+            } else {
+                // Joystick input is already a vector, just scale by speed
+                this.position.x += moveX * currentSpeed;
+                this.position.y += moveY * currentSpeed;
+            }
         }
 
         this.position.x = Math.max(this.radius, Math.min(GAME_CONFIG.WORLD_WIDTH - this.radius, this.position.x));
@@ -231,7 +244,6 @@ export class Player extends Character {
             this.lastRegenTime = now;
             const regenStats = this.getFinalStats(game.isOnlineMode); 
             
-            // Safe Zone Regeneration Buff (5x + 10)
             let regenAmount = regenStats.healthRegen;
             if (this.isInSafeZone) {
                 regenAmount = (regenAmount * 5) + 10;
@@ -441,15 +453,11 @@ export class Player extends Character {
     recalculateStats() {
         const finalStats = this.getFinalStats();
         const oldMax = this.maxHealth;
-        const oldHealth = this.health; // Capture current health
+        const oldHealth = this.health; 
         
         this.maxHealth = finalStats.maxHealth;
         this.damage = finalStats.damage;
         
-        // FIX: Infinite Healing & Exploit Prevention
-        // 1. If player was fully healed (>= oldMax), update to new max (maintains full health).
-        // 2. If player was damaged, keep exact current health (clamped to new max).
-        // This prevents swapping items to gain free HP when injured.
         if (oldHealth >= oldMax) {
             this.health = this.maxHealth;
         } else {
@@ -470,14 +478,13 @@ export class Player extends Character {
     }
     
     respawn() {
-        this.gold = Math.floor(this.gold * 0.7); // Lose 30% gold
+        this.gold = Math.floor(this.gold * 0.7); 
         this.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
         this.isDead = false;
         this.recalculateStats();
         this.health = this.maxHealth;
         this.totalDamageTaken = 0;
         this.deathLog = [];
-        // Immunity on respawn only (Explicitly called here)
         this.setInvulnerable(3000);
     }
 

@@ -1,0 +1,21 @@
+{
+  "name": "yumyum.io",
+  "short_name": "yumyum",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230d9488' /%3E%3Cpath d='M30 30 L50 60 L70 30 M50 60 L50 90' stroke='white' stroke-width='10' stroke-linecap='round' /%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230d9488' /%3E%3Cpath d='M30 30 L50 60 L70 30 M50 60 L50 90' stroke='white' stroke-width='10' stroke-linecap='round' /%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
