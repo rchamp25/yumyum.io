@@ -254,9 +254,8 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="w-screen h-screen bg-gray-900 text-white flex items-center justify-center font-sans overflow-hidden">
+        <div className="w-[100dvw] h-[100dvh] bg-gray-900 text-white flex items-center justify-center font-sans overflow-hidden relative">
             <div className="absolute inset-0 bg-[url('/background.png')] bg-cover bg-center opacity-20"></div>
-            
             {renderContent()}
         </div>
     );

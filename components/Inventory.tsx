@@ -26,7 +26,7 @@ export const getRarityClasses = (rarity: ItemRarity) => {
 };
 
 export const EmptySlotIcon: React.FC<{ slot: ItemSlot }> = ({ slot }) => {
-    const className = "w-8 h-8 text-gray-700";
+    const className = "w-6 h-6 md:w-8 md:h-8 text-gray-700";
     switch (slot) {
         case ItemSlot.Weapon: return <SwordIcon className={className} />;
         case ItemSlot.Armor: return <VestIcon className={className} />;
@@ -69,7 +69,7 @@ export const ItemSlotComponent: React.FC<{
     return (
         <div 
             ref={slotRef}
-            className={`w-16 h-16 border-2 rounded-md relative flex items-center justify-center transition-all duration-200 
+            className={`w-12 h-12 md:w-16 md:h-16 border-2 rounded-md relative flex items-center justify-center transition-all duration-200 
                 ${rarityClasses.bg} ${rarityClasses.border} 
                 ${onClick || onMouseDown ? `cursor-pointer ${rarityClasses.hoverBorder} ${rarityClasses.hoverBg}`: ''} 
                 ${item ? `shadow-lg ${rarityClasses.shadow}` : ''}
@@ -81,18 +81,19 @@ export const ItemSlotComponent: React.FC<{
             onMouseUp={onMouseUp}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onTouchStart={(e) => { if(onClick) { e.stopPropagation(); } }} // Allow basic touch
         >
             {item ? (
                 <>
-                    <ItemIcon item={item} className="w-10 h-10 text-gray-300" />
+                    <ItemIcon item={item} className="w-8 h-8 md:w-10 md:h-10 text-gray-300" />
                     {item.quantity && item.quantity > 1 && (
-                        <div className="absolute top-0 right-0 bg-gray-900/80 text-white text-xs font-bold px-1.5 py-0.5 rounded-bl-md rounded-tr-md pointer-events-none">
+                        <div className="absolute top-0 right-0 bg-gray-900/80 text-white text-[10px] font-bold px-1 py-0.5 rounded-bl-md rounded-tr-md pointer-events-none">
                             {item.quantity}
                         </div>
                     )}
                     {item.locked && (
                          <div className="absolute top-0 right-0 p-0.5">
-                             <SmallLockIcon className="w-4 h-4 text-yellow-400 drop-shadow-md" />
+                             <SmallLockIcon className="w-3 h-3 md:w-4 md:h-4 text-yellow-400 drop-shadow-md" />
                          </div>
                     )}
                 </>
@@ -128,7 +129,6 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
         
         const handleGlobalMouseUp = () => {
             if (draggingIndex !== null) {
-                // Dropped outside a valid slot - cancel drag
                 setDraggingIndex(null);
             }
         };
@@ -143,9 +143,8 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
 
 
     const handleSlotMouseDown = (e: React.MouseEvent, index: number) => {
-        if (isLockMode) return; // No dragging in lock mode
+        if (isLockMode) return; 
         if (characterData.inventory[index]) {
-            // Prevent default interaction if needed, usually good for preventing text selection
             e.preventDefault(); 
             setDraggingIndex(index);
             setMousePos({ x: e.clientX, y: e.clientY });
@@ -155,7 +154,7 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
     const handleSlotMouseUp = (e: React.MouseEvent, targetIndex: number) => {
         if (isLockMode) return;
         if (draggingIndex !== null) {
-            e.stopPropagation(); // Prevent global mouse up from firing
+            e.stopPropagation();
             onInventoryMove(draggingIndex, targetIndex);
             setDraggingIndex(null);
         }
@@ -165,36 +164,37 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
     const tooltipContainer = typeof document !== 'undefined' ? document.getElementById('tooltip-root') : null;
 
     return (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto" onClick={toggleInventory}>
-            <div className="bg-gray-800/90 backdrop-blur-md p-6 rounded-xl shadow-2xl border border-gray-700 text-center max-w-2xl w-full flex space-x-6" onClick={e => e.stopPropagation()}>
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-[60]" onClick={toggleInventory}>
+            <div 
+                className="bg-gray-800/90 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-gray-700 text-center w-[95%] md:max-w-2xl flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-6 max-h-[90dvh] overflow-y-auto" 
+                onClick={e => e.stopPropagation()}
+            >
                 {/* Equipment */}
-                <div className="flex-shrink-0">
-                    <h2 className="text-2xl font-bold text-white mb-4">Equipment</h2>
-                    <div className="space-y-3">
-                        {Object.values(ItemSlot).map(slot => (
-                            <ItemSlotComponent 
-                                key={slot}
-                                item={characterData.equipment[slot]}
-                                onClick={() => !isLockMode && onItemUnequip(slot)}
-                                slotType={slot}
-                            />
-                        ))}
-                    </div>
+                <div className="flex-shrink-0 flex flex-row md:flex-col justify-center gap-2 md:gap-3 border-b md:border-b-0 md:border-r border-gray-600 pb-4 md:pb-0 md:pr-4">
+                    <h2 className="hidden md:block text-2xl font-bold text-white mb-4">Gear</h2>
+                    {Object.values(ItemSlot).map(slot => (
+                        <ItemSlotComponent 
+                            key={slot}
+                            item={characterData.equipment[slot]}
+                            onClick={() => !isLockMode && onItemUnequip(slot)}
+                            slotType={slot}
+                        />
+                    ))}
                 </div>
 
                 {/* Inventory */}
                 <div className="flex-grow">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-2xl font-bold text-white">Inventory ({characterData.inventory.filter(i => i).length}/{characterData.inventory.length})</h2>
+                    <div className="flex justify-between items-center mb-2 md:mb-4">
+                        <h2 className="text-lg md:text-2xl font-bold text-white">Inventory</h2>
                         <button 
                             onClick={() => setLockMode(!isLockMode)}
-                            className={`px-3 py-1 rounded text-sm font-bold transition-colors flex items-center gap-2 ${isLockMode ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                            className={`px-2 py-1 md:px-3 rounded text-xs md:text-sm font-bold transition-colors flex items-center gap-1 md:gap-2 ${isLockMode ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                         >
-                            <SmallLockIcon className="w-4 h-4" />
-                            {isLockMode ? 'Save Locks' : 'Lock Items'}
+                            <SmallLockIcon className="w-3 h-3 md:w-4 md:h-4" />
+                            {isLockMode ? 'Save' : 'Lock'}
                         </button>
                     </div>
-                    <div className="grid grid-cols-5 gap-3 max-h-[60vh] overflow-y-auto pr-2 select-none">
+                    <div className="grid grid-cols-5 gap-2 md:gap-3 overflow-y-auto pr-2 select-none h-[300px] md:h-[400px]">
                         {characterData.inventory.map((item, index) => (
                             <ItemSlotComponent 
                                 key={index}
@@ -212,8 +212,8 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
                             />
                         ))}
                     </div>
-                    <div className="mt-4 text-gray-400 text-sm">
-                        {isLockMode ? 'Click items to lock/unlock them. Locked items cannot be sold.' : 'Drag to move. Click to equip/unequip.'}
+                    <div className="mt-2 text-gray-400 text-xs md:text-sm">
+                        {isLockMode ? 'Tap to lock/unlock.' : 'Drag to move. Tap to equip.'}
                     </div>
                 </div>
             </div>
@@ -231,11 +231,6 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
                 >
                     <div className={`w-16 h-16 border-2 rounded-md flex items-center justify-center shadow-2xl bg-gray-900/80 ${getRarityClasses(draggedItem.rarity).border}`}>
                         <ItemIcon item={draggedItem} className="w-10 h-10 text-white" />
-                        {draggedItem.quantity && draggedItem.quantity > 1 && (
-                             <div className="absolute top-0 right-0 bg-gray-900/80 text-white text-xs font-bold px-1.5 py-0.5 rounded-bl-md rounded-tr-md">
-                                {draggedItem.quantity}
-                            </div>
-                        )}
                     </div>
                 </div>,
                 tooltipContainer
