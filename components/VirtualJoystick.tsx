@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Vector2D } from '../game/types';
 
 interface VirtualJoystickProps {
@@ -10,14 +10,12 @@ const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const [active, setActive] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
-    const [origin, setOrigin] = useState({ x: 0, y: 0 }); // Where the touch started relative to center
     
     // Configuration
     const maxRadius = 40; 
 
-    const handleTouchStart = (e: React.TouchEvent) => {
+    const handleTouchStart = () => {
         setActive(true);
-        // We don't set origin here because we want the stick to snap to finger relative to center of the pad
     };
 
     const handleTouchMove = (e: React.TouchEvent) => {
