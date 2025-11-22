@@ -231,10 +231,10 @@ export class Player extends Character {
             this.lastRegenTime = now;
             const regenStats = this.getFinalStats(game.isOnlineMode); 
             
-            // Safe Zone Regeneration Buff (3x)
+            // Safe Zone Regeneration Buff (5x + 10)
             let regenAmount = regenStats.healthRegen;
             if (this.isInSafeZone) {
-                regenAmount *= 3;
+                regenAmount = (regenAmount * 5) + 10;
             }
 
             if (this.health < regenStats.maxHealth && !this.isDead && regenAmount > 0) {
