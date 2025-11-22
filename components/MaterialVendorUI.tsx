@@ -23,6 +23,7 @@ const MaterialVendorUI: React.FC<MaterialVendorUIProps> = ({ characterData, onBu
         if (multiplier === 1) setMultiplier(5);
         else if (multiplier === 5) setMultiplier(10);
         else if (multiplier === 10) setMultiplier(100);
+        else if (multiplier === 100) setMultiplier(1000);
         else setMultiplier(1);
     };
 
