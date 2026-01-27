@@ -1,13 +1,13 @@
 
-import React, { useState } from 'react';
-import { CharacterData, CharacterClass, Difficulty } from '../game/types';
+import React from 'react';
+import { CharacterData, CharacterClass } from '../game/types';
 import { WarriorIcon, MageIcon, ArcherIcon } from './icons';
 import { GoogleUser } from '../services/auth';
 
 interface CharacterSelectScreenProps {
   user: GoogleUser;
   characters: CharacterData[];
-  onSelectCharacter: (character: CharacterData, difficulty?: Difficulty) => void;
+  onSelectCharacter: (character: CharacterData) => void;
   onCreateNew: () => void;
   onDeleteCharacter: (characterId: string) => void;
   onLogout: () => void;

@@ -6,7 +6,7 @@ import SkillBar from './SkillBar';
 import { Enemy } from '../game/entities/Enemy';
 import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
-import { GAME_CONFIG, BOSS_CONFIG } from '../game/constants';
+import { GAME_CONFIG } from '../game/constants';
 import { getDistance } from '../game/math';
 import { CharacterClass, StatusEffect } from '../game/types';
 
@@ -17,7 +17,6 @@ interface HUDProps {
   waypoints: Waypoint[];
   onUseSkill: (index: number) => void;
   toggleInventory: () => void;
-  isInventoryOpen: boolean;
   otherPlayers: any[];
   isSaving?: boolean;
 }
@@ -63,7 +62,7 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, isInventoryOpen, otherPlayers, isSaving }) => {
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, otherPlayers, isSaving }) => {
   if (!player) return null;
   const xpToNext = player.getXpToNextLevel();
   const xpPercentage = xpToNext !== Infinity ? (player.xp / xpToNext) * 100 : 100;
