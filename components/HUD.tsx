@@ -15,7 +15,6 @@ interface HUDProps {
   enemies: Enemy[];
   npcs: NPC[];
   waypoints: Waypoint[];
-  nearbyNPC: NPC | null;
   onUseSkill: (index: number) => void;
   toggleInventory: () => void;
   isInventoryOpen: boolean;
@@ -94,17 +93,19 @@ const BossHealthBar: React.FC<{ boss: Enemy }> = ({ boss }) => {
 };
 
 const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[]; party: Party | null; otherPlayers: any[] }> = ({ player, enemies, npcs, waypoints, party, otherPlayers }) => {
-    // Standardize sizing. Using aspect-square ensures it matches world dimension ratios.
-    // 112px on small screens (w-28), 176px on medium+ (w-44).
-    // We calculate scale based on the actual world dimensions.
-    const worldSize = Math.max(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
+    // Standardize sizing using a perfect square to match World dimensions.
+    const worldWidth = GAME_CONFIG.WORLD_WIDTH;
+    const worldHeight = GAME_CONFIG.WORLD_HEIGHT;
     
     return (
-        <div className="w-28 h-28 md:w-44 md:h-44 bg-gray-900/90 backdrop-blur-md rounded-xl shadow-2xl border-2 border-gray-700/50 overflow-hidden relative group aspect-square">
-            {/* Inner Scale Layer: This ensures that 0,0 to WORLD_SIZE, WORLD_SIZE fits exactly */}
-            <div className="absolute inset-0 w-full h-full">
-                {/* Visual Grid/Background */}
-                <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:10px_10px]"></div>
+        <div className="w-32 h-32 md:w-48 md:h-48 bg-gray-950 rounded-xl shadow-2xl border-2 border-gray-700/80 overflow-hidden relative group aspect-square flex items-center justify-center">
+            {/* Inner Scale Layer: Absolute boundaries for the 18000x18000 world */}
+            <div className="relative w-full h-full bg-gray-900/50">
+                {/* World Border Visual: Shows the actual playable bounds */}
+                <div className="absolute inset-0 border border-white/5 pointer-events-none"></div>
+                
+                {/* Visual Grid */}
+                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:12px_12px]"></div>
                 
                 {/* Waypoints */}
                 {waypoints.map(wp => {
@@ -114,8 +115,8 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
                             key={wp.data.id} 
                             className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full z-10 ${isDiscovered ? 'bg-cyan-400 w-1.5 h-1.5 md:w-2 md:h-2' : 'bg-gray-600/40 w-1 h-1 md:w-1.5 md:h-1.5'}`} 
                             style={{ 
-                                left: `${(wp.data.position.x / worldSize) * 100}%`, 
-                                top: `${(wp.data.position.y / worldSize) * 100}%` 
+                                left: `${(wp.data.position.x / worldWidth) * 100}%`, 
+                                top: `${(wp.data.position.y / worldHeight) * 100}%` 
                             }}
                         ></div>
                     );
@@ -129,8 +130,8 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
                             key={idx} 
                             className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full z-10 ${isPartyMember ? 'bg-green-400 w-1.5 h-1.5' : 'bg-white w-1 h-1'}`} 
                             style={{ 
-                                left: `${(op.position.x / worldSize) * 100}%`, 
-                                top: `${(op.position.y / worldSize) * 100}%` 
+                                left: `${(op.position.x / worldWidth) * 100}%`, 
+                                top: `${(op.position.y / worldHeight) * 100}%` 
                             }}
                         ></div>
                     );
@@ -138,14 +139,14 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
 
                 {/* Enemies */}
                 {enemies.map(enemy => {
-                    if (!enemy.isBoss && getDistance(player.position, enemy.position) > 2500) return null;
+                    if (!enemy.isBoss && getDistance(player.position, enemy.position) > 3000) return null;
                     return (
                         <div 
                             key={enemy.id} 
                             className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full z-10 ${enemy.isBoss ? 'bg-red-500 w-2 h-2 md:w-3 md:h-3 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-red-500/50 w-0.5 h-0.5 md:w-1 md:h-1'}`} 
                             style={{ 
-                                left: `${(enemy.position.x / worldSize) * 100}%`, 
-                                top: `${(enemy.position.y / worldSize) * 100}%` 
+                                left: `${(enemy.position.x / worldWidth) * 100}%`, 
+                                top: `${(enemy.position.y / worldHeight) * 100}%` 
                             }}
                         ></div>
                     );
@@ -157,25 +158,25 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
                         key={npc.id} 
                         className="absolute w-1 h-1 md:w-1.5 md:h-1.5 bg-yellow-400 rounded-full -translate-x-1/2 -translate-y-1/2 z-10" 
                         style={{ 
-                            left: `${(npc.position.x / worldSize) * 100}%`, 
-                            top: `${(npc.position.y / worldSize) * 100}%` 
+                            left: `${(npc.position.x / worldWidth) * 100}%`, 
+                            top: `${(npc.position.y / worldHeight) * 100}%` 
                         }}
                     ></div>
                 ))}
 
                 {/* The Player (Draw Last) */}
                 <div 
-                    className="absolute w-2 h-2 md:w-3 md:h-3 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-20 shadow-[0_0_8px_white] ring-2 ring-blue-500/50" 
+                    className="absolute w-2 h-2 md:w-3 md:h-3 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-20 shadow-[0_0_10px_white] ring-2 ring-blue-500/40" 
                     style={{ 
-                        left: `${(player.position.x / worldSize) * 100}%`, 
-                        top: `${(player.position.y / worldSize) * 100}%` 
+                        left: `${(player.position.x / worldWidth) * 100}%`, 
+                        top: `${(player.position.y / worldHeight) * 100}%` 
                     }}
                 ></div>
             </div>
 
-            {/* Label Overlay */}
+            {/* UI Label Overlay */}
             <div className="absolute top-1 left-0 right-0 text-center pointer-events-none z-30">
-                <span className="text-white/20 font-black text-[8px] md:text-[9px] uppercase tracking-[0.2em] select-none">World Monitor</span>
+                <span className="text-white/10 font-black text-[8px] md:text-[9px] uppercase tracking-[0.25em] select-none">Satellite Feed</span>
             </div>
         </div>
     );
@@ -213,7 +214,7 @@ const PartyFrame: React.FC<{ member: Party['members'][0], currentUserId: string,
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, onUseSkill, toggleInventory, isInventoryOpen, party, onOpenParty, onRequestTrade, otherPlayers }) => {
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, isInventoryOpen, party, onOpenParty, onRequestTrade, otherPlayers }) => {
   if (!player) return null;
 
   const xpToNext = player.getXpToNextLevel();
@@ -259,7 +260,7 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
 
       {/* Minimap & Gold - Top Right */}
       <div className="absolute top-2 right-2 md:top-4 md:right-4 flex flex-col items-end gap-2 z-40">
-        <div className="px-3 py-1.5 bg-gray-950/80 backdrop-blur-md rounded-lg shadow-xl border border-white/5 flex items-center gap-2">
+        <div className="px-3 py-1.5 bg-gray-950/90 backdrop-blur-md rounded-lg shadow-xl border border-white/10 flex items-center gap-2">
             <CoinIcon className="w-4 h-4 text-yellow-500" />
             <span className="font-black text-xs md:text-sm text-yellow-400 tabular-nums">{player.gold.toLocaleString()}</span>
         </div>

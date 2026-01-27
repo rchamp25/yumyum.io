@@ -590,7 +590,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, i
         enemies={enemies} 
         npcs={npcs}
         waypoints={waypoints}
-        nearbyNPC={!interactingNPC && !interactingWaypoint ? nearbyNPC : null}
         onUseSkill={handleUseSkill}
         toggleInventory={toggleInventory}
         isInventoryOpen={isInventoryOpen}
