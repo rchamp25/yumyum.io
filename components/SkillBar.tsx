@@ -30,10 +30,8 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
       const remaining = skill.definition.cooldown - timeSinceUsed;
       setCooldown(remaining > 0 ? remaining : 0);
     };
-
     updateCooldown();
     const interval = setInterval(updateCooldown, 50);
-
     return () => clearInterval(interval);
   }, [skill.lastUsed, skill.definition.cooldown, isLocked]);
 
@@ -42,7 +40,6 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
   const isDisabled = isOnCooldown || isLocked;
 
   const handleTouch = (e: React.TouchEvent) => {
-      // Prevent default to avoid double-firing with click, and execute immediately
       e.preventDefault(); 
       if (!isDisabled) onClick();
   };
@@ -52,40 +49,44 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
       onClick={onClick}
       onTouchStart={handleTouch}
       disabled={isDisabled}
-      className="relative w-12 h-12 md:w-14 md:h-14 bg-gray-900 border-2 border-gray-600 rounded-md flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:cursor-not-allowed disabled:opacity-60"
+      className="relative w-12 h-12 md:w-16 md:h-16 bg-gray-950 border-2 border-white/10 rounded-xl flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-teal-400 active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 overflow-hidden shadow-lg"
       aria-label={`Use skill: ${skill.definition.name} (Key ${keybind})`}
     >
-      <Icon className={`w-6 h-6 md:w-8 md:h-8 ${isDisabled ? 'text-gray-500' : 'text-gray-400'}`} />
-      <div className="absolute -top-2 -right-2 bg-gray-900 border border-gray-600 rounded-full w-5 h-5 md:w-6 md:h-6 flex items-center justify-center text-[10px] md:text-xs font-bold text-teal-400">
+      <Icon className={`w-7 h-7 md:w-9 md:h-9 ${isDisabled ? 'text-gray-600' : 'text-teal-400 group-hover:text-teal-300 transition-colors'}`} />
+      
+      <div className="absolute top-0.5 right-1 bg-black/40 text-[8px] md:text-[10px] font-black text-teal-400/60 uppercase select-none">
         {keybind}
       </div>
 
       {isLocked && (
-          <div className="absolute inset-0 bg-black/70 flex items-center justify-center rounded-md">
-              <LockIcon className="w-6 h-6 md:w-8 md:h-8 text-gray-400" />
+          <div className="absolute inset-0 bg-black/80 flex items-center justify-center backdrop-blur-[1px]">
+              <LockIcon className="w-5 h-5 md:w-6 md:h-6 text-gray-500" />
           </div>
       )}
 
       {isOnCooldown && !isLocked && (
         <>
           <div
-            className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-black/60 rounded-b-sm"
+            className="absolute bottom-0 left-0 right-0 bg-teal-500/20"
             style={{ height: `${percentage}%` }}
           ></div>
-          <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-lg md:text-xl drop-shadow-lg">
+          <div className="absolute inset-0 flex items-center justify-center text-white font-black text-base md:text-xl drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
             {Math.ceil(cooldown / 1000)}
           </div>
         </>
       )}
 
-      <div className="absolute bottom-full mb-2 w-48 bg-gray-800 text-white text-xs rounded py-1 px-2 text-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden md:block">
-        <p className="font-bold text-teal-400">{skill.definition.name}</p>
+      <div className="absolute bottom-full mb-3 w-48 bg-gray-900/95 border border-white/10 text-white text-[11px] rounded-lg p-2.5 text-center opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100 pointer-events-none hidden md:block z-[100] shadow-2xl backdrop-blur-md">
+        <p className="font-black text-teal-400 uppercase tracking-widest mb-1">{skill.definition.name}</p>
         {isLocked ? (
-            <p className="text-red-400 font-bold">Unlocks at Level {skill.definition.unlockLevel}</p>
+            <p className="text-red-400 font-bold italic">Requires Level {skill.definition.unlockLevel}</p>
         ) : (
              <>
-                <p className="text-gray-300">{skill.definition.description}</p>
-                <p className="text-gray-500">Cooldown: {skill.definition.cooldown / 1000}s</p>
+                <p className="text-gray-300 leading-tight">{skill.definition.description}</p>
+                <div className="mt-1.5 pt-1.5 border-t border-white/5 flex justify-between text-[9px] font-bold text-gray-500 uppercase tracking-tighter">
+                    <span>Cooldown</span>
+                    <span>{skill.definition.cooldown / 1000}s</span>
+                </div>
             </>
         )}
       </div>
@@ -97,8 +98,8 @@ const SkillBar: React.FC<SkillBarProps> = ({ player, onUseSkill }) => {
   if (!player.skills) return null;
 
   return (
-    <div className="absolute bottom-24 left-1/2 -translate-x-1/2 pointer-events-auto z-50 md:bottom-4">
-      <div className="flex space-x-2 md:space-x-3 bg-gray-800/80 backdrop-blur-sm p-2 md:p-3 rounded-lg shadow-2xl border border-gray-700">
+    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-auto z-50 md:bottom-8">
+      <div className="flex gap-2 md:gap-3 bg-gray-900/60 backdrop-blur-xl p-2.5 md:p-3 rounded-2xl shadow-[0_15px_35px_rgba(0,0,0,0.5)] border border-white/10">
         {player.skills.map((skill, index) => (
           <SkillSlot 
             key={index} 

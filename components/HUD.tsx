@@ -22,7 +22,7 @@ interface HUDProps {
   party: Party | null;
   onOpenParty: () => void;
   onRequestTrade: (targetId: string) => void;
-  otherPlayers: any[]; // New prop for multiplayer
+  otherPlayers: any[];
 }
 
 const StatusEffectIcon: React.FC<{ effect: StatusEffect }> = ({ effect }) => {
@@ -50,7 +50,7 @@ const StatusEffectIcon: React.FC<{ effect: StatusEffect }> = ({ effect }) => {
         <div className={`relative w-8 h-8 md:w-10 md:h-10 bg-gray-900/90 rounded-md border-2 ${colorClass} flex items-center justify-center shadow-lg group pointer-events-auto`}>
             <div className="text-lg md:text-xl drop-shadow-md">{icon}</div>
             <div className="absolute inset-0 bg-current opacity-10 origin-bottom pointer-events-none" style={{ transform: `scaleY(${pct/100})` }}></div>
-            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 border border-gray-700 text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+            <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-black/90 border border-gray-700 text-white text-[10px] md:text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                 {name} ({Math.ceil(remaining/1000)}s)
             </div>
         </div>
@@ -60,12 +60,12 @@ const StatusEffectIcon: React.FC<{ effect: StatusEffect }> = ({ effect }) => {
 const StatBar: React.FC<{ value: number; maxValue: number; color: string; label: string }> = ({ value, maxValue, color, label }) => {
   const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
   return (
-    <div className="w-full bg-black/50 rounded-full h-4 md:h-6 border-2 border-gray-700 relative overflow-hidden">
+    <div className="w-full bg-black/50 rounded-full h-3 md:h-5 border border-gray-700/50 relative overflow-hidden">
       <div
-        className="h-full rounded-full transition-all duration-300 ease-in-out"
+        className="h-full transition-all duration-300 ease-in-out shadow-[0_0_10px_rgba(255,255,255,0.1)_inset]"
         style={{ width: `${percentage}%`, backgroundColor: color }}
       ></div>
-      <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-xs md:text-sm drop-shadow-md">
+      <div className="absolute inset-0 flex items-center justify-center text-white font-black text-[9px] md:text-[11px] drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)] uppercase tracking-tighter">
         {label}: {Math.round(value)} / {Math.round(maxValue)}
       </div>
     </div>
@@ -76,101 +76,107 @@ const BossHealthBar: React.FC<{ boss: Enemy }> = ({ boss }) => {
     const percent = Math.max(0, Math.min(100, (boss.health / boss.maxHealth) * 100));
     
     return (
-        <div className="w-[200px] md:w-[280px] mb-2 animate-fade-in pointer-events-none">
-            <div className="flex justify-between items-end mb-0.5 px-1">
-                <span className="text-purple-200 font-bold text-xs md:text-sm drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] tracking-wide uppercase flex items-center">
-                    <span className="text-base md:text-lg mr-1">☠️</span> {boss.name}
+        <div className="w-[200px] md:w-[320px] mb-2 animate-in slide-in-from-top duration-500 pointer-events-none">
+            <div className="flex justify-between items-end mb-1 px-1">
+                <span className="text-red-200 font-black text-[10px] md:text-xs drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] tracking-widest uppercase flex items-center">
+                    <span className="animate-pulse mr-1">💀</span> {boss.name}
                 </span>
-                <span className="text-purple-300 font-bold text-xs drop-shadow-md">{percent.toFixed(1)}%</span>
+                <span className="text-red-400 font-black text-[10px] drop-shadow-md">{percent.toFixed(0)}%</span>
             </div>
-            <div className="h-3 md:h-5 bg-gray-900/90 border border-purple-500/50 rounded-md relative overflow-hidden shadow-[0_0_10px_rgba(147,51,234,0.2)]">
-                <div className="absolute inset-0 bg-purple-900/20 animate-pulse"></div>
+            <div className="h-3 md:h-4 bg-gray-950 border border-red-500/30 rounded-full relative overflow-hidden shadow-[0_0_15px_rgba(239,68,68,0.2)]">
                 <div 
-                    className="h-full bg-gradient-to-r from-purple-900 via-purple-600 to-fuchsia-500 transition-all duration-300 ease-out relative"
+                    className="h-full bg-gradient-to-r from-red-900 via-red-600 to-orange-500 transition-all duration-500 ease-out"
                     style={{ width: `${percent}%` }}
-                >
-                    <div className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent"></div>
-                </div>
-                <div className="absolute inset-0 flex items-center justify-center text-[8px] md:text-[10px] font-bold text-white drop-shadow-md tracking-widest">
-                    {Math.ceil(boss.health).toLocaleString()} / {Math.ceil(boss.maxHealth).toLocaleString()}
-                </div>
+                ></div>
             </div>
         </div>
     );
 };
 
 const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[]; party: Party | null; otherPlayers: any[] }> = ({ player, enemies, npcs, waypoints, party, otherPlayers }) => {
-    const mapSize = 150; // Smaller on mobile default, scale with CSS
-    const scale = mapSize / Math.max(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
-
-    const playerX = player.position.x * scale;
-    const playerY = player.position.y * scale;
-
+    // Standardize sizing. Using aspect-square ensures it matches world dimension ratios.
+    // 112px on small screens (w-28), 176px on medium+ (w-44).
+    // We calculate scale based on the actual world dimensions.
+    const worldSize = Math.max(GAME_CONFIG.WORLD_WIDTH, GAME_CONFIG.WORLD_HEIGHT);
+    
     return (
-        <div className="w-[120px] h-[120px] md:w-[200px] md:h-[200px] bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-lg border-2 border-gray-700 overflow-hidden relative">
-            <div className="absolute top-1 left-0 right-0 text-center pointer-events-none z-0">
-                <span className="text-white/20 font-black text-xs md:text-lg uppercase tracking-[0.2em] drop-shadow-sm select-none">The Rat</span>
-            </div>
-
-            {waypoints.map(wp => {
-                 const isDiscovered = player.discoveredWaypoints.includes(wp.data.id);
-                 
-                 return (
-                     <div 
-                        key={wp.data.id}
-                        className="absolute z-10 flex flex-col items-center justify-center -translate-x-1/2 -translate-y-1/2"
-                        style={{ left: `${wp.data.position.x * scale}px`, top: `${wp.data.position.y * scale}px` }}
-                    >
-                        <div className={`w-1 md:w-1.5 h-1 md:h-1.5 rounded-full ${isDiscovered ? 'bg-cyan-400 shadow-[0_0_4px_#22d3ee]' : 'bg-gray-600'}`}></div>
-                    </div>
-                 );
-            })}
-
-            {/* Player Dot */}
-            <div 
-                className="absolute w-1.5 h-1.5 md:w-2 md:h-2 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-20 shadow-[0_0_5px_white]"
-                style={{ left: `${playerX}px`, top: `${playerY}px` }}
-            ></div>
-
-            {/* Other Players */}
-            {otherPlayers.map((op, idx) => {
-                const isPartyMember = party?.members.some(m => m.id === op.characterData.id);
-                const color = isPartyMember ? '#4ade80' : '#ffffff';
-                const size = isPartyMember ? 'w-1.5 h-1.5' : 'w-1 h-1';
+        <div className="w-28 h-28 md:w-44 md:h-44 bg-gray-900/90 backdrop-blur-md rounded-xl shadow-2xl border-2 border-gray-700/50 overflow-hidden relative group aspect-square">
+            {/* Inner Scale Layer: This ensures that 0,0 to WORLD_SIZE, WORLD_SIZE fits exactly */}
+            <div className="absolute inset-0 w-full h-full">
+                {/* Visual Grid/Background */}
+                <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:10px_10px]"></div>
                 
-                return (
-                    <div
-                        key={idx}
-                        className={`absolute ${size} rounded-full -translate-x-1/2 -translate-y-1/2 z-10`}
+                {/* Waypoints */}
+                {waypoints.map(wp => {
+                    const isDiscovered = player.discoveredWaypoints.includes(wp.data.id);
+                    return (
+                        <div 
+                            key={wp.data.id} 
+                            className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full z-10 ${isDiscovered ? 'bg-cyan-400 w-1.5 h-1.5 md:w-2 md:h-2' : 'bg-gray-600/40 w-1 h-1 md:w-1.5 md:h-1.5'}`} 
+                            style={{ 
+                                left: `${(wp.data.position.x / worldSize) * 100}%`, 
+                                top: `${(wp.data.position.y / worldSize) * 100}%` 
+                            }}
+                        ></div>
+                    );
+                })}
+
+                {/* Other Players */}
+                {otherPlayers.map((op, idx) => {
+                    const isPartyMember = party?.members.some(m => m.id === op.characterData.id);
+                    return (
+                        <div 
+                            key={idx} 
+                            className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full z-10 ${isPartyMember ? 'bg-green-400 w-1.5 h-1.5' : 'bg-white w-1 h-1'}`} 
+                            style={{ 
+                                left: `${(op.position.x / worldSize) * 100}%`, 
+                                top: `${(op.position.y / worldSize) * 100}%` 
+                            }}
+                        ></div>
+                    );
+                })}
+
+                {/* Enemies */}
+                {enemies.map(enemy => {
+                    if (!enemy.isBoss && getDistance(player.position, enemy.position) > 2500) return null;
+                    return (
+                        <div 
+                            key={enemy.id} 
+                            className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full z-10 ${enemy.isBoss ? 'bg-red-500 w-2 h-2 md:w-3 md:h-3 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-red-500/50 w-0.5 h-0.5 md:w-1 md:h-1'}`} 
+                            style={{ 
+                                left: `${(enemy.position.x / worldSize) * 100}%`, 
+                                top: `${(enemy.position.y / worldSize) * 100}%` 
+                            }}
+                        ></div>
+                    );
+                })}
+
+                {/* NPCs */}
+                {npcs.map(npc => (
+                    <div 
+                        key={npc.id} 
+                        className="absolute w-1 h-1 md:w-1.5 md:h-1.5 bg-yellow-400 rounded-full -translate-x-1/2 -translate-y-1/2 z-10" 
                         style={{ 
-                            left: `${op.position.x * scale}px`, 
-                            top: `${op.position.y * scale}px`,
-                            backgroundColor: color
+                            left: `${(npc.position.x / worldSize) * 100}%`, 
+                            top: `${(npc.position.y / worldSize) * 100}%` 
                         }}
                     ></div>
-                );
-            })}
+                ))}
 
-            {/* Enemies */}
-            {enemies.map(enemy => {
-                 if (!enemy.isBoss && getDistance(player.position, enemy.position) > 3000) return null;
-                 
-                 return (
-                     <div 
-                        key={enemy.id}
-                        className={`absolute rounded-full -translate-x-1/2 -translate-y-1/2 z-10 ${enemy.isBoss ? 'w-2 h-2 md:w-3 md:h-3 bg-purple-500 animate-pulse' : 'w-1 h-1 bg-red-500'}`}
-                        style={{ left: `${enemy.position.x * scale}px`, top: `${enemy.position.y * scale}px` }}
-                    ></div>
-                 );
-            })}
-             {/* NPC Dots */}
-             {npcs.map(npc => (
-                 <div 
-                    key={npc.id}
-                    className="absolute w-1.5 h-1.5 bg-yellow-400 rounded-full -translate-x-1/2 -translate-y-1/2 z-10"
-                    style={{ left: `${npc.position.x * scale}px`, top: `${npc.position.y * scale}px` }}
+                {/* The Player (Draw Last) */}
+                <div 
+                    className="absolute w-2 h-2 md:w-3 md:h-3 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 z-20 shadow-[0_0_8px_white] ring-2 ring-blue-500/50" 
+                    style={{ 
+                        left: `${(player.position.x / worldSize) * 100}%`, 
+                        top: `${(player.position.y / worldSize) * 100}%` 
+                    }}
                 ></div>
-            ))}
+            </div>
+
+            {/* Label Overlay */}
+            <div className="absolute top-1 left-0 right-0 text-center pointer-events-none z-30">
+                <span className="text-white/20 font-black text-[8px] md:text-[9px] uppercase tracking-[0.2em] select-none">World Monitor</span>
+            </div>
         </div>
     );
 };
@@ -179,36 +185,28 @@ const PartyFrame: React.FC<{ member: Party['members'][0], currentUserId: string,
     if (member.id === currentUserId) return null;
 
     const classColors = {
-        [CharacterClass.Warrior]: 'text-red-400 border-red-500',
-        [CharacterClass.Mage]: 'text-blue-400 border-blue-500',
-        [CharacterClass.Archer]: 'text-green-400 border-green-500',
+        [CharacterClass.Warrior]: 'border-red-500',
+        [CharacterClass.Mage]: 'border-blue-500',
+        [CharacterClass.Archer]: 'border-green-500',
     };
     
-    const colorClass = classColors[member.characterClass] || 'text-gray-400 border-gray-500';
+    const colorClass = classColors[member.characterClass] || 'border-gray-500';
     const healthPct = (member.health / member.maxHealth) * 100;
     const isOnline = member.isOnline !== false;
 
     return (
-        <div className={`bg-gray-900/80 backdrop-blur-sm border-l-4 p-1 md:p-2 rounded mb-1 md:mb-2 w-32 md:w-48 pointer-events-auto group relative ${isOnline ? colorClass.split(' ')[1] : 'border-gray-600 opacity-70'}`}>
-             <div className="flex justify-between items-center">
-                 <div className="flex flex-col">
-                     <span className={`font-bold text-xs md:text-sm truncate ${isOnline ? colorClass.split(' ')[0] : 'text-gray-500'}`}>{member.name}</span>
-                     {!isOnline && <span className="text-[8px] text-red-400 font-bold uppercase tracking-wide">(Off)</span>}
-                 </div>
-                 <span className="text-[10px] md:text-xs text-gray-400">Lv {member.level}</span>
+        <div className={`bg-gray-900/60 backdrop-blur-sm border-l-4 p-1 md:p-1.5 rounded-r-lg mb-1 w-24 md:w-36 pointer-events-auto group relative ${isOnline ? colorClass : 'border-gray-700 opacity-50'}`}>
+             <div className="flex justify-between items-center overflow-hidden">
+                 <span className={`font-black text-[9px] md:text-[11px] truncate uppercase tracking-tighter ${isOnline ? 'text-white' : 'text-gray-500'}`}>{member.name}</span>
+                 <span className="text-[8px] md:text-[10px] text-gray-500">Lv {member.level}</span>
              </div>
-             <div className="w-full bg-gray-800 h-1.5 md:h-2 mt-1 rounded-full overflow-hidden">
-                 <div className={`h-full transition-all duration-300 ${isOnline ? 'bg-green-500' : 'bg-gray-600'}`} style={{ width: `${healthPct}%`}}></div>
+             <div className="w-full bg-black/40 h-1 md:h-1.5 mt-0.5 rounded-full overflow-hidden">
+                 <div className={`h-full transition-all duration-300 ${isOnline ? 'bg-red-500' : 'bg-gray-700'}`} style={{ width: `${healthPct}%`}}></div>
              </div>
              
              {isOnline && (
-                 <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded">
-                     <button 
-                        onClick={() => onRequestTrade(member.id)}
-                        className="bg-yellow-600 hover:bg-yellow-500 text-white text-[10px] font-bold px-2 py-1 rounded"
-                     >
-                        Trade
-                     </button>
+                 <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-r-lg">
+                     <button onClick={() => onRequestTrade(member.id)} className="bg-yellow-600 hover:bg-yellow-500 text-white text-[8px] md:text-[10px] font-black px-2 py-0.5 rounded uppercase">Trade</button>
                  </div>
              )}
         </div>
@@ -227,90 +225,64 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, nearbyNPC, 
   });
 
   return (
-    <div className="absolute inset-0 pointer-events-none text-white">
+    <div className="absolute inset-0 pointer-events-none select-none">
       {/* Boss Health Bars */}
       {activeBosses.length > 0 && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 flex flex-col items-center z-50">
-              {activeBosses.map(boss => (
-                  <BossHealthBar key={boss.id} boss={boss} />
-              ))}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center z-50">
+              {activeBosses.map(boss => <BossHealthBar key={boss.id} boss={boss} />)}
           </div>
       )}
 
       {/* Player Info - Top Left */}
-      <div className="absolute top-2 left-2 md:top-4 md:left-4 w-56 md:w-72 p-2 md:p-3 bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-lg border border-gray-700 z-40">
-        <div className="flex items-center mb-1 md:mb-2">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-green-500 rounded-full flex items-center justify-center text-lg md:text-xl font-bold border-2 border-gray-600 mr-2 md:mr-3">
+      <div className="absolute top-2 left-2 md:top-4 md:left-4 w-48 md:w-64 p-2 md:p-2.5 bg-gray-950/80 backdrop-blur-xl rounded-xl shadow-2xl border border-white/5 z-40">
+        <div className="flex items-center mb-1.5">
+            <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center text-sm md:text-base font-black text-white border border-white/20 mr-2 shadow-lg">
                 {player.level}
             </div>
             <div className="overflow-hidden">
-                <h2 className="text-base md:text-lg font-bold truncate">{player.name}</h2>
-                <p className="text-xs md:text-sm text-gray-400">{player.characterClass !== undefined ? ['Warrior', 'Mage', 'Archer'][player.characterClass] : 'Adventurer'}</p>
+                <h2 className="text-sm md:text-base font-black text-white truncate leading-none mb-0.5">{player.name}</h2>
+                <p className="text-[10px] md:text-xs text-teal-400/80 uppercase font-bold tracking-widest">{player.characterClass !== undefined ? ['Warrior', 'Mage', 'Archer'][player.characterClass] : 'Adventurer'}</p>
             </div>
         </div>
-        <StatBar value={player.health} maxValue={player.maxHealth} color="#dc2626" label="HP" />
-        <div className="w-full bg-black/50 rounded-full h-2 md:h-3 mt-1 md:mt-2 border border-gray-700 relative overflow-hidden">
-            <div className="absolute inset-0 text-white text-[8px] md:text-[10px] flex items-center justify-center font-bold">{Math.round(player.xp)} / {xpToNext !== Infinity ? xpToNext : 'MAX'}</div>
-            <div className="h-full bg-purple-500 rounded-full" style={{ width: `${xpPercentage}%`}}></div>
+        <StatBar value={player.health} maxValue={player.maxHealth} color="#ef4444" label="HEALTH" />
+        <div className="w-full bg-black/50 rounded-full h-1.5 md:h-2 mt-1.5 border border-white/5 relative overflow-hidden">
+            <div className="h-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)]" style={{ width: `${xpPercentage}%`}}></div>
         </div>
       </div>
       
-      {/* Party Frames - Below Player Info */}
+      {/* Party Frames */}
       {party && (
-          <div className="absolute top-28 md:top-40 left-2 md:left-4 z-40 flex flex-col">
-              {party.members.map(m => (
-                  <PartyFrame key={m.id} member={m} currentUserId={player.id as string} onRequestTrade={onRequestTrade} />
-              ))}
+          <div className="absolute top-28 md:top-36 left-2 md:left-4 z-40 flex flex-col items-start">
+              {party.members.map(m => <PartyFrame key={m.id} member={m} currentUserId={player.id as string} onRequestTrade={onRequestTrade} />)}
           </div>
       )}
 
       {/* Minimap & Gold - Top Right */}
-      <div className="absolute top-2 right-2 md:top-4 md:right-4 flex flex-col items-end space-y-2 z-40">
-        <div className="p-2 md:p-3 bg-gray-900/80 backdrop-blur-sm rounded-lg shadow-lg border border-gray-700 flex flex-col items-end space-y-1 md:space-y-2">
-            <div className="flex items-center">
-              <span className="font-bold text-sm md:text-lg">{player.gold.toLocaleString()}</span>
-              <CoinIcon className="w-4 h-4 md:w-6 md:h-6 ml-1 md:ml-2 text-yellow-400" />
-            </div>
-            <div className="hidden md:block text-sm text-gray-300">
-              Dmg: <span className="font-bold">{player.damage}</span>
-            </div>
+      <div className="absolute top-2 right-2 md:top-4 md:right-4 flex flex-col items-end gap-2 z-40">
+        <div className="px-3 py-1.5 bg-gray-950/80 backdrop-blur-md rounded-lg shadow-xl border border-white/5 flex items-center gap-2">
+            <CoinIcon className="w-4 h-4 text-yellow-500" />
+            <span className="font-black text-xs md:text-sm text-yellow-400 tabular-nums">{player.gold.toLocaleString()}</span>
         </div>
         <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} party={party} otherPlayers={otherPlayers} />
       </div>
-
-      {/* Interaction Prompt - Center */}
-      {nearbyNPC && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-24 bg-gray-900/80 backdrop-blur-sm p-2 md:p-3 rounded-lg shadow-lg border border-gray-700 z-30">
-            <p className="font-bold text-sm md:text-lg">Press [E] to talk to {nearbyNPC.name}</p>
-        </div>
-      )}
       
-      {/* Status Effects List - Centered above Skill Bar (Shifted up for mobile) */}
-      <div className="absolute bottom-40 md:bottom-24 left-1/2 -translate-x-1/2 flex items-end justify-center space-x-1 md:space-x-2 z-40 pointer-events-none">
-        {player.statusEffects.map((effect) => (
-            <StatusEffectIcon key={`${effect.type}_${effect.startTime}`} effect={effect} />
-        ))}
+      {/* Status Effects - Centered above skills */}
+      <div className="absolute bottom-40 md:bottom-28 left-1/2 -translate-x-1/2 flex items-center justify-center gap-1.5 z-40">
+        {player.statusEffects.map((effect) => <StatusEffectIcon key={`${effect.type}_${effect.startTime}`} effect={effect} />)}
       </div>
       
-      {/* Skill Bar */}
       {player.skills && <SkillBar player={player} onUseSkill={onUseSkill} />}
 
-      {/* Buttons (Stacked on Bottom Right for Mobile to clear Joystick area) */}
+      {/* Utility Buttons */}
        <div className="absolute bottom-4 right-4 flex flex-col gap-2 z-40 items-end pointer-events-auto">
-           <button 
-              onClick={onOpenParty}
-              className="bg-gray-800/80 backdrop-blur-sm p-2 md:p-3 rounded-lg shadow-lg border border-gray-700 hover:bg-gray-700/80 transition-colors flex items-center justify-center w-12 h-12 md:w-auto md:h-auto"
-           >
-              <span className="text-xl md:mr-2">👥</span>
-              <span className="font-bold hidden md:inline">Party</span>
+           <button onClick={onOpenParty} className="bg-gray-900/80 backdrop-blur-md p-2.5 md:p-3 rounded-xl shadow-lg border border-white/10 hover:bg-gray-800 transition-all group active:scale-95 flex items-center justify-center">
+              <span className="text-xl md:text-2xl group-hover:scale-110 transition-transform">👥</span>
+              <span className="font-black text-[10px] md:text-xs text-white/60 ml-2 hidden md:inline uppercase tracking-widest">Party</span>
            </button>
 
-           <button 
-              onClick={toggleInventory}
-              className="bg-gray-800/80 backdrop-blur-sm p-2 md:p-3 rounded-lg shadow-lg border border-gray-700 hover:bg-gray-700/80 transition-colors w-12 h-12 md:w-auto md:h-auto flex items-center justify-center"
-           >
-              <span className="text-xl md:hidden">🎒</span>
-              <span className="font-bold hidden md:inline">Inventory ({isInventoryOpen ? 'C' : 'I'})</span>
+           <button onClick={toggleInventory} className="bg-gray-900/80 backdrop-blur-md p-2.5 md:p-3 rounded-xl shadow-lg border border-white/10 hover:bg-gray-800 transition-all group active:scale-95 flex items-center justify-center">
+              <span className="text-xl md:text-2xl group-hover:scale-110 transition-transform">🎒</span>
+              <span className="font-black text-[10px] md:text-xs text-white/60 ml-2 hidden md:inline uppercase tracking-widest">Inv ({isInventoryOpen ? 'C' : 'I'})</span>
            </button>
        </div>
     </div>
