@@ -442,6 +442,49 @@ export class Player extends Character {
         return goldGained;
     }
 
+    // New methods for Bank interaction
+    moveItemToBank(inventoryIndex: number) {
+        const item = this.inventory[inventoryIndex];
+        if (!item) return;
+
+        // Handle stacking for materials in bank
+        if (item.type === 'Material') {
+            const existingInBank = this.bank.find(i => i && i.id === item.id);
+            if (existingInBank && existingInBank.quantity) {
+                existingInBank.quantity += (item.quantity || 1);
+                this.inventory[inventoryIndex] = null;
+                return;
+            }
+        }
+
+        const emptyBankIndex = this.bank.findIndex(slot => slot === null);
+        if (emptyBankIndex !== -1) {
+            this.bank[emptyBankIndex] = item;
+            this.inventory[inventoryIndex] = null;
+        }
+    }
+
+    moveItemFromBank(bankIndex: number) {
+        const item = this.bank[bankIndex];
+        if (!item) return;
+
+        if (this.pickupItem(item)) {
+            this.bank[bankIndex] = null;
+        }
+    }
+
+    depositGold(amount: number) {
+        const toDeposit = Math.min(amount, this.gold);
+        this.gold -= toDeposit;
+        this.bankGold += toDeposit;
+    }
+
+    withdrawGold(amount: number) {
+        const toWithdraw = Math.min(amount, this.bankGold);
+        this.bankGold -= toWithdraw;
+        this.gold += toWithdraw;
+    }
+
     discoverWaypoint(waypointId: string): boolean {
         if (!this.discoveredWaypoints.includes(waypointId)) {
             this.discoveredWaypoints.push(waypointId);

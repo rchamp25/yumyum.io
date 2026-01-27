@@ -22,12 +22,10 @@ const App: React.FC = () => {
     const [deathStats, setDeathStats] = useState<GameStats | null>(null);
     const [loading, setLoading] = useState(true);
     
-    // Initialize Dev Mode from Local Storage
     const [isDevMode, setDevModeState] = useState<boolean>(() => {
         return localStorage.getItem('yumyum_is_dev') === 'true';
     });
     
-    const [isOnlineMode, setOnlineMode] = useState(false);
     const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>(Difficulty.Normal);
 
     const setDevMode = (value: boolean) => {
@@ -35,7 +33,6 @@ const App: React.FC = () => {
         localStorage.setItem('yumyum_is_dev', String(value));
     };
 
-    // Load characters function
     const refreshCharacters = async (uid: string) => {
         setLoading(true);
         const chars = await storageService.getCharacters(uid);
@@ -61,7 +58,6 @@ const App: React.FC = () => {
     const handleLogin = async (email: string) => {
         setLoading(true);
         try {
-            // Google Auth redirects away, so we won't reach the next lines usually
             await authService.signInWithGoogle(email);
         } catch (error) {
             console.error("Login failed:", error);
@@ -81,13 +77,10 @@ const App: React.FC = () => {
 
         let finalCharacterData = character;
 
-        // Dev Mode Logic - Only apply if NOT checking online mode integrity logic (simplified for now)
         if (isDevMode && !character.hasClaimedDevRewards) {
             const devCharacter = JSON.parse(JSON.stringify(character)) as CharacterData;
-            
             devCharacter.level = GAME_CONFIG.MAX_LEVEL;
             devCharacter.gold = 10000000;
-            devCharacter.xp = 0;
             devCharacter.discoveredWaypoints = WAYPOINTS.map(wp => wp.id);
 
             const maxRarity = Math.max(...ALL_EQUIPMENT.map(i => i.rarity));
@@ -97,26 +90,20 @@ const App: React.FC = () => {
             const materialItems: Item[] = [];
             allMaterials.forEach(mat => {
                 materialItems.push({ ...mat, quantity: 999 });
-                materialItems.push({ ...mat, quantity: 999 });
             });
             
             const devItems = [...topTierEquipment, ...materialItems];
-            const inventorySize = Math.max(GAME_CONFIG.DEFAULT_INVENTORY_SIZE, devItems.length + 5);
-            devCharacter.inventory = Array(inventorySize).fill(null);
+            devCharacter.inventory = Array(Math.max(GAME_CONFIG.DEFAULT_INVENTORY_SIZE, devItems.length + 5)).fill(null);
 
             for (let i = 0; i < devItems.length; i++) {
-                const item = devItems[i];
-                devCharacter.inventory[i] = { ...item };
+                devCharacter.inventory[i] = { ...devItems[i] };
             }
 
             devCharacter.hasClaimedDevRewards = true;
-            
             if (user) {
-                // Async save
                 await storageService.saveCharacter(user.uid, devCharacter);
                 await refreshCharacters(user.uid);
             }
-
             finalCharacterData = devCharacter;
         }
 
@@ -134,7 +121,6 @@ const App: React.FC = () => {
             const newChar = await storageService.createCharacter(user.uid, name, characterClass);
             if (newChar) {
                 await refreshCharacters(user.uid);
-                // Select with default difficulty
                 handleSelectCharacter(newChar);
             } else {
                 setLoading(false);
@@ -144,7 +130,7 @@ const App: React.FC = () => {
     };
 
     const handleDeleteCharacter = async (characterId: string) => {
-        if (user && window.confirm("Are you sure you want to delete this character? This cannot be undone.")) {
+        if (user && window.confirm("Are you sure you want to delete this character?")) {
             setLoading(true);
             await storageService.deleteCharacter(user.uid, characterId);
             await refreshCharacters(user.uid);
@@ -152,14 +138,10 @@ const App: React.FC = () => {
     };
 
     const handleDeath = async (stats: GameStats, finalCharacterData: CharacterData) => {
-        // 1. Immediate State Update: Crucial to prevent progress loss.
-        // We update currentCharacter immediately so any subsequent logic (like respawn) 
-        // uses the inventory/xp state exactly as it was at death.
         setCurrentCharacter(finalCharacterData);
         setDeathStats(stats);
         setGameState('dead');
 
-        // 2. Async Persistence: Save to DB in background
         if (user) {
             try {
                 await storageService.saveCharacter(user.uid, finalCharacterData);
@@ -172,7 +154,6 @@ const App: React.FC = () => {
     
     const handleReturnToSelect = async (finalCharacterData: CharacterData) => {
         if (user) {
-            // Optimistic update
             setLoading(true);
             await storageService.saveCharacter(user.uid, finalCharacterData);
             await refreshCharacters(user.uid);
@@ -188,34 +169,21 @@ const App: React.FC = () => {
 
     const handleRespawnInGame = async () => {
         if (!currentCharacter || !user) return;
-
         const playerToRespawn = new Player(currentCharacter);
         playerToRespawn.respawn();
-        
-        // If in insane mode, re-apply nerfs to the fresh player instance
-        if (isOnlineMode && selectedDifficulty === Difficulty.Insane) {
-             playerToRespawn.applyInsaneModeNerfs();
-        }
-
         const respawnedCharacterData = playerToRespawn.toCharacterData();
-
         await storageService.saveCharacter(user.uid, respawnedCharacterData);
         await refreshCharacters(user.uid);
-        
         setCurrentCharacter(respawnedCharacterData);
         setDeathStats(null);
         setGameState('in_game');
     };
 
     const renderContent = () => {
-        if (loading) {
-            return <div className="text-white text-2xl animate-pulse">Loading data...</div>;
-        }
+        if (loading) return <div className="text-white text-2xl animate-pulse">Loading adventure...</div>;
         switch (gameState) {
-            case 'login':
-                return <LoginScreen onLogin={handleLogin} />;
-            case 'char_select':
-                return user && <CharacterSelectScreen 
+            case 'login': return <LoginScreen onLogin={handleLogin} />;
+            case 'char_select': return user && <CharacterSelectScreen 
                                     user={user}
                                     characters={characters} 
                                     onSelectCharacter={handleSelectCharacter}
@@ -224,38 +192,28 @@ const App: React.FC = () => {
                                     onLogout={handleLogout}
                                     isDevMode={isDevMode}
                                     onSetDevMode={setDevMode}
-                                    isOnlineMode={isOnlineMode}
-                                    onSetOnlineMode={setOnlineMode}
                                 />;
-            case 'char_create':
-                return <CharacterCreationScreen 
+            case 'char_create': return <CharacterCreationScreen 
                             onCreate={handleCreateCharacter} 
                             onCancel={() => setGameState('char_select')} 
                         />;
-            case 'in_game':
-                return currentCharacter && user && <Game 
+            case 'in_game': return currentCharacter && user && <Game 
                                                 characterData={currentCharacter} 
                                                 onDeath={handleDeath}
                                                 onReturnToSelect={handleReturnToSelect}
                                                 isDevMode={isDevMode}
-                                                isOnlineMode={isOnlineMode}
+                                                isOnlineMode={false}
                                                 userId={user.uid}
                                                 difficulty={selectedDifficulty}
                                             />;
-            case 'dead':
-                return <DeathScreen 
-                            stats={deathStats} 
-                            onReturnToMenu={handleReturnToMenu} 
-                            onRespawnInGame={handleRespawnInGame}
-                        />;
-            default:
-                return <LoginScreen onLogin={handleLogin} />;
+            case 'dead': return <DeathScreen stats={deathStats} onReturnToMenu={handleReturnToMenu} onRespawnInGame={handleRespawnInGame} />;
+            default: return <LoginScreen onLogin={handleLogin} />;
         }
     };
 
     return (
-        <div className="w-[100dvw] h-[100dvh] bg-gray-900 text-white flex items-center justify-center font-sans overflow-hidden relative">
-            <div className="absolute inset-0 bg-[url('/background.png')] bg-cover bg-center opacity-20"></div>
+        <div className="w-[100dvw] h-[100dvh] bg-gray-950 text-white flex items-center justify-center font-sans overflow-hidden relative">
+            <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-black opacity-50"></div>
             {renderContent()}
         </div>
     );
