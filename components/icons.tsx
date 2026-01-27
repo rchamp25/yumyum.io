@@ -29,6 +29,15 @@ export const ArcherIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+export const BackpackIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 20V10c0-2.2 1.8-4 4-4h0c2.2 0 4 1.8 4 4v10" />
+        <rect x="6" y="10" width="12" height="10" rx="2" />
+        <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+        <path d="M6 14h12" />
+    </svg>
+);
+
 // Generic Icons
 export const SwordIcon: React.FC<{ className?: string }> = ({ className }) => <WarriorIcon className={className} />;
 export const VestIcon: React.FC<{ className?: string }> = ({ className }) => (

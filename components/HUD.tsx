@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Player } from '../game/entities/Player';
-import { CoinIcon } from './icons';
+import { CoinIcon, BackpackIcon } from './icons';
 import SkillBar from './SkillBar';
 import { Enemy } from '../game/entities/Enemy';
 import { NPC } from '../game/entities/NPC';
@@ -17,6 +17,7 @@ interface HUDProps {
   waypoints: Waypoint[];
   onUseSkill: (index: number) => void;
   toggleInventory: () => void;
+  isInventoryOpen: boolean;
   otherPlayers: any[];
   isSaving?: boolean;
 }
@@ -62,7 +63,7 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, otherPlayers, isSaving }) => {
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, isInventoryOpen, otherPlayers, isSaving }) => {
   if (!player) return null;
   const xpToNext = player.getXpToNextLevel();
   const xpPercentage = xpToNext !== Infinity ? (player.xp / xpToNext) * 100 : 100;
@@ -99,7 +100,9 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill,
 
       {/* Action Tray */}
        <div className="absolute bottom-6 right-6 flex flex-col gap-3 items-end pointer-events-auto">
-           <button onClick={toggleInventory} className="bg-teal-600 hover:bg-teal-500 text-white w-16 h-16 rounded-2xl shadow-xl border border-white/20 transition-all active:scale-90 flex items-center justify-center text-2xl">🎒</button>
+           <button onClick={toggleInventory} className="bg-teal-600 hover:bg-teal-500 text-white w-16 h-16 rounded-2xl shadow-xl border border-white/20 transition-all active:scale-90 flex items-center justify-center">
+               <BackpackIcon className="w-8 h-8" />
+           </button>
        </div>
     </div>
   );
