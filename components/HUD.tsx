@@ -55,7 +55,7 @@ const StatsWindow: React.FC<{ player: Player }> = ({ player }) => {
     ];
 
     return (
-        <div className="w-48 bg-gray-900/80 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-2xl mt-4 animate-fade-in">
+        <div className="w-48 bg-gray-900/80 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-2xl mt-4 animate-fade-in pointer-events-auto">
             <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Hero Statistics</h3>
             <div className="space-y-2">
                 {statItems.map((stat, i) => (

@@ -87,7 +87,7 @@ const Game: React.FC<GameProps> = ({
   const addGroundEffect = useCallback((ge: GroundEffect) => entitiesRef.current.groundEffects.push(ge), []);
 
   const playSound = useCallback((_type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => {
-    // Basic oscillator sounds placeholder
+    // Placeholder for audio manager
   }, []);
 
   const isVisible = (pos: Vector2D, radius: number = 0, buffer: number = 250) => {
@@ -104,17 +104,17 @@ const Game: React.FC<GameProps> = ({
         let packCenter = { x: 0, y: 0 };
         let validPosition = false;
 
-        while(!validPosition && attempts < 20) {
+        while(!validPosition && attempts < 25) {
             attempts++;
             const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 400) + 200;
             const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 400) + 200;
             const testPos = { x: randX, y: randY };
             
-            if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 200) continue;
+            if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 300) continue;
             
             let inBossZone = false;
             for (const zone of BOSS_ZONES) {
-                if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS + 100) {
+                if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS + 150) {
                     inBossZone = true;
                     break;
                 }
@@ -136,7 +136,7 @@ const Game: React.FC<GameProps> = ({
         const pack: Enemy[] = [];
         const packSize = Math.floor(Math.random() * 3) + 3;
         for(let i=0; i<packSize; i++) {
-            const offset = { x: (Math.random()-0.5)*120, y: (Math.random()-0.5)*120 };
+            const offset = { x: (Math.random()-0.5)*150, y: (Math.random()-0.5)*150 };
             pack.push(new Enemy({ x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, undefined, `local_${Date.now()}_${Math.random()}`, typeId));
         }
         return pack;
@@ -183,23 +183,26 @@ const Game: React.FC<GameProps> = ({
 
   useEffect(() => { initializeGame(characterData); }, [characterData, initializeGame]);
 
+  // STABLE LOGIC REF: Use this to prevent spawning from breaking when component re-renders
   const gameLoop = useCallback(() => {
     const curPlayer = playerRef.current;
     if (!curPlayer || curPlayer.isDead) return;
     
     const eRef = entitiesRef.current;
 
+    // Local Spawning
     localSpawnTimerRef.current++;
     if (localSpawnTimerRef.current > 60) {
          if (eRef.enemies.length < GAME_CONFIG.MAX_ENEMIES) {
              const newPack = generateEnemyPack(curPlayer.currentWorldId);
-             eRef.enemies.push(...newPack);
+             if (newPack.length > 0) eRef.enemies.push(...newPack);
          }
          localSpawnTimerRef.current = 0;
     }
 
+    // Auto-save logic
     autoSaveTimerRef.current++;
-    if (autoSaveTimerRef.current > 1800) {
+    if (autoSaveTimerRef.current > 3600) { // Every ~1 minute
         triggerCloudSave();
         autoSaveTimerRef.current = 0;
     }
@@ -212,6 +215,7 @@ const Game: React.FC<GameProps> = ({
 
     curPlayer.update(pressedKeys, gameContext, joystickVectorRef.current);
     
+    // Check NPC range for interactions
     renderEntities.waypoints.forEach(wp => {
         if (getDistance(curPlayer.position, wp.data.position) < wp.unlockRadius) {
             if (curPlayer.discoverWaypoint(wp.data.id)) {
@@ -221,6 +225,7 @@ const Game: React.FC<GameProps> = ({
         }
     });
 
+    // Update Entity logic
     eRef.enemies.forEach(e => e.update(gameContext));
     eRef.projectiles.forEach(p => p.update());
     eRef.floatingTexts.forEach(ft => ft.update());
@@ -228,6 +233,7 @@ const Game: React.FC<GameProps> = ({
     eRef.groundEffects.forEach(ge => ge.update(eRef.enemies, gameContext));
     eRef.droppedItems.forEach(di => di.update(curPlayer));
 
+    // Collision checks
     eRef.projectiles.forEach(p => {
         if (p.ownerId === curPlayer.id) { 
             for (const enemy of eRef.enemies) {
@@ -239,6 +245,7 @@ const Game: React.FC<GameProps> = ({
         }
     });
 
+    // Enemy Death & Loot
     eRef.enemies.forEach(enemy => {
         if (enemy.health <= 0 && !enemy.isDead) {
             enemy.isDead = true;
@@ -253,6 +260,7 @@ const Game: React.FC<GameProps> = ({
         }
     });
 
+    // Loot Collection
     eRef.droppedItems = eRef.droppedItems.filter(di => {
         if(getDistance(di.position, curPlayer.position) < curPlayer.radius + 30) {
             if (curPlayer.pickupItem(di.item)) {
@@ -263,12 +271,14 @@ const Game: React.FC<GameProps> = ({
         return true;
     });
 
+    // Cleanup expired
     eRef.enemies = eRef.enemies.filter(e => !e.isDead || (Date.now() - e.hitFlashTimer < 100));
     eRef.projectiles = eRef.projectiles.filter(p => !p.isExpired());
     eRef.floatingTexts = eRef.floatingTexts.filter(ft => !ft.isExpired());
     eRef.visualEffects = eRef.visualEffects.filter(ve => !ve.isExpired());
     eRef.groundEffects = eRef.groundEffects.filter(ge => !ge.isExpired());
 
+    // Health check
     if (curPlayer.health <= 0) {
         onDeath({
             killerName: curPlayer.lastDamagedBy || 'Wild Monster',
@@ -281,8 +291,10 @@ const Game: React.FC<GameProps> = ({
         return;
     }
 
+    // Sync render entities
     setRenderEntities(prev => ({ ...prev, enemies: [...eRef.enemies] }));
 
+    // Camera follow
     const canvas = canvasRef.current;
     if (canvas) {
         const targetX = curPlayer.position.x - canvas.width / 2;
@@ -291,7 +303,9 @@ const Game: React.FC<GameProps> = ({
     }
   }, [addFloatingText, addProjectile, addVisualEffect, addGroundEffect, generateEnemyPack, onDeath, playSound, triggerCloudSave, pressedKeys, renderEntities.waypoints, isOnlineMode]);
 
-  useGameLoop(gameLoop);
+  const logicRef = useRef(gameLoop);
+  useEffect(() => { logicRef.current = gameLoop; }, [gameLoop]);
+  useGameLoop(() => logicRef.current());
   
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!canvasRef.current) return;
