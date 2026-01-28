@@ -22,17 +22,14 @@ export function generateLoot(
     const baseItemFind = playerItemFind || 0;
     
     // Scale Item Find: 0% -> 2x Base, 600% -> Same Total as before (0.35 multiplier target)
-    // Old formula: Base * (1 + IF). New formula: (2 * Base) * (1 + (IF * scaling))
-    // At IF=6 (600%), we want the final multiplier to match old total efficiency.
-    // Scaling factor derived as 2.5/6
     const itemFindScaling = 2.5 / 6.0;
     const itemFindMultiplier = 1 + (baseItemFind * itemFindScaling);
     
     const rarityBonus = enemyLevel * LOOT_CONFIG.LEVEL_RARITY_BONUS;
     
     // Drop materials
-    // Base chance uses constant (0.40)
-    const matDropChance = (LOOT_CONFIG.MATERIAL_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
+    // Base chance increased for local yumyum feel
+    const matDropChance = (0.50 + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
     
     const onlineMultiplier = (isOnline && isBoss) ? ONLINE_BOSS_CONFIG.DROP_COUNT_MULTIPLIER : 1;
 
@@ -64,21 +61,16 @@ export function generateLoot(
                     material = MATERIALS_DB['mat_com'];
                 }
                 
-                if (material) {
-                    drops.push({ ...material, quantity: 1 });
-                }
+                if (material) drops.push({ ...material, quantity: 1 });
             }
     }
 
     // Boss Specific Mythic Drop
     if (isBoss) {
-            const mythicChance = 0.01 * itemFindMultiplier; // 1% base chance scaled by item find
-            
-            // Determine how many checks to run based on contribution
+            const mythicChance = 0.01 * itemFindMultiplier; 
             const mythicChecks = onlineMultiplier * quantityScale;
             const guaranteedChecks = Math.floor(mythicChecks);
             const remainderProb = mythicChecks - guaranteedChecks;
-            
             const totalChecks = guaranteedChecks + (Math.random() < remainderProb ? 1 : 0);
 
             for(let m=0; m<totalChecks; m++) {
@@ -95,26 +87,20 @@ export function generateLoot(
     let dropLoopCount = isBoss ? (BOSS_CONFIG.BOSS_DROP_BONUS + 1) : 1;
     dropLoopCount *= onlineMultiplier;
     
-    // Scale equipment drops by contribution
     const scaledLoopCount = dropLoopCount * quantityScale;
     const finalLoopCount = Math.floor(scaledLoopCount) + (Math.random() < (scaledLoopCount % 1) ? 1 : 0);
 
-    // Base drop rate uses constant (0.10)
-    const baseDropRate = LOOT_CONFIG.EQUIPMENT_DROP_RATE;
+    // Boosted base rate
+    const baseDropRate = 0.15; 
 
     for(let i=0; i<finalLoopCount; i++) {
         const equipDropChance = (baseDropRate + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
-        
-        // Only force drop for BOSSES or High Contribution Online kills (1st roll). Standard solo mobs rely on RNG.
         const forceDrop = isBoss || (isOnline && quantityScale >= 0.1 && i === 0);
-        
         const shouldDrop = forceDrop || Math.random() < equipDropChance;
 
         if (shouldDrop) {
             const item = getRandomItemWithGating(enemyLevel, itemFindMultiplier);
-            if (item) {
-                drops.push(item);
-            }
+            if (item) drops.push(item);
         }
     }
 

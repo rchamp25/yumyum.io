@@ -19,6 +19,7 @@ interface HUDProps {
   toggleInventory: () => void;
   otherPlayers: any[];
   isSaving?: boolean;
+  isStatsOpen: boolean;
 }
 
 const StatusEffectIcon: React.FC<{ effect: StatusEffect }> = ({ effect }) => {
@@ -43,6 +44,32 @@ const StatBar: React.FC<{ value: number; maxValue: number; color: string; label:
   );
 };
 
+const StatsWindow: React.FC<{ player: Player }> = ({ player }) => {
+    const stats = player.getFinalStats();
+    const statItems = [
+        { label: 'Damage', value: Math.round(stats.damage), color: 'text-red-400' },
+        { label: 'H-Regen', value: stats.healthRegen.toFixed(1) + '/s', color: 'text-green-400' },
+        { label: 'Speed', value: stats.speed.toFixed(1), color: 'text-blue-400' },
+        { label: 'Item Find', value: Math.round(stats.itemFind * 100) + '%', color: 'text-yellow-400' },
+        { label: 'Boss Dmg', value: '+' + Math.round((stats.bossDamageMultiplier - 1) * 100) + '%', color: 'text-purple-400' },
+    ];
+
+    return (
+        <div className="w-48 bg-gray-900/80 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-2xl mt-4 animate-fade-in">
+            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Hero Statistics</h3>
+            <div className="space-y-2">
+                {statItems.map((stat, i) => (
+                    <div key={i} className="flex justify-between items-center text-[11px]">
+                        <span className="text-gray-400 font-bold uppercase">{stat.label}</span>
+                        <span className={`${stat.color} font-black tabular-nums`}>{stat.value}</span>
+                    </div>
+                ))}
+            </div>
+            <p className="text-[8px] text-gray-600 mt-4 text-center uppercase font-bold tracking-tighter">Press 'C' to toggle</p>
+        </div>
+    );
+};
+
 const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[]; otherPlayers: any[] }> = ({ player, enemies, npcs, waypoints }) => {
     const worldSize = GAME_CONFIG.WORLD_WIDTH;
     return (
@@ -62,7 +89,7 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, otherPlayers, isSaving }) => {
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, otherPlayers, isSaving, isStatsOpen }) => {
   if (!player) return null;
   const xpToNext = player.getXpToNextLevel();
   const xpPercentage = xpToNext !== Infinity ? (player.xp / xpToNext) * 100 : 100;
@@ -86,12 +113,13 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill,
       </div>
       
       {/* Map & Gold */}
-      <div className="absolute top-6 right-6 flex flex-col items-end gap-4">
-        <div className="px-5 py-2.5 bg-gray-900/80 backdrop-blur-md rounded-xl shadow-xl border border-white/10 flex items-center gap-3">
+      <div className="absolute top-6 right-6 flex flex-col items-end">
+        <div className="px-5 py-2.5 bg-gray-900/80 backdrop-blur-md rounded-xl shadow-xl border border-white/10 flex items-center gap-3 mb-4">
             <CoinIcon className="w-5 h-5 text-yellow-500" />
             <span className="font-black text-lg text-yellow-400 tabular-nums">{player.gold.toLocaleString()}</span>
         </div>
         <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} otherPlayers={otherPlayers} />
+        {isStatsOpen && <StatsWindow player={player} />}
       </div>
       
       <div className="absolute bottom-36 left-1/2 -translate-x-1/2 flex gap-2">{player.statusEffects.map((e, i) => <StatusEffectIcon key={i} effect={e} />)}</div>
