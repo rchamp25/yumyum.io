@@ -10,8 +10,6 @@ import { GroundEffect } from '../game/entities/GroundEffect';
 import { DroppedItem } from '../game/entities/DroppedItem';
 import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
-import useGameLoop from '../hooks/useGameLoop';
-import useKeyboardInput from '../hooks/useKeyboardInput';
 import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES } from '../game/constants';
 import { CRAFTING_RECIPES } from '../game/items';
 import { getDistance } from '../game/math';
@@ -41,107 +39,39 @@ const Game: React.FC<GameProps> = ({
   difficulty 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const localSpawnTimerRef = useRef(0);
-  const autoSaveTimerRef = useRef(0);
   
-  const [player, setPlayer] = useState<Player | null>(null);
+  // --- MASTER ENGINE REFS ---
+  // These refs hold the entire game state to prevent logic resets during React renders
   const playerRef = useRef<Player | null>(null);
-  useEffect(() => { playerRef.current = player; }, [player]);
-
-  const entitiesRef = useRef<{
-      enemies: Enemy[];
-      projectiles: Projectile[];
-      floatingTexts: FloatingText[];
-      visualEffects: VisualEffect[];
-      groundEffects: GroundEffect[];
-      droppedItems: DroppedItem[];
-  }>({
-      enemies: [],
-      projectiles: [],
-      floatingTexts: [],
-      visualEffects: [],
-      groundEffects: [],
-      droppedItems: [],
-  });
-
-  const [renderEntities, setRenderEntities] = useState({
+  const entitiesRef = useRef({
       enemies: [] as Enemy[],
+      projectiles: [] as Projectile[],
+      floatingTexts: [] as FloatingText[],
+      visualEffects: [] as VisualEffect[],
+      groundEffects: [] as GroundEffect[],
+      droppedItems: [] as DroppedItem[],
       npcs: [] as NPC[],
-      waypoints: [] as Waypoint[],
+      waypoints: [] as Waypoint[]
   });
+  const engineTimers = useRef({
+      spawn: 0,
+      save: 0,
+      frame: 0
+  });
+  const cameraRef = useRef({ x: 0, y: 0 });
+  const pressedKeysRef = useRef<Set<string>>(new Set());
+  const joystickVectorRef = useRef<Vector2D>({ x: 0, y: 0 });
 
-  const [camera, setCamera] = useState({ x: 0, y: 0 });
+  // --- REACT UI STATE ---
   const [isInventoryOpen, setInventoryOpen] = useState(false);
   const [isStatsOpen, setStatsOpen] = useState(true);
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
   const [hoveredEnemy, setHoveredEnemy] = useState<Enemy | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{x: number, y: number}>({ x: 0, y: 0 });
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [isSaving, setIsSaving] = useState(false);
+  const [tick, setTick] = useState(0); // Used to force UI updates only
 
-  const joystickVectorRef = useRef<Vector2D>({ x: 0, y: 0 });
-  const pressedKeys = useKeyboardInput();
-
-  const addProjectile = useCallback((p: Projectile) => entitiesRef.current.projectiles.push(p), []);
-  const addFloatingText = useCallback((ft: FloatingText) => entitiesRef.current.floatingTexts.push(ft), []);
-  const addVisualEffect = useCallback((ve: VisualEffect) => entitiesRef.current.visualEffects.push(ve), []);
-  const addGroundEffect = useCallback((ge: GroundEffect) => entitiesRef.current.groundEffects.push(ge), []);
-
-  const playSound = useCallback((_type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => {
-    // Placeholder for audio manager
-  }, []);
-
-  const isVisible = (pos: Vector2D, radius: number = 0, buffer: number = 250) => {
-      const cvsWidth = window.innerWidth;
-      const cvsHeight = window.innerHeight;
-      return pos.x + radius + buffer > camera.x &&
-             pos.x - radius - buffer < camera.x + cvsWidth &&
-             pos.y + radius + buffer > camera.y &&
-             pos.y - radius - buffer < camera.y + cvsHeight;
-  };
-
-  const generateEnemyPack = useCallback((worldId: string): Enemy[] => {
-        let attempts = 0;
-        let packCenter = { x: 0, y: 0 };
-        let validPosition = false;
-
-        while(!validPosition && attempts < 25) {
-            attempts++;
-            const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 400) + 200;
-            const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 400) + 200;
-            const testPos = { x: randX, y: randY };
-            
-            if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 300) continue;
-            
-            let inBossZone = false;
-            for (const zone of BOSS_ZONES) {
-                if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS + 150) {
-                    inBossZone = true;
-                    break;
-                }
-            }
-            if (!inBossZone) { packCenter = testPos; validPosition = true; }
-        }
-        if (!validPosition) return [];
-
-        let level = 1;
-        const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
-        const safeZone = GAME_CONFIG.SAFE_ZONE_RADIUS;
-        const maxDist = Math.max(GAME_CONFIG.WORLD_WIDTH/2, GAME_CONFIG.WORLD_HEIGHT/2) - 100;
-        const progress = Math.max(0, (distFromCenter - safeZone) / (maxDist - safeZone));
-        level = Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1));
-        level = Math.min(GAME_CONFIG.MAX_LEVEL, Math.max(1, level));
-
-        const typeKeys = worldId === WORLD_IDS.WORLD_2 ? Object.keys(GROVE_ENEMIES) : Object.keys(ENEMY_TYPES);
-        const typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
-        const pack: Enemy[] = [];
-        const packSize = Math.floor(Math.random() * 3) + 3;
-        for(let i=0; i<packSize; i++) {
-            const offset = { x: (Math.random()-0.5)*150, y: (Math.random()-0.5)*150 };
-            pack.push(new Enemy({ x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, undefined, `local_${Date.now()}_${Math.random()}`, typeId));
-        }
-        return pack;
-  }, []);
-
+  // Helper for triggering cloud saves
   const triggerCloudSave = useCallback(async () => {
     if (!playerRef.current || isSaving) return;
     setIsSaving(true);
@@ -153,276 +83,356 @@ const Game: React.FC<GameProps> = ({
     }
   }, [userId, isSaving]);
 
-  const initializeGame = useCallback((updatedCharData: CharacterData) => {
-      const newPlayer = new Player(updatedCharData);
-      if (difficulty === Difficulty.Insane) newPlayer.applyInsaneModeNerfs();
-      newPlayer.setInvulnerable(3000);
-      setPlayer(newPlayer);
-      setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
-      
-      const cx = GAME_CONFIG.WORLD_WIDTH / 2;
-      const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
-      
-      setRenderEntities({
-          enemies: [],
-          npcs: [
+  // Enemy generation logic
+  const generateEnemyPack = (worldId: string): Enemy[] => {
+    let attempts = 0;
+    let packCenter = { x: 0, y: 0 };
+    let validPosition = false;
+
+    while(!validPosition && attempts < 30) {
+        attempts++;
+        const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 600) + 300;
+        const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 600) + 300;
+        const testPos = { x: randX, y: randY };
+        
+        if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 400) continue;
+        
+        let inBossZone = false;
+        for (const zone of BOSS_ZONES) {
+            if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS + 200) {
+                inBossZone = true;
+                break;
+            }
+        }
+        if (!inBossZone) { packCenter = testPos; validPosition = true; }
+    }
+    if (!validPosition) return [];
+
+    let level = 1;
+    const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
+    const progress = Math.max(0, (distFromCenter - GAME_CONFIG.SAFE_ZONE_RADIUS) / (GAME_CONFIG.WORLD_WIDTH/2 - GAME_CONFIG.SAFE_ZONE_RADIUS));
+    level = Math.min(GAME_CONFIG.MAX_LEVEL, Math.max(1, Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1))));
+
+    const typeKeys = worldId === WORLD_IDS.WORLD_2 ? Object.keys(GROVE_ENEMIES) : Object.keys(ENEMY_TYPES);
+    const typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+    const pack: Enemy[] = [];
+    const packSize = Math.floor(Math.random() * 3) + 3;
+    for(let i=0; i<packSize; i++) {
+        const offset = { x: (Math.random()-0.5)*180, y: (Math.random()-0.5)*180 };
+        pack.push(new Enemy({ x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, undefined, `mob_${Date.now()}_${Math.random()}`, typeId));
+    }
+    return pack;
+  };
+
+  // --- INITIALIZATION ---
+  useEffect(() => {
+    const newPlayer = new Player(characterData);
+    if (difficulty === Difficulty.Insane) newPlayer.applyInsaneModeNerfs();
+    newPlayer.setInvulnerable(3000);
+    playerRef.current = newPlayer;
+    cameraRef.current = { x: newPlayer.position.x, y: newPlayer.position.y };
+
+    const cx = GAME_CONFIG.WORLD_WIDTH / 2;
+    const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
+
+    entitiesRef.current = {
+        enemies: [],
+        projectiles: [],
+        floatingTexts: [],
+        visualEffects: [],
+        groundEffects: [],
+        droppedItems: [],
+        npcs: [
             new NPC({ x: cx + 150, y: cy }, 'Thomas', NPCType.Crafter),
             new NPC({ x: cx - 150, y: cy }, 'Trevor', NPCType.Vendor),
             new NPC({ x: cx, y: cy - 150 }, 'Jackson', NPCType.Seller),
             new NPC({ x: cx, y: cy + 150 }, 'Rory', NPCType.WorldTraveler),
             new NPC({ x: cx - 150, y: cy + 150 }, 'Vault Master', NPCType.Banker),
-          ],
-          waypoints: WAYPOINTS.map(data => new Waypoint(data)),
-      });
-      
-      entitiesRef.current = {
-          enemies: [], projectiles: [], floatingTexts: [],
-          visualEffects: [], groundEffects: [], droppedItems: [],
-      };
-  }, [difficulty]);
-
-  useEffect(() => { initializeGame(characterData); }, [characterData, initializeGame]);
-
-  // STABLE LOGIC REF: Use this to prevent spawning from breaking when component re-renders
-  const gameLoop = useCallback(() => {
-    const curPlayer = playerRef.current;
-    if (!curPlayer || curPlayer.isDead) return;
-    
-    const eRef = entitiesRef.current;
-
-    // Local Spawning
-    localSpawnTimerRef.current++;
-    if (localSpawnTimerRef.current > 60) {
-         if (eRef.enemies.length < GAME_CONFIG.MAX_ENEMIES) {
-             const newPack = generateEnemyPack(curPlayer.currentWorldId);
-             if (newPack.length > 0) eRef.enemies.push(...newPack);
-         }
-         localSpawnTimerRef.current = 0;
-    }
-
-    // Auto-save logic
-    autoSaveTimerRef.current++;
-    if (autoSaveTimerRef.current > 3600) { // Every ~1 minute
-        triggerCloudSave();
-        autoSaveTimerRef.current = 0;
-    }
-
-    const gameContext = { 
-        player: curPlayer, enemies: eRef.enemies, 
-        addProjectile, addFloatingText, addVisualEffect, addGroundEffect, 
-        playSound, isOnlineMode 
+        ],
+        waypoints: WAYPOINTS.map(data => new Waypoint(data))
     };
 
-    curPlayer.update(pressedKeys, gameContext, joystickVectorRef.current);
-    
-    // Check NPC range for interactions
-    renderEntities.waypoints.forEach(wp => {
-        if (getDistance(curPlayer.position, wp.data.position) < wp.unlockRadius) {
-            if (curPlayer.discoverWaypoint(wp.data.id)) {
-                 addFloatingText(new FloatingText("Waypoint Unlocked!", { x: curPlayer.position.x, y: curPlayer.position.y - 50 }, '#22d3ee'));
-                 triggerCloudSave();
+    // Force initial mob spawn
+    for (let i = 0; i < 8; i++) {
+        const pack = generateEnemyPack(newPlayer.currentWorldId);
+        entitiesRef.current.enemies.push(...pack);
+    }
+
+    // --- MAIN ENGINE LOOP ---
+    let animationFrameId: number;
+    const loop = () => {
+        const p = playerRef.current;
+        if (!p || p.isDead) return;
+
+        const e = entitiesRef.current;
+        const ctx = {
+            player: p,
+            enemies: e.enemies,
+            addProjectile: (proj: Projectile) => e.projectiles.push(proj),
+            addFloatingText: (ft: FloatingText) => e.floatingTexts.push(ft),
+            addVisualEffect: (ve: VisualEffect) => e.visualEffects.push(ve),
+            addGroundEffect: (ge: GroundEffect) => e.groundEffects.push(ge),
+            playSound: () => {}, // Placeholder
+            isOnlineMode: false
+        };
+
+        // 1. Spawning Logic
+        engineTimers.current.spawn++;
+        if (engineTimers.current.spawn > 120) { // Every 2 seconds
+            if (e.enemies.length < GAME_CONFIG.MAX_ENEMIES) {
+                const pack = generateEnemyPack(p.currentWorldId);
+                e.enemies.push(...pack);
             }
+            engineTimers.current.spawn = 0;
         }
-    });
 
-    // Update Entity logic
-    eRef.enemies.forEach(e => e.update(gameContext));
-    eRef.projectiles.forEach(p => p.update());
-    eRef.floatingTexts.forEach(ft => ft.update());
-    eRef.visualEffects.forEach(ve => ve.update());
-    eRef.groundEffects.forEach(ge => ge.update(eRef.enemies, gameContext));
-    eRef.droppedItems.forEach(di => di.update(curPlayer));
+        // 2. Movement & Physics
+        p.update(pressedKeysRef.current, ctx, joystickVectorRef.current);
+        e.enemies.forEach(mob => mob.update(ctx));
+        e.projectiles.forEach(proj => proj.update());
+        e.droppedItems.forEach(item => item.update(p));
+        e.floatingTexts.forEach(ft => ft.update());
+        e.visualEffects.forEach(ve => ve.update());
+        e.groundEffects.forEach(ge => ge.update(e.enemies, ctx));
 
-    // Collision checks
-    eRef.projectiles.forEach(p => {
-        if (p.ownerId === curPlayer.id) { 
-            for (const enemy of eRef.enemies) {
-                if (!enemy.isDead && getDistance(p.position, enemy.position) < p.radius + enemy.radius) {
-                    p.onHit(enemy, gameContext);
-                    if (!p.piercing && p.bounces <= 0) p.expire();
+        // 3. Collision Logic (Projectiles)
+        e.projectiles.forEach(proj => {
+            if (proj.ownerId === p.id) {
+                for (const mob of e.enemies) {
+                    if (!mob.isDead && getDistance(proj.position, mob.position) < proj.radius + mob.radius) {
+                        proj.onHit(mob, ctx);
+                        if (!proj.piercing && proj.bounces <= 0) proj.expire();
+                    }
                 }
             }
-        }
-    });
+        });
 
-    // Enemy Death & Loot
-    eRef.enemies.forEach(enemy => {
-        if (enemy.health <= 0 && !enemy.isDead) {
-            enemy.isDead = true;
-            if (!enemy.xpGiven) {
-                enemy.xpGiven = true;
-                curPlayer.gainXP(enemy.xpValue, addFloatingText, enemy.level);
-                curPlayer.gainGold(enemy.goldValue, addFloatingText);
-                curPlayer.kills++;
-                const drops = enemy.dropLoot(curPlayer);
-                eRef.droppedItems.push(...drops);
+        // 4. Combat Results & Looting
+        e.enemies.forEach(mob => {
+            if (mob.health <= 0 && !mob.isDead) {
+                mob.isDead = true;
+                if (!mob.xpGiven) {
+                    mob.xpGiven = true;
+                    p.gainXP(mob.xpValue, ctx.addFloatingText, mob.level);
+                    p.gainGold(mob.goldValue, ctx.addFloatingText);
+                    p.kills++;
+                    const drops = mob.dropLoot(p);
+                    e.droppedItems.push(...drops);
+                }
             }
-        }
-    });
+        });
 
-    // Loot Collection
-    eRef.droppedItems = eRef.droppedItems.filter(di => {
-        if(getDistance(di.position, curPlayer.position) < curPlayer.radius + 30) {
-            if (curPlayer.pickupItem(di.item)) {
-                addFloatingText(new FloatingText(`+ ${di.item.name}`, curPlayer.position, '#ffd700'));
-                return false;
+        e.droppedItems = e.droppedItems.filter(item => {
+            if (getDistance(item.position, p.position) < p.radius + 30) {
+                if (p.pickupItem(item.item)) {
+                    ctx.addFloatingText(new FloatingText(`+ ${item.item.name}`, p.position, '#ffd700'));
+                    return false;
+                }
             }
+            return true;
+        });
+
+        // 5. Cleanup
+        e.enemies = e.enemies.filter(mob => !mob.isDead || (Date.now() - mob.hitFlashTimer < 100));
+        e.projectiles = e.projectiles.filter(proj => !proj.isExpired());
+        e.floatingTexts = e.floatingTexts.filter(ft => !ft.isExpired());
+        e.visualEffects = e.visualEffects.filter(ve => !ve.isExpired());
+        e.groundEffects = e.groundEffects.filter(ge => !ge.isExpired());
+
+        // 6. State Check
+        if (p.health <= 0) {
+            onDeath({
+                killerName: p.lastDamagedBy || 'Monster',
+                level: p.level,
+                kills: p.kills,
+                gold: p.gold,
+                totalDamageTaken: p.totalDamageTaken,
+                deathLog: p.deathLog,
+            }, p.toCharacterData());
+            return;
         }
-        return true;
-    });
 
-    // Cleanup expired
-    eRef.enemies = eRef.enemies.filter(e => !e.isDead || (Date.now() - e.hitFlashTimer < 100));
-    eRef.projectiles = eRef.projectiles.filter(p => !p.isExpired());
-    eRef.floatingTexts = eRef.floatingTexts.filter(ft => !ft.isExpired());
-    eRef.visualEffects = eRef.visualEffects.filter(ve => !ve.isExpired());
-    eRef.groundEffects = eRef.groundEffects.filter(ge => !ge.isExpired());
+        // 7. Sync Camera
+        if (canvasRef.current) {
+            const targetX = p.position.x - canvasRef.current.width / 2;
+            const targetY = p.position.y - canvasRef.current.height / 2;
+            cameraRef.current.x += (targetX - cameraRef.current.x) * 0.1;
+            cameraRef.current.y += (targetY - cameraRef.current.y) * 0.1;
+        }
 
-    // Health check
-    if (curPlayer.health <= 0) {
-        onDeath({
-            killerName: curPlayer.lastDamagedBy || 'Wild Monster',
-            level: curPlayer.level,
-            kills: curPlayer.kills,
-            gold: curPlayer.gold,
-            totalDamageTaken: curPlayer.totalDamageTaken,
-            deathLog: curPlayer.deathLog,
-        }, curPlayer.toCharacterData());
-        return;
-    }
+        // 8. Draw Frame
+        const canvas = canvasRef.current;
+        const drawCtx = canvas?.getContext('2d');
+        if (drawCtx && canvas) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const world = WORLD_CONFIGS[p.currentWorldId as keyof typeof WORLD_CONFIGS] || WORLD_CONFIGS[WORLD_IDS.WORLD_1];
+            
+            drawCtx.fillStyle = world.bgColor;
+            drawCtx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            drawCtx.save();
+            drawCtx.translate(-cameraRef.current.x, -cameraRef.current.y);
+            
+            // Grid
+            drawCtx.strokeStyle = world.gridColor; drawCtx.lineWidth = 1;
+            for(let x = 0; x <= GAME_CONFIG.WORLD_WIDTH; x += 150) { drawCtx.beginPath(); drawCtx.moveTo(x, 0); drawCtx.lineTo(x, GAME_CONFIG.WORLD_HEIGHT); drawCtx.stroke(); }
+            for(let y = 0; y <= GAME_CONFIG.WORLD_HEIGHT; y += 150) { drawCtx.beginPath(); drawCtx.moveTo(0, y); drawCtx.lineTo(GAME_CONFIG.WORLD_WIDTH, y); drawCtx.stroke(); }
 
-    // Sync render entities
-    setRenderEntities(prev => ({ ...prev, enemies: [...eRef.enemies] }));
+            // Safe Zone Ring
+            const cx = GAME_CONFIG.WORLD_WIDTH / 2; const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
+            drawCtx.beginPath(); drawCtx.arc(cx, cy, GAME_CONFIG.SAFE_ZONE_RADIUS, 0, Math.PI * 2);
+            drawCtx.strokeStyle = 'rgba(20, 184, 166, 0.4)'; drawCtx.lineWidth = 6; drawCtx.setLineDash([15, 10]); drawCtx.stroke(); drawCtx.setLineDash([]);
+            drawCtx.fillStyle = 'rgba(20, 184, 166, 0.05)'; drawCtx.fill();
 
-    // Camera follow
-    const canvas = canvasRef.current;
-    if (canvas) {
-        const targetX = curPlayer.position.x - canvas.width / 2;
-        const targetY = curPlayer.position.y - canvas.height / 2;
-        setCamera(prev => ({ x: prev.x + (targetX - prev.x) * 0.1, y: prev.y + (targetY - prev.y) * 0.1 }));
-    }
-  }, [addFloatingText, addProjectile, addVisualEffect, addGroundEffect, generateEnemyPack, onDeath, playSound, triggerCloudSave, pressedKeys, renderEntities.waypoints, isOnlineMode]);
+            // Entities
+            e.groundEffects.forEach(ge => ge.draw(drawCtx));
+            e.waypoints.forEach(wp => wp.draw(drawCtx, p.discoveredWaypoints.includes(wp.data.id)));
+            e.droppedItems.forEach(di => di.draw(drawCtx));
+            e.npcs.forEach(npc => npc.draw(drawCtx));
+            e.enemies.forEach(mob => mob.draw(drawCtx));
+            p.draw(drawCtx);
+            e.projectiles.forEach(proj => proj.draw(drawCtx));
+            e.visualEffects.forEach(ve => ve.draw(drawCtx));
+            e.floatingTexts.forEach(ft => ft.draw(drawCtx));
 
-  const logicRef = useRef(gameLoop);
-  useEffect(() => { logicRef.current = gameLoop; }, [gameLoop]);
-  useGameLoop(() => logicRef.current());
-  
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const worldX = (e.clientX - rect.left) + camera.x;
-    const worldY = (e.clientY - rect.top) + camera.y;
-    const target = renderEntities.enemies.find(enemy => !enemy.isDead && getDistance({ x: worldX, y: worldY }, enemy.position) <= enemy.radius + 15);
-    setHoveredEnemy(target || null);
-    setTooltipPos({ x: e.clientX, y: e.clientY });
-  };
+            drawCtx.restore();
+        }
 
-  const saveAndTravel = async (worldId: string) => {
-      const curPlayer = playerRef.current;
-      if (!curPlayer) return;
-      const data = curPlayer.toCharacterData();
-      data.currentWorldId = worldId;
-      data.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
-      await storageService.saveCharacter(userId, data);
-      window.location.reload(); 
-  };
+        // 9. Sync UI (Throttled to 10hz for performance)
+        engineTimers.current.frame++;
+        if (engineTimers.current.frame % 6 === 0) setTick(t => t + 1);
 
+        animationFrameId = requestAnimationFrame(loop);
+    };
+
+    animationFrameId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
+
+  // Interaction Handler
   const handleInteraction = useCallback(() => {
-    const curPlayer = playerRef.current;
-    if (!curPlayer) return;
-    const nearbyNPC = renderEntities.npcs.find(n => getDistance(curPlayer.position, n.position) < n.interactionRadius);
+    const p = playerRef.current;
+    if (!p) return;
+    const nearbyNPC = entitiesRef.current.npcs.find(n => getDistance(p.position, n.position) < n.interactionRadius + 20);
     if (nearbyNPC) setInteractingNPC(nearbyNPC);
-  }, [renderEntities.npcs]);
+  }, []);
 
+  // Keyboard Management
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-        const curPlayer = playerRef.current;
-        const key = e.key.toLowerCase();
+    const handleKeyDown = (ev: KeyboardEvent) => {
+        const key = ev.key.toLowerCase();
+        pressedKeysRef.current.add(key);
         if (key === 'escape') { setInventoryOpen(false); setInteractingNPC(null); }
-        if (key === 'i') setInventoryOpen(p => !p);
-        if (key === 'c') setStatsOpen(p => !p);
+        if (key === 'i') setInventoryOpen(prev => !prev);
+        if (key === 'c') setStatsOpen(prev => !prev);
         if (key === 'e') handleInteraction();
         if (key === 'q') onReturnToSelect(playerRef.current?.toCharacterData() || characterData);
-        if (['1', '2', '3', '4', '5'].includes(key) && curPlayer) {
-            const gameContext = { 
-                player: curPlayer, enemies: entitiesRef.current.enemies, 
-                addProjectile, addFloatingText, addVisualEffect, addGroundEffect, 
-                playSound, isOnlineMode 
+        if (['1', '2', '3', '4', '5'].includes(key) && playerRef.current) {
+            const p = playerRef.current;
+            const e = entitiesRef.current;
+            const ctx = {
+                player: p, enemies: e.enemies,
+                addProjectile: (proj: Projectile) => e.projectiles.push(proj),
+                addFloatingText: (ft: FloatingText) => e.floatingTexts.push(ft),
+                addVisualEffect: (ve: VisualEffect) => e.visualEffects.push(ve),
+                addGroundEffect: (ge: GroundEffect) => e.groundEffects.push(ge),
+                playSound: () => {}, isOnlineMode: false
             };
-            curPlayer.useSkill(parseInt(key) - 1, gameContext);
+            p.useSkill(parseInt(key) - 1, ctx);
         }
     };
+    const handleKeyUp = (ev: KeyboardEvent) => pressedKeysRef.current.delete(ev.key.toLowerCase());
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleInteraction, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode, onReturnToSelect, characterData]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => { window.removeEventListener('keydown', handleKeyDown); window.removeEventListener('keyup', handleKeyUp); };
+  }, [handleInteraction, onReturnToSelect, characterData]);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    const curPlayer = playerRef.current;
-    if (!ctx || !canvas || !curPlayer) return;
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-    const world = WORLD_CONFIGS[curPlayer.currentWorldId as keyof typeof WORLD_CONFIGS] || WORLD_CONFIGS[WORLD_IDS.WORLD_1];
-    ctx.fillStyle = world.bgColor; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.save(); ctx.translate(-camera.x, -camera.y);
-    ctx.strokeStyle = world.gridColor; ctx.lineWidth = 1;
-    for(let x = 0; x <= GAME_CONFIG.WORLD_WIDTH; x += 100) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, GAME_CONFIG.WORLD_HEIGHT); ctx.stroke(); }
-    for(let y = 0; y <= GAME_CONFIG.WORLD_HEIGHT; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME_CONFIG.WORLD_WIDTH, y); ctx.stroke(); }
-    const cx = GAME_CONFIG.WORLD_WIDTH / 2; const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
-    ctx.beginPath(); ctx.arc(cx, cy, GAME_CONFIG.SAFE_ZONE_RADIUS, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(20, 184, 166, 0.4)'; ctx.lineWidth = 6; ctx.setLineDash([15, 10]); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(20, 184, 166, 0.05)'; ctx.fill();
-    const eRef = entitiesRef.current;
-    eRef.groundEffects.forEach(ge => ge.draw(ctx));
-    renderEntities.waypoints.forEach(wp => wp.draw(ctx, curPlayer.discoveredWaypoints?.includes(wp.data.id) || false));
-    eRef.droppedItems.forEach(di => isVisible(di.position) && di.draw(ctx));
-    renderEntities.npcs.forEach(npc => npc.draw(ctx));
-    renderEntities.enemies.forEach(e => isVisible(e.position, e.radius) && e.draw(ctx));
-    curPlayer.draw(ctx);
-    eRef.projectiles.forEach(p => isVisible(p.position) && p.draw(ctx));
-    eRef.visualEffects.forEach(ve => isVisible(ve.position) && ve.draw(ctx));
-    eRef.floatingTexts.forEach(ft => ft.draw(ctx));
-    ctx.restore();
-  }, [camera, renderEntities]);
+  // World Travel Logic
+  const saveAndTravel = async (worldId: string) => {
+    const p = playerRef.current;
+    if (!p) return;
+    const data = p.toCharacterData();
+    data.currentWorldId = worldId;
+    data.position = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
+    await storageService.saveCharacter(userId, data);
+    window.location.reload(); 
+  };
 
   return (
     <div className="w-screen h-screen relative overflow-hidden bg-gray-950">
-      <canvas ref={canvasRef} className="w-full h-full cursor-crosshair" onMouseMove={handleMouseMove} />
+      <canvas 
+        ref={canvasRef} 
+        className="w-full h-full cursor-crosshair" 
+        onMouseMove={(ev) => {
+            const p = playerRef.current;
+            if (!p) return;
+            const rect = canvasRef.current!.getBoundingClientRect();
+            const worldX = (ev.clientX - rect.left) + cameraRef.current.x;
+            const worldY = (ev.clientY - rect.top) + cameraRef.current.y;
+            const target = entitiesRef.current.enemies.find(mob => !mob.isDead && getDistance({ x: worldX, y: worldY }, mob.position) <= mob.radius + 15);
+            setHoveredEnemy(target || null);
+            setTooltipPos({ x: ev.clientX, y: ev.clientY });
+        }}
+      />
       <VirtualJoystick onMove={(v) => joystickVectorRef.current = v} />
+      
       <HUD 
-        player={player} 
-        enemies={renderEntities.enemies} 
-        npcs={renderEntities.npcs} 
-        waypoints={renderEntities.waypoints} 
+        player={playerRef.current} 
+        enemies={entitiesRef.current.enemies} 
+        npcs={entitiesRef.current.npcs} 
+        waypoints={entitiesRef.current.waypoints} 
         toggleInventory={() => setInventoryOpen(p => !p)} 
         otherPlayers={[]} 
         isSaving={isSaving} 
         isStatsOpen={isStatsOpen}
         onUseSkill={(i) => {
-            if (player) {
-                const gameContext = { player, enemies: entitiesRef.current.enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode };
-                player.useSkill(i, gameContext);
-            }
+            const p = playerRef.current;
+            if (!p) return;
+            const e = entitiesRef.current;
+            const ctx = {
+                player: p, enemies: e.enemies,
+                addProjectile: (proj: Projectile) => e.projectiles.push(proj),
+                addFloatingText: (ft: FloatingText) => e.floatingTexts.push(ft),
+                addVisualEffect: (ve: VisualEffect) => e.visualEffects.push(ve),
+                addGroundEffect: (ge: GroundEffect) => e.groundEffects.push(ge),
+                playSound: () => {}, isOnlineMode: false
+            };
+            p.useSkill(i, ctx);
         }} 
       />
+
       {hoveredEnemy && <EnemyTooltip enemy={hoveredEnemy} position={tooltipPos} />}
-      {isInventoryOpen && player && <Inventory characterData={player.toCharacterData()} onItemEquip={(i) => { player.equipItem(i); triggerCloudSave(); }} onItemUnequip={(s) => { player.unequipItem(s); triggerCloudSave(); }} toggleInventory={() => setInventoryOpen(false)} onInventoryMove={(f,t) => player.moveItem(f,t)} onToggleLock={(i) => player.toggleItemLock(i)} />}
-      {interactingNPC && player && <NPCInteraction 
-        npc={interactingNPC} 
-        characterData={player.toCharacterData()} 
-        recipes={CRAFTING_RECIPES} 
-        onClose={() => setInteractingNPC(null)} 
-        onCraft={(r) => { player.craftItem(r); triggerCloudSave(); }} 
-        onSell={(_item, idx, stack) => { player.sellItem(idx, stack); triggerCloudSave(); }} 
-        onBuy={(item, cost) => { player.buyItem(item, cost); triggerCloudSave(); }} 
-        onSellByRarity={(rarity) => { player.sellUnlockedItemsByRarity(rarity); triggerCloudSave(); }}
-        onTravelToWorld={saveAndTravel} 
-        bankItems={player.bank} 
-        onDeposit={(i) => { player.moveItemToBank(i); triggerCloudSave(); }} 
-        onWithdraw={(i) => { player.moveItemFromBank(i); triggerCloudSave(); }} 
-        onDepositGold={(a) => { player.depositGold(a); triggerCloudSave(); }}
-        onWithdrawGold={(a) => { player.withdrawGold(a); triggerCloudSave(); }}
-      />}
+      
+      {isInventoryOpen && playerRef.current && (
+        <Inventory 
+            characterData={playerRef.current.toCharacterData()} 
+            onItemEquip={(idx) => { playerRef.current?.equipItem(idx); triggerCloudSave(); }} 
+            onItemUnequip={(slot) => { playerRef.current?.unequipItem(slot); triggerCloudSave(); }} 
+            toggleInventory={() => setInventoryOpen(false)} 
+            onInventoryMove={(f,t) => playerRef.current?.moveItem(f,t)} 
+            onToggleLock={(idx) => playerRef.current?.toggleItemLock(idx)} 
+        />
+      )}
+
+      {interactingNPC && playerRef.current && (
+        <NPCInteraction 
+          npc={interactingNPC} 
+          characterData={playerRef.current.toCharacterData()} 
+          recipes={CRAFTING_RECIPES} 
+          onClose={() => setInteractingNPC(null)} 
+          onCraft={(r) => { playerRef.current?.craftItem(r); triggerCloudSave(); }} 
+          onSell={(_item, idx, stack) => { playerRef.current?.sellItem(idx, stack); triggerCloudSave(); }} 
+          onBuy={(item, cost) => { playerRef.current?.buyItem(item, cost); triggerCloudSave(); }} 
+          onSellByRarity={(rarity) => { playerRef.current?.sellUnlockedItemsByRarity(rarity); triggerCloudSave(); }}
+          onTravelToWorld={saveAndTravel} 
+          bankItems={playerRef.current.bank} 
+          onDeposit={(idx) => { playerRef.current?.moveItemToBank(idx); triggerCloudSave(); }} 
+          onWithdraw={(idx) => { playerRef.current?.moveItemFromBank(idx); triggerCloudSave(); }} 
+          onDepositGold={(amt) => { playerRef.current?.depositGold(amt); triggerCloudSave(); }}
+          onWithdrawGold={(amt) => { playerRef.current?.withdrawGold(amt); triggerCloudSave(); }}
+        />
+      )}
     </div>
   );
 };

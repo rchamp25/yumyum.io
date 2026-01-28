@@ -56,7 +56,7 @@ const StatsWindow: React.FC<{ player: Player }> = ({ player }) => {
 
     return (
         <div className="w-48 bg-gray-900/80 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-2xl mt-4 animate-fade-in pointer-events-auto">
-            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 border-b border-white/5 pb-2">Hero Statistics</h3>
+            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 border-b border-white/5 pb-2 text-left">Hero Stats</h3>
             <div className="space-y-2">
                 {statItems.map((stat, i) => (
                     <div key={i} className="flex justify-between items-center text-[11px]">
@@ -98,13 +98,13 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill,
     <div className="absolute inset-0 pointer-events-none select-none p-6">
       {/* Player Vitality */}
       <div className="absolute top-6 left-6 w-72 p-4 bg-gray-900/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/5">
-        <div className="flex items-center mb-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-blue-600 rounded-xl flex items-center justify-center text-xl font-black text-white border border-white/10 mr-3 shadow-lg">{player.level}</div>
+        <div className="flex items-center mb-3 text-left">
+            <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-blue-600 rounded-xl flex items-center justify-center text-xl font-black text-white border border-white/10 mr-3 shadow-lg shrink-0">{player.level}</div>
             <div className="overflow-hidden">
                 <h2 className="text-lg font-black text-white truncate leading-none mb-1">{player.name}</h2>
                 <div className="flex items-center gap-2">
                     <span className="text-[10px] text-teal-400 font-black uppercase tracking-widest">{CharacterClass[player.characterClass]}</span>
-                    {isSaving && <span className="text-[9px] text-white/30 animate-pulse uppercase font-bold tracking-tighter">● Cloud Saving</span>}
+                    {isSaving && <span className="text-[9px] text-white/30 animate-pulse uppercase font-bold tracking-tighter">● Saving</span>}
                 </div>
             </div>
         </div>
