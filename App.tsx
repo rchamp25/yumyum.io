@@ -202,7 +202,6 @@ const App: React.FC = () => {
                                                 onDeath={handleDeath}
                                                 onReturnToSelect={handleReturnToSelect}
                                                 isDevMode={isDevMode}
-                                                isOnlineMode={false}
                                                 userId={user.uid}
                                                 difficulty={selectedDifficulty}
                                             />;

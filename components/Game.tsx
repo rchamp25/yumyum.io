@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Vector2D, NPCType, Difficulty } from '../game/types';
+import { CharacterData, GameStats, NPCType, Difficulty } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -24,7 +24,6 @@ interface GameProps {
   characterData: CharacterData;
   onDeath: (stats: GameStats, finalCharacterData: CharacterData) => void | Promise<void>;
   onReturnToSelect: (finalCharacterData: CharacterData) => void | Promise<void>;
-  isOnlineMode: boolean;
   isDevMode: boolean;
   userId: string;
   difficulty: Difficulty;
@@ -34,14 +33,12 @@ const Game: React.FC<GameProps> = ({
   characterData, 
   onDeath, 
   onReturnToSelect, 
-  isOnlineMode, 
   userId, 
   difficulty 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // --- MASTER ENGINE REFS ---
-  // These refs hold the entire game state to prevent logic resets during React renders
   const playerRef = useRef<Player | null>(null);
   const entitiesRef = useRef({
       enemies: [] as Enemy[],
@@ -60,7 +57,7 @@ const Game: React.FC<GameProps> = ({
   });
   const cameraRef = useRef({ x: 0, y: 0 });
   const pressedKeysRef = useRef<Set<string>>(new Set());
-  const joystickVectorRef = useRef<Vector2D>({ x: 0, y: 0 });
+  const joystickVectorRef = useRef({ x: 0, y: 0 });
 
   // --- REACT UI STATE ---
   const [isInventoryOpen, setInventoryOpen] = useState(false);
@@ -69,7 +66,7 @@ const Game: React.FC<GameProps> = ({
   const [hoveredEnemy, setHoveredEnemy] = useState<Enemy | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [isSaving, setIsSaving] = useState(false);
-  const [tick, setTick] = useState(0); // Used to force UI updates only
+  const [, setTick] = useState(0); // Force UI updates
 
   // Helper for triggering cloud saves
   const triggerCloudSave = useCallback(async () => {
@@ -83,23 +80,27 @@ const Game: React.FC<GameProps> = ({
     }
   }, [userId, isSaving]);
 
-  // Enemy generation logic
+  // Enemy generation logic - GLOBAL MAP RANDOM
   const generateEnemyPack = (worldId: string): Enemy[] => {
     let attempts = 0;
     let packCenter = { x: 0, y: 0 };
     let validPosition = false;
 
-    while(!validPosition && attempts < 30) {
+    while(!validPosition && attempts < 15) {
         attempts++;
-        const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 600) + 300;
-        const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 600) + 300;
+        
+        // Random position across entire map
+        const randX = Math.random() * (GAME_CONFIG.WORLD_WIDTH - 200) + 100;
+        const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 200) + 100;
         const testPos = { x: randX, y: randY };
         
-        if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 400) continue;
+        // Don't spawn inside safe zone
+        if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 200) continue;
         
+        // Don't spawn inside boss zones
         let inBossZone = false;
         for (const zone of BOSS_ZONES) {
-            if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS + 200) {
+            if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS + 100) {
                 inBossZone = true;
                 break;
             }
@@ -108,6 +109,7 @@ const Game: React.FC<GameProps> = ({
     }
     if (!validPosition) return [];
 
+    // Level scaling based on distance from SAFE ZONE center
     let level = 1;
     const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
     const progress = Math.max(0, (distFromCenter - GAME_CONFIG.SAFE_ZONE_RADIUS) / (GAME_CONFIG.WORLD_WIDTH/2 - GAME_CONFIG.SAFE_ZONE_RADIUS));
@@ -117,8 +119,9 @@ const Game: React.FC<GameProps> = ({
     const typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
     const pack: Enemy[] = [];
     const packSize = Math.floor(Math.random() * 3) + 3;
+    
     for(let i=0; i<packSize; i++) {
-        const offset = { x: (Math.random()-0.5)*180, y: (Math.random()-0.5)*180 };
+        const offset = { x: (Math.random()-0.5)*150, y: (Math.random()-0.5)*150 };
         pack.push(new Enemy({ x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, undefined, `mob_${Date.now()}_${Math.random()}`, typeId));
     }
     return pack;
@@ -152,8 +155,8 @@ const Game: React.FC<GameProps> = ({
         waypoints: WAYPOINTS.map(data => new Waypoint(data))
     };
 
-    // Force initial mob spawn
-    for (let i = 0; i < 8; i++) {
+    // Populate World Immediately (Pre-spawn ~80 packs to ensure map isn't empty)
+    for (let i = 0; i < 80; i++) {
         const pack = generateEnemyPack(newPlayer.currentWorldId);
         entitiesRef.current.enemies.push(...pack);
     }
@@ -176,14 +179,21 @@ const Game: React.FC<GameProps> = ({
             isOnlineMode: false
         };
 
-        // 1. Spawning Logic
+        // 1. Spawning Logic (Global Population Maintenance)
         engineTimers.current.spawn++;
-        if (engineTimers.current.spawn > 120) { // Every 2 seconds
+        if (engineTimers.current.spawn > 20) { // Check frequently
             if (e.enemies.length < GAME_CONFIG.MAX_ENEMIES) {
                 const pack = generateEnemyPack(p.currentWorldId);
                 e.enemies.push(...pack);
             }
             engineTimers.current.spawn = 0;
+        }
+
+        // Auto-save logic
+        engineTimers.current.save++;
+        if (engineTimers.current.save > 3600) { // Every ~1 minute
+            triggerCloudSave();
+            engineTimers.current.save = 0;
         }
 
         // 2. Movement & Physics

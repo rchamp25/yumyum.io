@@ -19,13 +19,14 @@ export class DroppedItem {
 
     update(player: Player) {
         const distanceToPlayer = getDistance(this.position, player.position);
-        if (distanceToPlayer < 75) { // Magnet range
+        if (distanceToPlayer < 200) { // Increased Magnet Range from 75 to 200
             const direction = normalizeVector({
                 x: player.position.x - this.position.x,
                 y: player.position.y - this.position.y,
             });
             
-            const speed = Math.max(2, 10 - distanceToPlayer * 0.1);
+            // Accelerate as it gets closer
+            const speed = Math.max(4, 15 - distanceToPlayer * 0.05);
             this.position.x += direction.x * speed;
             this.position.y += direction.y * speed;
         }
