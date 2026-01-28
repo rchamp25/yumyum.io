@@ -2,7 +2,7 @@
 import { Vector2D } from "../types";
 import { getDistance } from "../math";
 
-type EffectType = 'dash_trail' | 'stomp_wave' | 'whirlwind' | 'slash_arc' | 'buff_aura' | 'teleport_in' | 'teleport_out' | 'explosion' | 'fire_explosion' | 'frost_nova' | 'rain_of_arrows' | 'loot_sparkle' | 'snow' | 'ember' | 'spore' | 'shimmer';
+type EffectType = 'dash_trail' | 'stomp_wave' | 'whirlwind' | 'slash_arc' | 'buff_aura' | 'teleport_in' | 'teleport_out' | 'explosion' | 'fire_explosion' | 'frost_nova' | 'rain_of_arrows' | 'loot_sparkle' | 'snow' | 'ember' | 'spore' | 'shimmer' | 'fog' | 'ash';
 
 interface EffectOptions {
     radius?: number;
@@ -50,6 +50,16 @@ export class VisualEffect {
             this.velocity = { 
                 x: (Math.random() - 0.5) * 0.5, 
                 y: (Math.random() - 0.5) * 0.5 
+            };
+        } else if (this.type === 'ash') {
+            this.velocity = {
+                x: (Math.random() - 0.5) * 1.5,
+                y: (Math.random() * 1.5) + 0.5 // Falls slowly/drifts
+            };
+        } else if (this.type === 'fog') {
+            this.velocity = {
+                x: (Math.random() - 0.5) * 0.3,
+                y: (Math.random() - 0.5) * 0.3
             };
         }
 
@@ -115,6 +125,23 @@ export class VisualEffect {
                  ctx.fillStyle = 'white';
                  ctx.beginPath();
                  ctx.arc(this.position.x, this.position.y, this.options.radius || 3, 0, Math.PI * 2);
+                 ctx.fill();
+                 break;
+             }
+             case 'ash': {
+                 ctx.globalAlpha = Math.sin(progress * Math.PI) * 0.8;
+                 ctx.fillStyle = '#9ca3af'; // Gray
+                 ctx.beginPath();
+                 const s = this.options.radius || 2;
+                 ctx.rect(this.position.x - s/2, this.position.y - s/2, s, s);
+                 ctx.fill();
+                 break;
+             }
+             case 'fog': {
+                 ctx.globalAlpha = Math.sin(progress * Math.PI) * 0.15; // Very faint
+                 ctx.fillStyle = this.options.color || '#e4e4e7';
+                 ctx.beginPath();
+                 ctx.arc(this.position.x, this.position.y, this.options.radius || 40, 0, Math.PI * 2);
                  ctx.fill();
                  break;
              }

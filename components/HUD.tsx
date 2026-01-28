@@ -6,7 +6,7 @@ import SkillBar from './SkillBar';
 import { Enemy } from '../game/entities/Enemy';
 import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
-import { GAME_CONFIG } from '../game/constants';
+import { GAME_CONFIG, INTEREST_ZONES } from '../game/constants';
 import { getDistance } from '../game/math';
 import { CharacterClass, StatusEffect } from '../game/types';
 
@@ -75,6 +75,22 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
     return (
         <div className="w-48 h-48 bg-gray-950/80 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10 overflow-hidden relative aspect-square">
             <div className="relative w-full h-full">
+                {/* Zones */}
+                {INTEREST_ZONES.map(zone => (
+                    <div 
+                        key={zone.id} 
+                        className="absolute rounded-full opacity-30" 
+                        style={{ 
+                            left: `${(zone.x / worldSize) * 100}%`, 
+                            top: `${(zone.y / worldSize) * 100}%`,
+                            width: `${(zone.radius / worldSize) * 100 * 2}%`,
+                            height: `${(zone.radius / worldSize) * 100 * 2}%`,
+                            backgroundColor: zone.color,
+                            transform: 'translate(-50%, -50%)'
+                        }}
+                    ></div>
+                ))}
+                
                 {waypoints.map(wp => (
                     <div key={wp.data.id} className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full ${player.discoveredWaypoints.includes(wp.data.id) ? 'bg-cyan-400 w-2 h-2' : 'bg-gray-700 w-1 h-1'}`} style={{ left: `${(wp.data.position.x / worldSize) * 100}%`, top: `${(wp.data.position.y / worldSize) * 100}%` }}></div>
                 ))}

@@ -1,5 +1,5 @@
 
-import { ItemRarity, WaypointData, EnemyType } from './types';
+import { ItemRarity, WaypointData, EnemyType, ZoneData } from './types';
 
 export const GAME_CONFIG = {
     WORLD_WIDTH: 18000, // Tripled from 6000
@@ -18,9 +18,9 @@ export const GAME_CONFIG = {
     ENEMY_PACK_SIZE_MIN: 3,
     ENEMY_PACK_SIZE_MAX: 5,
     ENEMY_PACK_RADIUS: 75,
-    ENEMY_AGGRO_RANGE: 90, 
+    ENEMY_AGGRO_RANGE: 180, // Doubled from 90
     ENEMY_LEASH_RANGE: 300, 
-    BOSS_AGGRO_RANGE: 180, 
+    BOSS_AGGRO_RANGE: 360, // Doubled from 180
     BOSS_LEASH_RANGE: 600, 
 };
 
@@ -69,6 +69,57 @@ export const BOSS_ZONES = [
     { id: 'boss_ne', x: GAME_CONFIG.WORLD_WIDTH - 250, y: 250, name: "North East Zone" },
     { id: 'boss_sw', x: 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "South West Zone" },
     { id: 'boss_se', x: GAME_CONFIG.WORLD_WIDTH - 250, y: GAME_CONFIG.WORLD_HEIGHT - 250, name: "South East Zone" },
+];
+
+export const INTEREST_ZONES: ZoneData[] = [
+    {
+        id: 'zone_graveyard',
+        name: 'The Cursed Grounds',
+        x: 4500,
+        y: 4500,
+        radius: 900,
+        color: '#3f3f46', // Zinc 700
+        particleType: 'fog',
+        mobTypes: ['ghost'],
+        difficultyMultiplier: 1.2,
+        dropBonus: 0.2
+    },
+    {
+        id: 'zone_glacier',
+        name: 'The Frostlands',
+        x: GAME_CONFIG.WORLD_WIDTH - 4500,
+        y: 4500,
+        radius: 900,
+        color: '#0e7490', // Cyan 700 (Darker ice)
+        particleType: 'snow',
+        mobTypes: ['yeti'],
+        difficultyMultiplier: 1.3,
+        dropBonus: 0.3
+    },
+    {
+        id: 'zone_volcano',
+        name: 'The Magma Fields',
+        x: 4500,
+        y: GAME_CONFIG.WORLD_HEIGHT - 4500,
+        radius: 900,
+        color: '#7f1d1d', // Red 900
+        particleType: 'ash',
+        mobTypes: ['magma_golem'],
+        difficultyMultiplier: 1.4,
+        dropBonus: 0.4
+    },
+    {
+        id: 'zone_swamp',
+        name: 'The Fungal Mire',
+        x: GAME_CONFIG.WORLD_WIDTH - 4500,
+        y: GAME_CONFIG.WORLD_HEIGHT - 4500,
+        radius: 900,
+        color: '#3b0764', // Purple 900
+        particleType: 'spore',
+        mobTypes: ['mutated_slime'],
+        difficultyMultiplier: 1.25,
+        dropBonus: 0.25
+    }
 ];
 
 export const LOOT_CONFIG = {
@@ -200,6 +251,51 @@ export const ENEMY_TYPES: { [key: string]: EnemyType } = {
         attackCooldown: 1400, 
         attackType: 'melee' 
     },
+    // --- SPECIAL ZONE MOBS ---
+    'ghost': {
+        name: 'Vengeful Ghost',
+        radius: 18,
+        healthMultiplier: 0.9,
+        damageMultiplier: 1.5,
+        speed: 3.0,
+        color: '#a1a1aa', // Zinc 400
+        attackRange: 30,
+        attackCooldown: 1000,
+        attackType: 'melee'
+    },
+    'yeti': {
+        name: 'Yeti',
+        radius: 35,
+        healthMultiplier: 3.5,
+        damageMultiplier: 2.0,
+        speed: 2.2,
+        color: '#cffafe', // Cyan 100
+        attackRange: 40,
+        attackCooldown: 2000,
+        attackType: 'melee'
+    },
+    'magma_golem': {
+        name: 'Magma Golem',
+        radius: 40,
+        healthMultiplier: 4.0,
+        damageMultiplier: 2.5,
+        speed: 1.5,
+        color: '#7f1d1d', // Red 900
+        attackRange: 50,
+        attackCooldown: 3000,
+        attackType: 'melee'
+    },
+    'mutated_slime': {
+        name: 'Mutated Slime',
+        radius: 25,
+        healthMultiplier: 2.0,
+        damageMultiplier: 1.2,
+        speed: 2.5,
+        color: '#8b5cf6', // Violet 500
+        attackRange: 25,
+        attackCooldown: 1200,
+        attackType: 'melee'
+    }
 };
 
 export const GROVE_ENEMIES: { [key: string]: EnemyType } = {

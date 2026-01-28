@@ -225,3 +225,16 @@ export interface TradeSession {
     player1Offer: TradeOffer;
     player2Offer: TradeOffer;
 }
+
+export interface ZoneData {
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+    radius: number;
+    color: string;
+    particleType: 'fog' | 'snow' | 'ash' | 'spore' | 'ember';
+    mobTypes: string[];
+    difficultyMultiplier: number;
+    dropBonus: number;
+}

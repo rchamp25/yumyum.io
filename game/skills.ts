@@ -80,7 +80,7 @@ const WarriorSkills: SkillDefinition[] = [
         cooldown: 45000,
         unlockLevel: 41,
         use: (player, game) => {
-            player.addStatusEffect({ type: 'haste', duration: 8000, speedMultiplier: 1.4 });
+            player.addStatusEffect({ type: 'haste', duration: 8000, speedMultiplier: 1.25 }); // Reduced from 1.4
             player.addStatusEffect({ type: 'empowered', duration: 8000, damageMultiplier: 1.5 });
             game.addVisualEffect(new VisualEffect(player.position, 'buff_aura', 8000, { color: '#ef4444', radius: 50 }));
         }
@@ -229,7 +229,7 @@ const ArcherSkills: SkillDefinition[] = [
         cooldown: 15000,
         unlockLevel: 21,
         use: (player, game) => {
-            player.addStatusEffect({ type: 'haste', duration: 5000, speedMultiplier: 1.6 });
+            player.addStatusEffect({ type: 'haste', duration: 5000, speedMultiplier: 1.4 }); // Reduced from 1.6
             game.addVisualEffect(new VisualEffect(player.position, 'buff_aura', 5000, { color: '#4ade80', radius: 30 }));
         }
     },

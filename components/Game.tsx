@@ -10,7 +10,7 @@ import { GroundEffect } from '../game/entities/GroundEffect';
 import { DroppedItem } from '../game/entities/DroppedItem';
 import { NPC } from '../game/entities/NPC';
 import { Waypoint } from '../game/entities/Waypoint';
-import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES } from '../game/constants';
+import { GAME_CONFIG, WAYPOINTS, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS, ENEMY_TYPES, GROVE_ENEMIES, INTEREST_ZONES } from '../game/constants';
 import { CRAFTING_RECIPES } from '../game/items';
 import { getDistance } from '../game/math';
 import HUD from './HUD';
@@ -109,20 +109,46 @@ const Game: React.FC<GameProps> = ({
     }
     if (!validPosition) return [];
 
+    // Check if spawn is in an Interest Zone
+    const interestZone = INTEREST_ZONES.find(z => getDistance(packCenter, z) < z.radius);
+
     // Level scaling based on distance from SAFE ZONE center
     let level = 1;
     const distFromCenter = getDistance(packCenter, { x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2 });
     const progress = Math.max(0, (distFromCenter - GAME_CONFIG.SAFE_ZONE_RADIUS) / (GAME_CONFIG.WORLD_WIDTH/2 - GAME_CONFIG.SAFE_ZONE_RADIUS));
     level = Math.min(GAME_CONFIG.MAX_LEVEL, Math.max(1, Math.floor(1 + progress * (GAME_CONFIG.MAX_LEVEL - 1))));
 
-    const typeKeys = worldId === WORLD_IDS.WORLD_2 ? Object.keys(GROVE_ENEMIES) : Object.keys(ENEMY_TYPES);
-    const typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+    // Determine Mob Type
+    let typeId = '';
+    
+    if (interestZone && interestZone.mobTypes.length > 0) {
+        // Force spawn zone-specific mob
+        typeId = interestZone.mobTypes[Math.floor(Math.random() * interestZone.mobTypes.length)];
+        // Zone mobs are stronger
+        level = Math.min(GAME_CONFIG.MAX_LEVEL + 5, Math.ceil(level * interestZone.difficultyMultiplier));
+    } else {
+        // Standard random spawn
+        const typeKeys = worldId === WORLD_IDS.WORLD_2 ? Object.keys(GROVE_ENEMIES) : Object.keys(ENEMY_TYPES).filter(k => !INTEREST_ZONES.some(z => z.mobTypes.includes(k)));
+        typeId = typeKeys[Math.floor(Math.random() * typeKeys.length)];
+    }
+
     const pack: Enemy[] = [];
     const packSize = Math.floor(Math.random() * 3) + 3;
     
     for(let i=0; i<packSize; i++) {
         const offset = { x: (Math.random()-0.5)*150, y: (Math.random()-0.5)*150 };
-        pack.push(new Enemy({ x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, undefined, `mob_${Date.now()}_${Math.random()}`, typeId));
+        const enemy = new Enemy({ x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, undefined, `mob_${Date.now()}_${Math.random()}`, typeId);
+        
+        // Apply zone drop bonus if applicable
+        if (interestZone) {
+            // We can attach a custom property or just let the level scaling handle it.
+            // Since level increases loot chance, explicit property is a nice bonus.
+            // Note: Enemy class doesn't store arbitrary props by default, 
+            // but we rely on level for now. 
+            // We could modify Enemy to accept a lootBonus, but for now the Level Boost is significant.
+        }
+        
+        pack.push(enemy);
     }
     return pack;
   };
@@ -186,6 +212,38 @@ const Game: React.FC<GameProps> = ({
                 const pack = generateEnemyPack(p.currentWorldId);
                 e.enemies.push(...pack);
             }
+
+            // Ambient Particle Logic
+            // Check if player is in a zone
+            const zone = INTEREST_ZONES.find(z => getDistance(p.position, z) < z.radius);
+            if (zone) {
+                // Spawn ambient particles around player
+                // Frequency depends on zone type
+                let spawnChance = 0.3;
+                if (zone.particleType === 'fog') spawnChance = 0.05; // Fog lasts longer
+                
+                if (Math.random() < spawnChance) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const dist = Math.random() * 600; // Spawn within screen range
+                    const pos = {
+                        x: p.position.x + Math.cos(angle) * dist,
+                        y: p.position.y + Math.sin(angle) * dist
+                    };
+                    
+                    let duration = 2000;
+                    let radius = 2;
+                    let color = 'white';
+
+                    if (zone.particleType === 'snow') { duration = 3000; radius = 3; }
+                    else if (zone.particleType === 'ember') { duration = 1500; radius = 2; }
+                    else if (zone.particleType === 'spore') { duration = 4000; radius = 2; }
+                    else if (zone.particleType === 'ash') { duration = 3000; radius = 3; }
+                    else if (zone.particleType === 'fog') { duration = 6000; radius = 150; color = 'rgba(200,200,200,0.1)'; }
+
+                    e.visualEffects.push(new VisualEffect(pos, zone.particleType, duration, { radius, color }));
+                }
+            }
+
             engineTimers.current.spawn = 0;
         }
 
@@ -284,6 +342,19 @@ const Game: React.FC<GameProps> = ({
             drawCtx.save();
             drawCtx.translate(-cameraRef.current.x, -cameraRef.current.y);
             
+            // Draw Interest Zones (Ground Visuals)
+            INTEREST_ZONES.forEach(zone => {
+                const grad = drawCtx.createRadialGradient(zone.x, zone.y, zone.radius * 0.2, zone.x, zone.y, zone.radius);
+                grad.addColorStop(0, zone.color);
+                grad.addColorStop(0.7, zone.color);
+                grad.addColorStop(1, 'rgba(0,0,0,0)');
+                
+                drawCtx.fillStyle = grad;
+                drawCtx.beginPath();
+                drawCtx.arc(zone.x, zone.y, zone.radius, 0, Math.PI * 2);
+                drawCtx.fill();
+            });
+
             // Grid
             drawCtx.strokeStyle = world.gridColor; drawCtx.lineWidth = 1;
             for(let x = 0; x <= GAME_CONFIG.WORLD_WIDTH; x += 150) { drawCtx.beginPath(); drawCtx.moveTo(x, 0); drawCtx.lineTo(x, GAME_CONFIG.WORLD_HEIGHT); drawCtx.stroke(); }
