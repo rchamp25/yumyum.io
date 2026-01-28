@@ -1,6 +1,6 @@
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { CharacterData, GameStats, Item, ItemSlot, Recipe, Vector2D, WaypointData, ItemRarity, Difficulty, NPCType } from '../game/types';
+import { CharacterData, GameStats, Vector2D, NPCType, Difficulty } from '../game/types';
 import { Player } from '../game/entities/Player';
 import { Enemy } from '../game/entities/Enemy';
 import { Projectile } from '../game/entities/Projectile';
@@ -18,32 +18,37 @@ import { getDistance } from '../game/math';
 import HUD from './HUD';
 import Inventory from './Inventory';
 import NPCInteraction from './NPCInteraction';
-import FastTravelUI from './FastTravelUI';
 import EnemyTooltip from './EnemyTooltip';
 import VirtualJoystick from './VirtualJoystick';
 import { storageService } from '../services/storage';
 
 interface GameProps {
   characterData: CharacterData;
-  onDeath: (stats: GameStats, finalCharacterData: CharacterData) => void;
-  onReturnToSelect: (finalCharacterData: CharacterData) => void;
+  onDeath: (stats: GameStats, finalCharacterData: CharacterData) => void | Promise<void>;
+  onReturnToSelect: (finalCharacterData: CharacterData) => void | Promise<void>;
   isOnlineMode: boolean;
   isDevMode: boolean;
   userId: string;
   difficulty: Difficulty;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, userId, difficulty }) => {
+const Game: React.FC<GameProps> = ({ 
+  characterData, 
+  onDeath, 
+  onReturnToSelect, 
+  isOnlineMode, 
+  userId, 
+  difficulty 
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const localSpawnTimerRef = useRef(0);
-  const localBossCooldownRef = useRef(0);
   const autoSaveTimerRef = useRef(0);
   
   const [player, setPlayer] = useState<Player | null>(null);
   const playerRef = useRef<Player | null>(null);
   useEffect(() => { playerRef.current = player; }, [player]);
 
-  // Use refs for the logic-intensive parts to keep the loop stable
+  // Use refs for the logic-intensive parts to keep the loop stable and prevent enemy spawn restarts
   const entitiesRef = useRef<{
       enemies: Enemy[];
       projectiles: Projectile[];
@@ -60,7 +65,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
       droppedItems: [],
   });
 
-  // State is used primarily for rendering and reacting to entity changes
   const [renderEntities, setRenderEntities] = useState({
       enemies: [] as Enemy[],
       npcs: [] as NPC[],
@@ -71,7 +75,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
   
   const [isInventoryOpen, setInventoryOpen] = useState(false);
   const [interactingNPC, setInteractingNPC] = useState<NPC | null>(null);
-  const [interactingWaypoint, setInteractingWaypoint] = useState<Waypoint | null>(null);
   const [hoveredEnemy, setHoveredEnemy] = useState<Enemy | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{x: number, y: number}>({ x: 0, y: 0 });
   const [isSaving, setIsSaving] = useState(false);
@@ -84,7 +87,7 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
   const addVisualEffect = useCallback((ve: VisualEffect) => entitiesRef.current.visualEffects.push(ve), []);
   const addGroundEffect = useCallback((ge: GroundEffect) => entitiesRef.current.groundEffects.push(ge), []);
 
-  const playSound = useCallback((type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => {
+  const playSound = useCallback((_type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => {
     // Basic oscillator sounds placeholder
   }, []);
 
@@ -108,10 +111,8 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
             const randY = Math.random() * (GAME_CONFIG.WORLD_HEIGHT - 200) + 100;
             const testPos = { x: randX, y: randY };
             
-            // Check Safe Zone
             if (getDistance(testPos, {x: GAME_CONFIG.WORLD_WIDTH/2, y: GAME_CONFIG.WORLD_HEIGHT/2}) < GAME_CONFIG.SAFE_ZONE_RADIUS + 100) continue;
             
-            // Check Boss Zones
             let inBossZone = false;
             for (const zone of BOSS_ZONES) {
                 if (getDistance(testPos, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
@@ -156,6 +157,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
 
   const initializeGame = useCallback((updatedCharData: CharacterData) => {
       const newPlayer = new Player(updatedCharData);
+      if (difficulty === Difficulty.Insane) {
+          newPlayer.applyInsaneModeNerfs();
+      }
       newPlayer.setInvulnerable(3000);
       setPlayer(newPlayer);
       setCamera({ x: newPlayer.position.x, y: newPlayer.position.y });
@@ -176,14 +180,10 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
       });
       
       entitiesRef.current = {
-          enemies: [],
-          projectiles: [],
-          floatingTexts: [],
-          visualEffects: [],
-          groundEffects: [],
-          droppedItems: [],
+          enemies: [], projectiles: [], floatingTexts: [],
+          visualEffects: [], groundEffects: [], droppedItems: [],
       };
-  }, []);
+  }, [difficulty]);
 
   useEffect(() => { initializeGame(characterData); }, [characterData, initializeGame]);
 
@@ -203,7 +203,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
          localSpawnTimerRef.current = 0;
     }
 
-    // Auto-save logic
     autoSaveTimerRef.current++;
     if (autoSaveTimerRef.current > 1800) {
         triggerCloudSave();
@@ -211,19 +210,13 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
     }
 
     const gameContext = { 
-        player: curPlayer, 
-        enemies: eRef.enemies, 
-        addProjectile, 
-        addFloatingText, 
-        addVisualEffect, 
-        addGroundEffect, 
-        playSound, 
-        isOnlineMode: false 
+        player: curPlayer, enemies: eRef.enemies, 
+        addProjectile, addFloatingText, addVisualEffect, addGroundEffect, 
+        playSound, isOnlineMode 
     };
 
     curPlayer.update(pressedKeys, gameContext, joystickVectorRef.current);
     
-    // Waypoint unlocking
     renderEntities.waypoints.forEach(wp => {
         if (getDistance(curPlayer.position, wp.data.position) < wp.unlockRadius) {
             if (curPlayer.discoverWaypoint(wp.data.id)) {
@@ -233,7 +226,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
         }
     });
 
-    // Update Entities
     eRef.enemies.forEach(e => e.update(gameContext));
     eRef.projectiles.forEach(p => p.update());
     eRef.floatingTexts.forEach(ft => ft.update());
@@ -241,7 +233,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
     eRef.groundEffects.forEach(ge => ge.update(eRef.enemies, gameContext));
     eRef.droppedItems.forEach(di => di.update(curPlayer));
 
-    // Projectile Collisions
     eRef.projectiles.forEach(p => {
         if (p.ownerId === curPlayer.id) { 
             for (const enemy of eRef.enemies) {
@@ -253,7 +244,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
         }
     });
 
-    // Handle Death and Loot
     eRef.enemies.forEach(enemy => {
         if (enemy.health <= 0 && !enemy.isDead) {
             enemy.isDead = true;
@@ -268,7 +258,6 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
         }
     });
 
-    // Item Pickup
     eRef.droppedItems = eRef.droppedItems.filter(di => {
         if(getDistance(di.position, curPlayer.position) < curPlayer.radius) {
             if (curPlayer.pickupItem(di.item)) {
@@ -279,14 +268,12 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
         return true;
     });
 
-    // Filter Expired
     eRef.enemies = eRef.enemies.filter(e => !e.isDead || (Date.now() - e.hitFlashTimer < 100));
     eRef.projectiles = eRef.projectiles.filter(p => !p.isExpired());
     eRef.floatingTexts = eRef.floatingTexts.filter(ft => !ft.isExpired());
     eRef.visualEffects = eRef.visualEffects.filter(ve => !ve.isExpired());
     eRef.groundEffects = eRef.groundEffects.filter(ge => !ge.isExpired());
 
-    // Death Check
     if (curPlayer.health <= 0) {
         onDeath({
             killerName: curPlayer.lastDamagedBy || 'Wild Monster',
@@ -299,22 +286,15 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
         return;
     }
 
-    // Sync state for rendering
-    setRenderEntities(prev => ({
-        ...prev,
-        enemies: [...eRef.enemies]
-    }));
+    setRenderEntities(prev => ({ ...prev, enemies: [...eRef.enemies] }));
 
     const canvas = canvasRef.current;
     if (canvas) {
         const targetX = curPlayer.position.x - canvas.width / 2;
         const targetY = curPlayer.position.y - canvas.height / 2;
-        setCamera(prev => ({ 
-            x: prev.x + (targetX - prev.x) * 0.1, 
-            y: prev.y + (targetY - prev.y) * 0.1 
-        }));
+        setCamera(prev => ({ x: prev.x + (targetX - prev.x) * 0.1, y: prev.y + (targetY - prev.y) * 0.1 }));
     }
-  }, [addFloatingText, addProjectile, addVisualEffect, addGroundEffect, generateEnemyPack, onDeath, playSound, triggerCloudSave, pressedKeys, renderEntities.waypoints]);
+  }, [addFloatingText, addProjectile, addVisualEffect, addGroundEffect, generateEnemyPack, onDeath, playSound, triggerCloudSave, pressedKeys, renderEntities.waypoints, isOnlineMode]);
 
   useGameLoop(gameLoop);
   
@@ -342,31 +322,29 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
     const curPlayer = playerRef.current;
     if (!curPlayer) return;
     const nearbyNPC = renderEntities.npcs.find(n => getDistance(curPlayer.position, n.position) < n.interactionRadius);
-    const nearbyWP = renderEntities.waypoints.find(w => getDistance(curPlayer.position, w.data.position) < w.interactionRadius && curPlayer.discoveredWaypoints?.includes(w.data.id));
     if (nearbyNPC) setInteractingNPC(nearbyNPC);
-    else if (nearbyWP) setInteractingWaypoint(nearbyWP);
-  }, [renderEntities.npcs, renderEntities.waypoints]);
+  }, [renderEntities.npcs]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
         const curPlayer = playerRef.current;
         const key = e.key.toLowerCase();
-        if (key === 'escape') { setInventoryOpen(false); setInteractingNPC(null); setInteractingWaypoint(null); }
+        if (key === 'escape') { setInventoryOpen(false); setInteractingNPC(null); }
         if (key === 'i' || key === 'c') setInventoryOpen(p => !p);
         if (key === 'e') handleInteraction();
+        if (key === 'q') onReturnToSelect(playerRef.current?.toCharacterData() || characterData);
         if (['1', '2', '3', '4', '5'].includes(key) && curPlayer) {
             const gameContext = { 
-                player: curPlayer, 
-                enemies: entitiesRef.current.enemies, 
+                player: curPlayer, enemies: entitiesRef.current.enemies, 
                 addProjectile, addFloatingText, addVisualEffect, addGroundEffect, 
-                playSound, isOnlineMode: false 
+                playSound, isOnlineMode 
             };
             curPlayer.useSkill(parseInt(key) - 1, gameContext);
         }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleInteraction, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound]);
+  }, [handleInteraction, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode, onReturnToSelect, characterData]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -376,49 +354,35 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
 
     canvas.width = window.innerWidth; 
     canvas.height = window.innerHeight;
-    
     const world = WORLD_CONFIGS[curPlayer.currentWorldId as keyof typeof WORLD_CONFIGS] || WORLD_CONFIGS[WORLD_IDS.WORLD_1];
     
     ctx.fillStyle = world.bgColor; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
     ctx.save(); 
     ctx.translate(-camera.x, -camera.y);
     
-    // Draw grid
-    ctx.strokeStyle = world.gridColor; 
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = world.gridColor; ctx.lineWidth = 1;
     for(let x = 0; x <= GAME_CONFIG.WORLD_WIDTH; x += 100) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, GAME_CONFIG.WORLD_HEIGHT); ctx.stroke(); }
     for(let y = 0; y <= GAME_CONFIG.WORLD_HEIGHT; y += 100) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(GAME_CONFIG.WORLD_WIDTH, y); ctx.stroke(); }
 
-    // DRAW SAFE ZONE RING
     const cx = GAME_CONFIG.WORLD_WIDTH / 2;
     const cy = GAME_CONFIG.WORLD_HEIGHT / 2;
     ctx.beginPath();
     ctx.arc(cx, cy, GAME_CONFIG.SAFE_ZONE_RADIUS, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(20, 184, 166, 0.4)';
-    ctx.lineWidth = 6;
-    ctx.setLineDash([15, 10]); // Dashed line for magic feel
-    ctx.stroke();
-    ctx.setLineDash([]); // Reset
-    
-    ctx.fillStyle = 'rgba(20, 184, 166, 0.05)';
-    ctx.fill();
+    ctx.lineWidth = 6; ctx.setLineDash([15, 10]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(20, 184, 166, 0.05)'; ctx.fill();
 
-    // Draw entities
     const eRef = entitiesRef.current;
     eRef.groundEffects.forEach(ge => ge.draw(ctx));
     renderEntities.waypoints.forEach(wp => wp.draw(ctx, curPlayer.discoveredWaypoints?.includes(wp.data.id) || false));
     eRef.droppedItems.forEach(di => isVisible(di.position) && di.draw(ctx));
     renderEntities.npcs.forEach(npc => npc.draw(ctx));
     renderEntities.enemies.forEach(e => isVisible(e.position, e.radius) && e.draw(ctx));
-    
     curPlayer.draw(ctx);
-    
     eRef.projectiles.forEach(p => isVisible(p.position) && p.draw(ctx));
     eRef.visualEffects.forEach(ve => isVisible(ve.position) && ve.draw(ctx));
     eRef.floatingTexts.forEach(ft => ft.draw(ctx));
-    
     ctx.restore();
   }, [camera, renderEntities]);
 
@@ -426,22 +390,9 @@ const Game: React.FC<GameProps> = ({ characterData, onDeath, onReturnToSelect, u
     <div className="w-screen h-screen relative overflow-hidden bg-gray-950">
       <canvas ref={canvasRef} className="w-full h-full cursor-crosshair" onMouseMove={handleMouseMove} />
       <VirtualJoystick onMove={(v) => joystickVectorRef.current = v} />
-      <HUD 
-        player={player} 
-        enemies={renderEntities.enemies} 
-        npcs={renderEntities.npcs} 
-        waypoints={renderEntities.waypoints} 
-        toggleInventory={() => setInventoryOpen(p => !p)} 
-        isInventoryOpen={isInventoryOpen} 
-        otherPlayers={[]} 
-        isSaving={isSaving} 
-        onUseSkill={(i) => {
+      <HUD player={player} enemies={renderEntities.enemies} npcs={renderEntities.npcs} waypoints={renderEntities.waypoints} toggleInventory={() => setInventoryOpen(p => !p)} otherPlayers={[]} isSaving={isSaving} onUseSkill={(i) => {
             if (player) {
-                const gameContext = { 
-                    player, enemies: entitiesRef.current.enemies, 
-                    addProjectile, addFloatingText, addVisualEffect, addGroundEffect, 
-                    playSound, isOnlineMode: false 
-                };
+                const gameContext = { player, enemies: entitiesRef.current.enemies, addProjectile, addFloatingText, addVisualEffect, addGroundEffect, playSound, isOnlineMode };
                 player.useSkill(i, gameContext);
             }
         }} 
