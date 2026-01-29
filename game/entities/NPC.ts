@@ -23,7 +23,7 @@ export class NPC extends Character {
         // NPCs are static for now
     }
 
-    draw(ctx: CanvasRenderingContext2D) {
+    draw(ctx: CanvasRenderingContext2D, canInteract: boolean = false) {
         super.draw(ctx, false);
         
         ctx.save();
@@ -41,6 +41,22 @@ export class NPC extends Character {
         ctx.font = '10px sans-serif';
         ctx.fillText(`(${NPCType[this.npcType]})`, this.position.x, this.position.y + this.radius + 34);
         
+        if (canInteract) {
+            // Interaction Prompt Above Head
+            const floatOffset = Math.sin(Date.now() / 200) * 3;
+            
+            ctx.fillStyle = '#facc15'; // yellow-400
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillText("Press 'E'", this.position.x, this.position.y - this.radius - 10 + floatOffset);
+            
+            // Highlight Circle
+            ctx.beginPath();
+            ctx.arc(this.position.x, this.position.y, this.radius + 5, 0, Math.PI * 2);
+            ctx.strokeStyle = '#facc15';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
         ctx.restore();
     }
 }

@@ -139,15 +139,6 @@ const Game: React.FC<GameProps> = ({
         const offset = { x: (Math.random()-0.5)*150, y: (Math.random()-0.5)*150 };
         const enemy = new Enemy({ x: packCenter.x + offset.x, y: packCenter.y + offset.y }, level, undefined, `mob_${Date.now()}_${Math.random()}`, typeId);
         
-        // Apply zone drop bonus if applicable
-        if (interestZone) {
-            // We can attach a custom property or just let the level scaling handle it.
-            // Since level increases loot chance, explicit property is a nice bonus.
-            // Note: Enemy class doesn't store arbitrary props by default, 
-            // but we rely on level for now. 
-            // We could modify Enemy to accept a lootBonus, but for now the Level Boost is significant.
-        }
-        
         pack.push(enemy);
     }
     return pack;
@@ -277,15 +268,21 @@ const Game: React.FC<GameProps> = ({
 
         // 4. Combat Results & Looting
         e.enemies.forEach(mob => {
-            if (mob.health <= 0 && !mob.isDead) {
-                mob.isDead = true;
+            // FIXED: Check health <= 0, disregard isDead flag for processing the loot event.
+            // isDead might already be true from takeDamage, but we check xpGiven/lootDropped to ensure one-time event.
+            if (mob.health <= 0) {
+                mob.isDead = true; 
+                
                 if (!mob.xpGiven) {
                     mob.xpGiven = true;
                     p.gainXP(mob.xpValue, ctx.addFloatingText, mob.level);
                     p.gainGold(mob.goldValue, ctx.addFloatingText);
                     p.kills++;
+                    
                     const drops = mob.dropLoot(p);
-                    e.droppedItems.push(...drops);
+                    if (drops.length > 0) {
+                        e.droppedItems.push(...drops);
+                    }
                 }
             }
         });
@@ -300,7 +297,7 @@ const Game: React.FC<GameProps> = ({
             return true;
         });
 
-        // 5. Cleanup
+        // 5. Cleanup (Remove dead enemies that have finished flashing)
         e.enemies = e.enemies.filter(mob => !mob.isDead || (Date.now() - mob.hitFlashTimer < 100));
         e.projectiles = e.projectiles.filter(proj => !proj.isExpired());
         e.floatingTexts = e.floatingTexts.filter(ft => !ft.isExpired());
@@ -370,7 +367,12 @@ const Game: React.FC<GameProps> = ({
             e.groundEffects.forEach(ge => ge.draw(drawCtx));
             e.waypoints.forEach(wp => wp.draw(drawCtx, p.discoveredWaypoints.includes(wp.data.id)));
             e.droppedItems.forEach(di => di.draw(drawCtx));
-            e.npcs.forEach(npc => npc.draw(drawCtx));
+            e.npcs.forEach(npc => {
+                // Pass interaction state to NPC draw to show prompt
+                const dist = getDistance(p.position, npc.position);
+                const canInteract = dist < npc.interactionRadius + 20;
+                npc.draw(drawCtx, canInteract);
+            });
             e.enemies.forEach(mob => mob.draw(drawCtx));
             p.draw(drawCtx);
             e.projectiles.forEach(proj => proj.draw(drawCtx));

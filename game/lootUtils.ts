@@ -21,15 +21,13 @@ export function generateLoot(
     // Item Find Calculation
     const baseItemFind = playerItemFind || 0;
     
-    // Scale Item Find: 0% -> 2x Base, 600% -> Same Total as before (0.35 multiplier target)
-    const itemFindScaling = 2.5 / 6.0;
-    const itemFindMultiplier = 1 + (baseItemFind * itemFindScaling);
+    // Scale Item Find: 0% -> 1x Base (Standard)
+    const itemFindMultiplier = 1 + baseItemFind;
     
     const rarityBonus = enemyLevel * LOOT_CONFIG.LEVEL_RARITY_BONUS;
     
     // Drop materials
-    // Base chance increased heavily to 75%
-    const matDropChance = (0.75 + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
+    const matDropChance = (LOOT_CONFIG.MATERIAL_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
     
     const onlineMultiplier = (isOnline && isBoss) ? ONLINE_BOSS_CONFIG.DROP_COUNT_MULTIPLIER : 1;
 
@@ -90,11 +88,8 @@ export function generateLoot(
     const scaledLoopCount = dropLoopCount * quantityScale;
     const finalLoopCount = Math.floor(scaledLoopCount) + (Math.random() < (scaledLoopCount % 1) ? 1 : 0);
 
-    // Boosted base rate from 0.15 to 0.40 (40%)
-    const baseDropRate = 0.40; 
-
     for(let i=0; i<finalLoopCount; i++) {
-        const equipDropChance = (baseDropRate + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
+        const equipDropChance = (LOOT_CONFIG.EQUIPMENT_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
         const forceDrop = isBoss || (isOnline && quantityScale >= 0.1 && i === 0);
         const shouldDrop = forceDrop || Math.random() < equipDropChance;
 
