@@ -28,8 +28,8 @@ export function generateLoot(
     const rarityBonus = enemyLevel * LOOT_CONFIG.LEVEL_RARITY_BONUS;
     
     // Drop materials
-    // Base chance increased for local yumyum feel
-    const matDropChance = (0.50 + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
+    // Base chance increased heavily to 75%
+    const matDropChance = (0.75 + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
     
     const onlineMultiplier = (isOnline && isBoss) ? ONLINE_BOSS_CONFIG.DROP_COUNT_MULTIPLIER : 1;
 
@@ -90,8 +90,8 @@ export function generateLoot(
     const scaledLoopCount = dropLoopCount * quantityScale;
     const finalLoopCount = Math.floor(scaledLoopCount) + (Math.random() < (scaledLoopCount % 1) ? 1 : 0);
 
-    // Boosted base rate
-    const baseDropRate = 0.15; 
+    // Boosted base rate from 0.15 to 0.40 (40%)
+    const baseDropRate = 0.40; 
 
     for(let i=0; i<finalLoopCount; i++) {
         const equipDropChance = (baseDropRate + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
