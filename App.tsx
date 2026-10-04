@@ -6,6 +6,7 @@ import Game from './components/Game';
 import DeathScreen from './components/DeathScreen';
 import { authService, AuthUser } from './services/auth';
 import { storageService } from './services/storage';
+import { guestStorage, isGuestSessionActive, setGuestSessionActive } from './services/guestStorage';
 import { CharacterData, CharacterClass, GameStats, Item } from './game/types';
 import { Player } from './game/entities/Player';
 import { MATERIALS_DB, ALL_EQUIPMENT } from './game/items';
@@ -32,6 +33,8 @@ const applyDevRewards = (character: CharacterData): CharacterData => {
     return devCharacter;
 };
 
+const GUEST_USER: AuthUser = { uid: 'guest', displayName: 'Guest', email: '', isGuest: true };
+
 /** Brings a dead character back to town at full health, applying the death gold penalty. */
 const respawnCharacter = (character: CharacterData): CharacterData => {
     const player = new Player(character);
@@ -49,31 +52,40 @@ const App: React.FC = () => {
     // Bumped every time a game session starts so <Game> remounts with fresh state (e.g. after world travel)
     const [gameSessionKey, setGameSessionKey] = useState(0);
 
+    // Guests keep their heroes in this browser; signed-in players keep theirs in Supabase
+    const store = user?.isGuest ? guestStorage : storageService;
+
     // Supabase re-emits the signed-in user on token refresh and when the tab regains focus.
     // Only a change of user should reset the app; otherwise players get kicked out mid-game.
     const currentUidRef = useRef<string | null | undefined>(undefined);
 
-    useEffect(() => {
-        return authService.onAuthStateChanged(async (authUser) => {
-            const uid = authUser?.uid ?? null;
-            if (uid === currentUidRef.current) return;
-            currentUidRef.current = uid;
-
-            setCurrentCharacter(null);
-            setDeathInfo(null);
-            if (authUser) {
-                setUser(authUser);
-                setLoading(true);
-                setCharacters(await storageService.getCharacters(authUser.uid));
-                setGameState('char_select');
-            } else {
-                setUser(null);
-                setCharacters([]);
-                setGameState('login');
-            }
-            setLoading(false);
-        });
+    /** Switches to a signed-in player, a guest, or nobody (the login screen). */
+    const enterSession = useCallback(async (nextUser: AuthUser | null) => {
+        currentUidRef.current = nextUser?.uid ?? null;
+        setCurrentCharacter(null);
+        setDeathInfo(null);
+        setUser(nextUser);
+        if (nextUser) {
+            setLoading(true);
+            const sessionStore = nextUser.isGuest ? guestStorage : storageService;
+            setCharacters(await sessionStore.getCharacters(nextUser.uid));
+            setGameState('char_select');
+        } else {
+            setCharacters([]);
+            setGameState('login');
+        }
+        setLoading(false);
     }, []);
+
+    useEffect(() => {
+        return authService.onAuthStateChanged((authUser) => {
+            // Signing in with Google ends guest mode
+            if (authUser) setGuestSessionActive(false);
+            const nextUser = authUser ?? (isGuestSessionActive() ? GUEST_USER : null);
+            if ((nextUser?.uid ?? null) === currentUidRef.current) return;
+            void enterSession(nextUser);
+        });
+    }, [enterSession]);
 
     /** Keeps the character list in sync with the latest data so the menu never shows stale progress. */
     const updateLocalCharacter = useCallback((data: CharacterData) => {
@@ -83,9 +95,11 @@ const App: React.FC = () => {
     const saveCharacter = useCallback(async (data: CharacterData) => {
         updateLocalCharacter(data);
         if (!user) return;
-        const saved = await storageService.saveCharacter(user.uid, data);
+        const saved = await store.saveCharacter(user.uid, data);
         if (!saved) alert("Your progress couldn't be saved. Check your connection and try again.");
-    }, [user, updateLocalCharacter]);
+    }, [user, store, updateLocalCharacter]);
+
+    const checkNameTaken = useCallback((name: string) => store.checkCharacterNameExists(name), [store]);
 
     const startGame = (character: CharacterData) => {
         setCurrentCharacter(character);
@@ -104,8 +118,19 @@ const App: React.FC = () => {
         }
     };
 
+    const handlePlayAsGuest = () => {
+        setGuestSessionActive(true);
+        void enterSession(GUEST_USER);
+    };
+
     const handleLogout = async () => {
-        await authService.signOut();
+        if (user?.isGuest) {
+            // Guest heroes stay in this browser for next time
+            setGuestSessionActive(false);
+            await enterSession(null);
+        } else {
+            await authService.signOut();
+        }
     };
 
     const handleSelectCharacter = async (character: CharacterData) => {
@@ -125,7 +150,7 @@ const App: React.FC = () => {
     const handleCreateCharacter = async (name: string, characterClass: CharacterClass) => {
         if (!user) return;
         setLoading(true);
-        const newChar = await storageService.createCharacter(user.uid, name, characterClass);
+        const newChar = await store.createCharacter(user.uid, name, characterClass);
         if (newChar) {
             setCharacters(prev => [...prev, newChar]);
             setLoading(false);
@@ -139,8 +164,8 @@ const App: React.FC = () => {
     const handleDeleteCharacter = async (characterId: string) => {
         if (!user || !window.confirm("Are you sure you want to delete this character? This cannot be undone.")) return;
         setLoading(true);
-        await storageService.deleteCharacter(user.uid, characterId);
-        setCharacters(await storageService.getCharacters(user.uid));
+        await store.deleteCharacter(user.uid, characterId);
+        setCharacters(await store.getCharacters(user.uid));
         setLoading(false);
     };
 
@@ -184,7 +209,7 @@ const App: React.FC = () => {
         if (loading) return <div className="text-white text-2xl animate-pulse">Loading adventure...</div>;
         switch (gameState) {
             case 'login':
-                return <LoginScreen onLogin={handleLogin} />;
+                return <LoginScreen onLogin={handleLogin} onPlayAsGuest={handlePlayAsGuest} />;
             case 'char_select':
                 return user && (
                     <CharacterSelectScreen
@@ -199,6 +224,7 @@ const App: React.FC = () => {
             case 'char_create':
                 return (
                     <CharacterCreationScreen
+                        checkNameTaken={checkNameTaken}
                         onCreate={handleCreateCharacter}
                         onCancel={() => setGameState('char_select')}
                     />
@@ -208,7 +234,7 @@ const App: React.FC = () => {
                     <Game
                         key={gameSessionKey}
                         characterData={currentCharacter}
-                        userId={user.uid}
+                        onSave={(data) => store.saveCharacter(user.uid, data)}
                         onDeath={handleDeath}
                         onLeave={handleLeave}
                         onTravelToWorld={handleTravelToWorld}

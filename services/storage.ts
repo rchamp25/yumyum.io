@@ -4,6 +4,48 @@ import { supabase } from './supabaseClient';
 
 export const MAX_CHARACTERS = 3;
 
+/** Where characters are kept: Supabase for signed-in players, the browser for guests. */
+export interface CharacterStore {
+  getCharacters(userId: string): Promise<CharacterData[]>;
+  saveCharacter(userId: string, characterData: CharacterData): Promise<boolean>;
+  checkCharacterNameExists(name: string): Promise<boolean>;
+  createCharacter(userId: string, name: string, characterClass: CharacterClass): Promise<CharacterData | null>;
+  deleteCharacter(userId: string, characterId: string): Promise<void>;
+}
+
+/** A brand-new level 1 character in the village. */
+export const createStartingCharacter = (id: string, name: string, characterClass: CharacterClass): CharacterData => ({
+  id,
+  name,
+  characterClass,
+  level: 1,
+  xp: 0,
+  gold: 0,
+  kills: 0,
+  stats: {
+    maxHealth: GAME_CONFIG.PLAYER_HEALTH,
+    health: GAME_CONFIG.PLAYER_HEALTH,
+    damage: GAME_CONFIG.PLAYER_DAMAGE,
+    speed: GAME_CONFIG.PLAYER_SPEED,
+    healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
+    itemFind: GAME_CONFIG.PLAYER_ITEM_FIND,
+    bossDamageMultiplier: 1,
+  },
+  inventory: Array(GAME_CONFIG.DEFAULT_INVENTORY_SIZE).fill(null),
+  equipment: {
+    [ItemSlot.Weapon]: null,
+    [ItemSlot.Armor]: null,
+    [ItemSlot.Boots]: null,
+    [ItemSlot.Accessory]: null,
+    [ItemSlot.Bag]: null,
+  },
+  bank: Array(GAME_CONFIG.BANK_SIZE).fill(null),
+  bankGold: 0,
+  discoveredWaypoints: ['wp_spawn'],
+  hasClaimedDevRewards: false,
+  currentWorldId: WORLD_IDS.WORLD_1,
+});
+
 // Row shape of the `characters` table. Bank data and the current world live inside the
 // `stats` JSON column; older rows may also have top-level `bank` / `bank_gold` columns.
 interface CharacterRow {
@@ -26,7 +68,7 @@ interface CharacterRow {
   bank_gold?: number;
 }
 
-class StorageService {
+class SupabaseCharacterStore implements CharacterStore {
 
   private mapFromDB(row: CharacterRow): CharacterData {
     const stats = row.stats || ({} as CharacterRow['stats']);
@@ -128,37 +170,8 @@ class StorageService {
       return null;
     }
 
-    const newCharPayload = {
-      user_id: userId,
-      name,
-      char_class: characterClass,
-      level: 1,
-      xp: 0,
-      gold: 0,
-      kills: 0,
-      stats: {
-        maxHealth: GAME_CONFIG.PLAYER_HEALTH,
-        health: GAME_CONFIG.PLAYER_HEALTH,
-        damage: GAME_CONFIG.PLAYER_DAMAGE,
-        speed: GAME_CONFIG.PLAYER_SPEED,
-        healthRegen: GAME_CONFIG.PLAYER_HEALTH_REGEN,
-        itemFind: GAME_CONFIG.PLAYER_ITEM_FIND,
-        bossDamageMultiplier: 1,
-        bank: Array(GAME_CONFIG.BANK_SIZE).fill(null),
-        bankGold: 0,
-        currentWorldId: WORLD_IDS.WORLD_1
-      },
-      inventory: Array(GAME_CONFIG.DEFAULT_INVENTORY_SIZE).fill(null),
-      equipment: {
-          [ItemSlot.Weapon]: null,
-          [ItemSlot.Armor]: null,
-          [ItemSlot.Boots]: null,
-          [ItemSlot.Accessory]: null,
-          [ItemSlot.Bag]: null,
-      },
-      discovered_waypoints: ['wp_spawn'],
-      has_claimed_dev_rewards: false
-    };
+    // The database generates the id
+    const { id: _id, ...newCharPayload } = this.mapToDB(userId, createStartingCharacter('', name, characterClass));
 
     const { data, error } = await supabase
         .from('characters')
@@ -187,4 +200,4 @@ class StorageService {
   }
 }
 
-export const storageService = new StorageService();
+export const storageService = new SupabaseCharacterStore();

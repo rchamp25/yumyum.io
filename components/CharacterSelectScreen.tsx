@@ -73,10 +73,20 @@ const CharacterSelectScreen: React.FC<CharacterSelectScreenProps> = ({ user, cha
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6 md:mb-10 border-b border-white/5 pb-6 md:pb-8">
         <div className="text-left">
             <h1 className="text-3xl md:text-5xl font-black text-white mb-1">Hero Selection</h1>
-            <p className="text-teal-500 font-bold uppercase tracking-[0.2em] text-sm">Welcome back, {user.displayName}</p>
+            <p className="text-teal-500 font-bold uppercase tracking-[0.2em] text-sm">
+              {user.isGuest ? 'Playing as a guest' : `Welcome back, ${user.displayName}`}
+            </p>
         </div>
-        <button onClick={onLogout} className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-2.5 px-6 rounded-xl transition-colors border border-white/5 uppercase tracking-widest text-xs">Sign Out</button>
+        <button onClick={onLogout} className="bg-white/5 hover:bg-white/10 text-white/60 font-black py-2.5 px-6 rounded-xl transition-colors border border-white/5 uppercase tracking-widest text-xs">
+          {user.isGuest ? 'Exit Guest Mode' : 'Sign Out'}
+        </button>
       </div>
+      {user.isGuest && (
+        <p className="text-left text-sm text-gray-400 bg-white/5 border border-white/5 rounded-xl px-4 py-3 mb-6 md:mb-8">
+          Guest heroes are saved in this browser only. Clearing your browser data deletes them, and they
+          won't appear on other devices. Sign in with Google to keep heroes on your account.
+        </p>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8">
         {slots.map((char, index) => char ? (
             <CharacterCard key={char.id} character={char} onSelect={() => onSelectCharacter(char)} onDelete={() => onDeleteCharacter(char.id)} />

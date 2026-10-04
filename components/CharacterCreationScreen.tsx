@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { CharacterClass } from '../game/types';
 import { WarriorIcon, MageIcon, ArcherIcon } from './icons';
-import { storageService } from '../services/storage';
 
 interface CharacterCreationScreenProps {
   onCreate: (name: string, characterClass: CharacterClass) => void;
   onCancel: () => void;
+  checkNameTaken: (name: string) => Promise<boolean>;
 }
 
 // Tailwind only generates classes it can find as complete strings, so each color is spelled out
@@ -39,7 +39,7 @@ const ClassCard: React.FC<{
   );
 };
 
-const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onCreate, onCancel }) => {
+const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onCreate, onCancel, checkNameTaken }) => {
   const [name, setName] = useState('');
   const [selectedClass, setSelectedClass] = useState<CharacterClass | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +72,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onCre
       setIsChecking(true);
 
       const debounceTimer = setTimeout(async () => {
-          const exists = await storageService.checkCharacterNameExists(name);
+          const exists = await checkNameTaken(name);
           setIsChecking(false);
           if (exists) {
               setError("Name is already taken.");
@@ -80,7 +80,7 @@ const CharacterCreationScreen: React.FC<CharacterCreationScreenProps> = ({ onCre
       }, 500);
 
       return () => clearTimeout(debounceTimer);
-  }, [name]);
+  }, [name, checkNameTaken]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

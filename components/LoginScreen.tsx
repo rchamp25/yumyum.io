@@ -3,9 +3,10 @@ import React, { useState } from 'react';
 
 interface LoginScreenProps {
   onLogin: () => void | Promise<void>;
+  onPlayAsGuest: () => void;
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onPlayAsGuest }) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
@@ -22,7 +23,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     <div className="bg-gray-800/80 backdrop-blur-md p-6 md:p-8 rounded-xl shadow-lg border border-gray-700 text-center max-w-md w-full">
       <p className="text-teal-400 font-black uppercase tracking-[0.3em] text-sm mb-4">yumyum.io</p>
       <h1 className="text-3xl md:text-4xl font-bold mb-2 text-white">Welcome, Adventurer</h1>
-      <p className="text-gray-400 mb-8">Sign in to begin or continue your journey. Your heroes are saved to your account.</p>
+      <p className="text-gray-400 mb-8">Sign in to keep your heroes on your account, or jump straight in as a guest.</p>
       
       <div className="space-y-6">
         <button
@@ -51,6 +52,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </>
           )}
         </button>
+        <button
+          onClick={onPlayAsGuest}
+          disabled={isLoading}
+          className="w-full bg-teal-600 text-white font-semibold py-3 px-6 rounded-lg text-lg hover:bg-teal-500 transition-colors duration-300 disabled:opacity-50"
+        >
+          Play as Guest
+        </button>
+        <p className="text-xs text-gray-500">Guest heroes are saved in this browser only.</p>
       </div>
     </div>
   );

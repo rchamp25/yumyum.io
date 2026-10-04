@@ -22,7 +22,6 @@ import NPCInteraction from './NPCInteraction';
 import FastTravelUI from './FastTravelUI';
 import EnemyTooltip from './EnemyTooltip';
 import VirtualJoystick from './VirtualJoystick';
-import { storageService } from '../services/storage';
 
 // The simulation advances in fixed 60Hz steps regardless of the display's refresh rate,
 // so movement and frame-counted timers behave the same on 60Hz, 120Hz and 144Hz screens.
@@ -93,13 +92,14 @@ const centerCameraOn = (position: Vector2D) => ({
 
 interface GameProps {
   characterData: CharacterData;
-  userId: string;
+  /** Persists the character (Supabase for players, the browser for guests). */
+  onSave: (characterData: CharacterData) => Promise<boolean>;
   onDeath: (stats: GameStats, finalCharacterData: CharacterData) => void;
   onLeave: (finalCharacterData: CharacterData) => void;
   onTravelToWorld: (characterData: CharacterData) => void;
 }
 
-const Game: React.FC<GameProps> = ({ characterData, userId, onDeath, onLeave, onTravelToWorld }) => {
+const Game: React.FC<GameProps> = ({ characterData, onSave, onDeath, onLeave, onTravelToWorld }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // The player lives for the whole session; App remounts this component to switch worlds.
@@ -141,11 +141,11 @@ const Game: React.FC<GameProps> = ({ characterData, userId, onDeath, onLeave, on
   // Mirrors of state and props that the long-running game loop needs to read
   const interactingNPCRef = useRef(interactingNPC);
   const interactingWaypointRef = useRef(interactingWaypoint);
-  const callbacksRef = useRef({ onDeath, onLeave, onTravelToWorld });
+  const callbacksRef = useRef({ onSave, onDeath, onLeave, onTravelToWorld });
   useEffect(() => {
     interactingNPCRef.current = interactingNPC;
     interactingWaypointRef.current = interactingWaypoint;
-    callbacksRef.current = { onDeath, onLeave, onTravelToWorld };
+    callbacksRef.current = { onSave, onDeath, onLeave, onTravelToWorld };
   });
 
   // --- Saving ---
@@ -169,14 +169,14 @@ const Game: React.FC<GameProps> = ({ characterData, userId, onDeath, onLeave, on
       try {
         do {
           state.pending = false;
-          await storageService.saveCharacter(userId, player.toCharacterData());
+          await callbacksRef.current.onSave(player.toCharacterData());
         } while (state.pending && !hasExitedRef.current);
       } finally {
         state.inFlight = false;
         setIsSaving(false);
       }
     })();
-  }, [userId, player]);
+  }, [player]);
 
   // Waits for any in-flight save so it can't land after (and overwrite) the save App makes on exit
   const exitGame = useCallback((handOff: () => void) => {

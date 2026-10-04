@@ -5,6 +5,8 @@ export interface AuthUser {
     uid: string;
     displayName: string;
     email: string;
+    /** Guests play without an account; their heroes are stored in the browser. */
+    isGuest?: boolean;
 }
 
 const toAuthUser = (user: User): AuthUser => ({

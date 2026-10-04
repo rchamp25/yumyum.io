@@ -2,7 +2,7 @@
 
 A browser-based action RPG inspired by [Hordes.io](https://hordes.io). Pick a class, fight your way out from the village through packs of monsters, collect and craft gear, and take on the bosses waiting in the corners of the world.
 
-**Play it at [yumyum-io.vercel.app](https://yumyum-io.vercel.app).** It runs in any modern desktop or mobile browser. Sign in with Google to keep your heroes between sessions.
+**Play it at [yumyum-io.vercel.app](https://yumyum-io.vercel.app).** It runs in any modern desktop or mobile browser. Play as a guest to jump straight in, or sign in with Google to keep your heroes on your account.
 
 ## Features
 
@@ -13,6 +13,7 @@ A browser-based action RPG inspired by [Hordes.io](https://hordes.io). Pick a cl
 - **Village services**: a merchant, a material seller, a vault for extra storage and gold, and a traveler who takes you to a second, harder world, The Grove.
 - **Waypoints** you discover while exploring and can fast travel between.
 - **Mobile support** with a virtual joystick and touch controls.
+- **Guest play**: no account needed. Guest heroes are saved in the browser; sign in with Google to keep heroes on your account across devices.
 
 ## Controls
 
@@ -45,7 +46,7 @@ Dying returns you to the village and costs 30% of the gold you're carrying. Gold
 - [React 18](https://react.dev) and TypeScript for the UI, with the game world drawn on an HTML canvas
 - [Vite](https://vite.dev) for development and builds
 - [Tailwind CSS](https://tailwindcss.com) for styling
-- [Supabase](https://supabase.com) for Google sign-in and saving characters
+- [Supabase](https://supabase.com) for Google sign-in and saving characters (guest heroes use the browser's local storage instead)
 - Hosted on [Vercel](https://vercel.com)
 
 The game runs entirely in the browser. The simulation advances in fixed 60 Hz steps, so it plays at the same speed on any refresh rate.
@@ -194,6 +195,8 @@ The `is_dev` flag only keeps the testing rewards away from regular players. It i
 2. Under **Settings > Environment Variables**, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. These are baked in at build time, so redeploy after changing them.
 3. Add the deployed URL to the Supabase redirect URLs as described in [Google sign-in](#google-sign-in).
 
+Supabase pauses free-tier projects after a week without activity. To prevent that, `vercel.json` schedules a [Vercel cron job](https://vercel.com/docs/cron-jobs) that calls `api/keep-alive.js` once a day, and that function makes one small Supabase request. It uses the same two environment variables, and cron jobs only run on production deployments. You can see its runs under **Settings > Cron Jobs** in the Vercel project.
+
 ## Project structure
 
 ```
@@ -208,6 +211,13 @@ The `is_dev` flag only keeps the testing rewards away from regular players. It i
 │   ├── spawning.ts      Enemy pack and boss spawning
 │   ├── lootUtils.ts     Loot drops
 │   └── stats.ts         Final stat calculation from gear and location
-├── services/            Supabase client, auth and character storage
+├── services/            Supabase client, auth, and character storage (Supabase and guest)
+├── api/                 Vercel serverless function for the Supabase keep-alive cron job
 └── public/              Static files (favicon, web app manifest)
 ```
+
+## License
+
+Copyright (c) 2026 rchamp25. All rights reserved.
+
+This repository is public so you can read the code and see how the game works, but no license is granted. You may not copy, modify, distribute or reuse the code or assets without written permission.
