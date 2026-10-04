@@ -4,6 +4,8 @@ A browser-based action RPG inspired by [Hordes.io](https://hordes.io). Pick a cl
 
 **Play it at [yumyum-io.vercel.app](https://yumyum-io.vercel.app).** It runs in any modern desktop or mobile browser. Play as a guest to jump straight in, or sign in with Google to keep your heroes on your account.
 
+For the project's history, the problems found along the way and the technical decisions behind it, see the [engineering write-up](WRITEUP.md).
+
 ## Features
 
 - **Three classes** (Warrior, Mage and Archer), each with five skills that unlock as you level up to 45.
