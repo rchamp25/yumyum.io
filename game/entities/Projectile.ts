@@ -94,7 +94,7 @@ export class Projectile {
 
     let finalDamage = this.damage;
     // Check if target is boss and apply multiplier
-    if ('isBoss' in target && (target as any).isBoss) {
+    if ('isBoss' in target && target.isBoss === true) {
         finalDamage *= this.bossDamageMultiplier;
     }
 
@@ -112,13 +112,13 @@ export class Projectile {
     // Apply on-hit effects
     if (this.onHitEffects) {
         switch (this.onHitEffects.type) {
-            case 'explosion':
+            case 'explosion': {
                 game.addVisualEffect(new VisualEffect(this.position, 'fire_explosion', 500, {radius: this.onHitEffects.radius}));
                 const targets = (target instanceof Player) ? [game.player] : game.enemies;
                 targets.forEach(enemy => {
                     if (enemy.id !== target.id && getDistance(this.position, enemy.position) < (this.onHitEffects!.radius || 80)) {
                          let explosionDamage = this.damage * 0.75;
-                         if ('isBoss' in enemy && (enemy as any).isBoss) {
+                         if ('isBoss' in enemy && enemy.isBoss) {
                              explosionDamage *= this.bossDamageMultiplier;
                          }
                          const explosionFt = enemy.takeDamage(explosionDamage, { name: `${this.ownerName}'s Explosion`, level: this.ownerLevel });
@@ -130,6 +130,7 @@ export class Projectile {
                     }
                 });
                 break;
+            }
             case 'status':
                 if (this.onHitEffects.effect) {
                     target.addStatusEffect(this.onHitEffects.effect);

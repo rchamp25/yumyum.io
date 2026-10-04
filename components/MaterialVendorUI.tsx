@@ -28,15 +28,15 @@ const MaterialVendorUI: React.FC<MaterialVendorUIProps> = ({ characterData, onBu
     };
 
     return (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto" onClick={onClose}>
-            <div className="bg-gray-800/90 backdrop-blur-md p-6 rounded-xl shadow-2xl border border-gray-700 text-center max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-60" onClick={onClose}>
+            <div className="bg-gray-800/90 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-gray-700 text-center w-[95%] md:max-w-2xl max-h-[95dvh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-2xl font-bold text-emerald-400">Jackson the Seller</h2>
                      <button onClick={onClose} className="text-2xl text-gray-400 hover:text-white">&times;</button>
                 </div>
                 <p className="text-gray-400 mb-4">"Need supplies for your craft? I've got what you need... for a price."</p>
                 
-                <div className="flex justify-between items-center mb-4 px-4">
+                <div className="flex justify-between items-center mb-4 md:px-4">
                      <div className="bg-black/40 px-4 py-2 rounded-lg flex items-center space-x-2">
                         <span className="text-gray-300">Your Gold:</span>
                         <span className="text-yellow-400 font-bold text-xl">{characterData.gold.toLocaleString()}</span>

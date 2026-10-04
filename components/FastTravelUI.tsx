@@ -12,8 +12,8 @@ interface FastTravelUIProps {
 
 const FastTravelUI: React.FC<FastTravelUIProps> = ({ discoveredWaypointIds, currentWaypointId, onTravel, onClose }) => {
     return (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-auto z-50" onClick={onClose}>
-            <div className="bg-gray-900/90 backdrop-blur-md p-6 rounded-xl shadow-2xl border border-cyan-500/50 max-w-lg w-full" onClick={e => e.stopPropagation()}>
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-auto z-60" onClick={onClose}>
+            <div className="bg-gray-900/90 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-cyan-500/50 w-[95%] md:max-w-lg" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-cyan-400 flex items-center">
                         <span className="mr-2 text-3xl">⚡</span> Fast Travel

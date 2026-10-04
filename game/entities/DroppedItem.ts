@@ -1,6 +1,6 @@
 
 import { Vector2D, Item, ItemRarity } from "../types";
-import { normalizeVector, getDistance } from "../utils";
+import { normalizeVector, getDistance } from "../math";
 import { Player } from "./Player";
 
 export class DroppedItem {

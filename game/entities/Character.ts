@@ -33,8 +33,6 @@ export abstract class Character {
         this.level = level;
     }
 
-    abstract update(...args: any[]): void;
-
     setInvulnerable(duration: number) {
         this.invulnerableUntil = Date.now() + duration;
     }

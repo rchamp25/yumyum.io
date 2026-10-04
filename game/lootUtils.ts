@@ -1,21 +1,9 @@
 
-import { Item, ItemRarity, Vector2D } from './types';
-import { LOOT_CONFIG, BOSS_CONFIG, ONLINE_BOSS_CONFIG } from './constants';
+import { Item, ItemRarity } from './types';
+import { LOOT_CONFIG, BOSS_CONFIG } from './constants';
 import { ALL_EQUIPMENT, ALL_MYTHICS, MATERIALS_DB } from './items';
 
-export interface LootResult {
-    item: Item;
-    position: Vector2D;
-}
-
-export function generateLoot(
-    enemyLevel: number, 
-    _enemyPosition: Vector2D, 
-    isBoss: boolean, 
-    playerItemFind: number,
-    isOnline: boolean = false,
-    quantityScale: number = 1.0 // New parameter: % of total drops to award (0.0 - 1.0)
-): Item[] {
+export function generateLoot(enemyLevel: number, isBoss: boolean, playerItemFind: number): Item[] {
     const drops: Item[] = [];
     
     // Item Find Calculation
@@ -28,14 +16,9 @@ export function generateLoot(
     
     // Drop materials
     const matDropChance = (LOOT_CONFIG.MATERIAL_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_MATERIAL_DROP_RATE_BONUS)) * itemFindMultiplier;
-    
-    const onlineMultiplier = (isOnline && isBoss) ? ONLINE_BOSS_CONFIG.DROP_COUNT_MULTIPLIER : 1;
 
     if (Math.random() < matDropChance) {
-            let numMaterials = Math.floor(Math.random() * (LOOT_CONFIG.MATERIAL_QUANTITY_MAX - LOOT_CONFIG.MATERIAL_QUANTITY_MIN + 1)) + LOOT_CONFIG.MATERIAL_QUANTITY_MIN;
-            numMaterials *= onlineMultiplier;
-            // Scale materials by contribution
-            numMaterials = Math.ceil(numMaterials * quantityScale);
+            const numMaterials = Math.floor(Math.random() * (LOOT_CONFIG.MATERIAL_QUANTITY_MAX - LOOT_CONFIG.MATERIAL_QUANTITY_MIN + 1)) + LOOT_CONFIG.MATERIAL_QUANTITY_MIN;
 
             for (let i = 0; i < numMaterials; i++) {
                 const matRoll = Math.random();
@@ -64,34 +47,20 @@ export function generateLoot(
     }
 
     // Boss Specific Mythic Drop
-    if (isBoss) {
-            const mythicChance = 0.01 * itemFindMultiplier; 
-            const mythicChecks = onlineMultiplier * quantityScale;
-            const guaranteedChecks = Math.floor(mythicChecks);
-            const remainderProb = mythicChecks - guaranteedChecks;
-            const totalChecks = guaranteedChecks + (Math.random() < remainderProb ? 1 : 0);
-
-            for(let m=0; m<totalChecks; m++) {
-                if (Math.random() < mythicChance) {
-                    if (ALL_MYTHICS.length > 0) {
-                        const randomMythic = ALL_MYTHICS[Math.floor(Math.random() * ALL_MYTHICS.length)];
-                        drops.push({ ...randomMythic });
-                    }
-                }
-            }
+    if (isBoss && ALL_MYTHICS.length > 0) {
+        const mythicChance = 0.01 * itemFindMultiplier;
+        if (Math.random() < mythicChance) {
+            const randomMythic = ALL_MYTHICS[Math.floor(Math.random() * ALL_MYTHICS.length)];
+            drops.push({ ...randomMythic });
+        }
     }
 
-    // Drop equipment
-    let dropLoopCount = isBoss ? (BOSS_CONFIG.BOSS_DROP_BONUS + 1) : 1;
-    dropLoopCount *= onlineMultiplier;
-    
-    const scaledLoopCount = dropLoopCount * quantityScale;
-    const finalLoopCount = Math.floor(scaledLoopCount) + (Math.random() < (scaledLoopCount % 1) ? 1 : 0);
+    // Drop equipment (bosses always drop, and roll several times)
+    const dropRolls = isBoss ? (BOSS_CONFIG.BOSS_DROP_BONUS + 1) : 1;
+    const equipDropChance = (LOOT_CONFIG.EQUIPMENT_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
 
-    for(let i=0; i<finalLoopCount; i++) {
-        const equipDropChance = (LOOT_CONFIG.EQUIPMENT_DROP_RATE + (enemyLevel * LOOT_CONFIG.LEVEL_DROP_RATE_BONUS)) * itemFindMultiplier;
-        const forceDrop = isBoss || (isOnline && quantityScale >= 0.1 && i === 0);
-        const shouldDrop = forceDrop || Math.random() < equipDropChance;
+    for (let i = 0; i < dropRolls; i++) {
+        const shouldDrop = isBoss || Math.random() < equipDropChance;
 
         if (shouldDrop) {
             const item = getRandomItemWithGating(enemyLevel, itemFindMultiplier);

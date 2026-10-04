@@ -19,7 +19,7 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
     while(displayBank.length < 100) displayBank.push(null);
 
     return (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-auto z-[60]" onClick={onClose}>
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-auto z-60" onClick={onClose}>
             <div className="bg-gray-800/95 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-slate-500 w-[95%] md:max-w-6xl h-[95dvh] md:h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-2 md:mb-4 shrink-0">
                     <h2 className="text-xl md:text-2xl font-bold text-slate-300 flex items-center">
@@ -38,8 +38,8 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                         </div>
                         {onDepositGold && (
                             <div className="flex space-x-1">
-                                <button onClick={() => onDepositGold(1000)} className="bg-slate-700 text-white text-[10px] px-2 py-1 rounded">1k</button>
-                                <button onClick={() => onDepositGold(characterData.gold)} className="bg-yellow-600 text-black font-bold text-[10px] px-2 py-1 rounded">All</button>
+                                <button onClick={() => onDepositGold(1000)} className="bg-slate-700 text-white text-[10px] px-2 py-1 rounded-sm">1k</button>
+                                <button onClick={() => onDepositGold(characterData.gold)} className="bg-yellow-600 text-black font-bold text-[10px] px-2 py-1 rounded-sm">All</button>
                             </div>
                         )}
                     </div>
@@ -50,8 +50,8 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                     <div className="flex items-center space-x-2 md:space-x-4 w-full md:w-auto justify-between md:justify-end">
                         {onWithdrawGold && (
                             <div className="flex space-x-1">
-                                <button onClick={() => onWithdrawGold(characterData.bankGold)} className="bg-yellow-600 text-black font-bold text-[10px] px-2 py-1 rounded">All</button>
-                                <button onClick={() => onWithdrawGold(1000)} className="bg-slate-700 text-white text-[10px] px-2 py-1 rounded">1k</button>
+                                <button onClick={() => onWithdrawGold(characterData.bankGold)} className="bg-yellow-600 text-black font-bold text-[10px] px-2 py-1 rounded-sm">All</button>
+                                <button onClick={() => onWithdrawGold(1000)} className="bg-slate-700 text-white text-[10px] px-2 py-1 rounded-sm">1k</button>
                             </div>
                         )}
                         <div className="text-left md:text-right">
@@ -61,11 +61,11 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                     </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-2 md:gap-6 flex-grow min-h-0">
+                <div className="flex flex-col md:flex-row gap-2 md:gap-6 grow min-h-0">
                     {/* Left: Player Inventory */}
                     <div className="flex-1 flex flex-col min-h-0">
-                        <h3 className="text-sm md:text-lg font-bold text-white mb-1 bg-gray-700/50 p-1 rounded text-center">Inventory</h3>
-                        <div className="bg-gray-900/50 p-2 rounded-lg overflow-y-auto flex-grow border border-gray-700 h-1/3 md:h-auto">
+                        <h3 className="text-sm md:text-lg font-bold text-white mb-1 bg-gray-700/50 p-1 rounded-sm text-center">Inventory</h3>
+                        <div className="bg-gray-900/50 p-2 rounded-lg overflow-y-auto grow border border-gray-700 h-1/3 md:h-auto">
                             <div className="grid grid-cols-5 md:grid-cols-4 gap-2">
                                 {characterData.inventory.map((item, index) => (
                                     <ItemSlotComponent 
@@ -79,9 +79,9 @@ const BankUI: React.FC<BankUIProps> = ({ characterData, bankItems, onDeposit, on
                     </div>
 
                     {/* Right: Bank Stash */}
-                    <div className="flex-[2] flex flex-col min-h-0 relative">
-                        <h3 className="text-sm md:text-lg font-bold text-slate-300 mb-1 bg-slate-800/50 p-1 rounded text-center border border-slate-600">Stash</h3>
-                        <div className="bg-slate-900/50 p-2 rounded-lg overflow-y-auto flex-grow border border-slate-700 relative h-2/3 md:h-auto">
+                    <div className="flex-2 flex flex-col min-h-0 relative">
+                        <h3 className="text-sm md:text-lg font-bold text-slate-300 mb-1 bg-slate-800/50 p-1 rounded-sm text-center border border-slate-600">Stash</h3>
+                        <div className="bg-slate-900/50 p-2 rounded-lg overflow-y-auto grow border border-slate-700 relative h-2/3 md:h-auto">
                             {isLoading ? (
                                 <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 z-10">
                                     <span className="text-slate-300 font-bold">Loading...</span>

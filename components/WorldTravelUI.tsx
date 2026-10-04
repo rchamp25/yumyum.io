@@ -16,7 +16,7 @@ const WorldTravelUI: React.FC<WorldTravelUIProps> = ({ onClose, onTravelToWorld,
     ];
 
     return (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-auto z-[60]" onClick={onClose}>
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center pointer-events-auto z-60" onClick={onClose}>
             <div className="bg-gray-900/95 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-indigo-500/50 w-[95%] md:max-w-3xl" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 md:mb-6">
                     <h2 className="text-2xl md:text-3xl font-bold text-indigo-400 flex items-center">

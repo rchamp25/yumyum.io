@@ -39,8 +39,9 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
   const isOnCooldown = cooldown > 0;
   const isDisabled = isOnCooldown || isLocked;
 
-  const handleTouch = (e: React.TouchEvent) => {
-      e.preventDefault(); 
+  // Fire on touchstart for instant response on mobile. React registers touch listeners as passive,
+  // so the follow-up click can't be cancelled, but the skill cooldown makes it a no-op.
+  const handleTouch = () => {
       if (!isDisabled) onClick();
   };
 
@@ -49,7 +50,7 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
       onClick={onClick}
       onTouchStart={handleTouch}
       disabled={isDisabled}
-      className="relative w-12 h-12 md:w-16 md:h-16 bg-gray-950 border-2 border-white/10 rounded-xl flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-teal-400 active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 overflow-hidden shadow-lg"
+      className="relative w-12 h-12 md:w-16 md:h-16 bg-gray-950 border-2 border-white/10 rounded-xl flex items-center justify-center group focus:outline-hidden focus:ring-2 focus:ring-teal-400 active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 overflow-hidden shadow-lg"
       aria-label={`Use skill: ${skill.definition.name} (Key ${keybind})`}
     >
       <Icon className={`w-7 h-7 md:w-9 md:h-9 ${isDisabled ? 'text-gray-600' : 'text-teal-400 group-hover:text-teal-300 transition-colors'}`} />
@@ -76,7 +77,7 @@ const SkillSlot: React.FC<{ skill: SkillState; keybind: string; Icon: React.FC<{
         </>
       )}
 
-      <div className="absolute bottom-full mb-3 w-48 bg-gray-900/95 border border-white/10 text-white text-[11px] rounded-lg p-2.5 text-center opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100 pointer-events-none hidden md:block z-[100] shadow-2xl backdrop-blur-md">
+      <div className="absolute bottom-full mb-3 w-48 bg-gray-900/95 border border-white/10 text-white text-[11px] rounded-lg p-2.5 text-center opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100 pointer-events-none hidden md:block z-100 shadow-2xl backdrop-blur-md">
         <p className="font-black text-teal-400 uppercase tracking-widest mb-1">{skill.definition.name}</p>
         {isLocked ? (
             <p className="text-red-400 font-bold italic">Requires Level {skill.definition.unlockLevel}</p>

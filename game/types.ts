@@ -29,12 +29,6 @@ export interface EnemyType {
     attackType: 'melee' | 'ranged';
 }
 
-export enum Difficulty {
-    Normal = 'Normal',
-    Hard = 'Hard',
-    Insane = 'Insane'
-}
-
 export enum ItemSlot {
   Weapon = 'Weapon',
   Armor = 'Armor',
@@ -96,10 +90,11 @@ export interface CharacterData {
   equipment: Record<ItemSlot, Item | null>;
   bank: (Item | null)[];
   bankGold: number;
-  position?: Vector2D; // For online mode
+  position?: Vector2D; // Last saved position in the current world
   currentWorldId?: string; // world_1 or world_2
   discoveredWaypoints?: string[];
   hasClaimedDevRewards?: boolean; // Tracks if dev mode items have been granted
+  isDev?: boolean; // Dev character, set by hand in the database. The game reads it but never saves it.
 }
 
 export interface DeathLogEvent {
@@ -149,7 +144,6 @@ export interface GameContext {
     addVisualEffect: (effect: VisualEffect) => void;
     addGroundEffect: (effect: GroundEffect) => void;
     playSound: (type: 'attack' | 'damage' | 'hit' | 'level_up' | 'boss_spawn') => void;
-    isOnlineMode: boolean;
 }
 
 export interface Recipe {
@@ -171,59 +165,6 @@ export interface WaypointData {
     id: string;
     name: string;
     position: Vector2D;
-}
-
-export interface ServerEnemy {
-    id: string;
-    position: Vector2D;
-    spawnPosition?: Vector2D; // Added for tracking leash point
-    health: number;
-    maxHealth: number;
-    level: number;
-    isBoss: boolean;
-    bossZoneId?: string;
-    typeId: string; // Key for ENEMY_TYPES or BOSS_TYPES
-    radius?: number; // Custom radius for online scaling
-    damage?: number; // Custom damage for online scaling
-    damageTakenMap?: Record<string, number>; // Track damage by player ID
-}
-
-export interface PartyMember {
-    id: string; // Socket ID (or active ID)
-    characterId: string; // Stable ID for reconnects
-    name: string;
-    level: number;
-    characterClass: CharacterClass;
-    health: number;
-    maxHealth: number;
-    isOnline: boolean;
-}
-
-export interface Party {
-    id: string;
-    leaderId: string;
-    members: PartyMember[];
-}
-
-export interface TradeItem {
-    item: Item;
-    inventoryIndex: number;
-}
-
-export interface TradeOffer {
-    gold: number;
-    items: TradeItem[];
-    isLocked: boolean;
-}
-
-export interface TradeSession {
-    id: string;
-    player1Id: string;
-    player2Id: string;
-    player1Name: string;
-    player2Name: string;
-    player1Offer: TradeOffer;
-    player2Offer: TradeOffer;
 }
 
 export interface ZoneData {

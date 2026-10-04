@@ -15,9 +15,9 @@ const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
     const maxRadius = 40; 
 
     const handleTouchStart = (e: React.TouchEvent) => {
-        // Critical: Stop propagation so the touch doesn't fire "click" on elements behind it
+        // Stop propagation so the touch doesn't fire "click" on elements behind it
         // or confuse other multi-touch logic.
-        e.stopPropagation(); 
+        e.stopPropagation();
         setActive(true);
     };
 
@@ -61,7 +61,7 @@ const VirtualJoystick: React.FC<VirtualJoystickProps> = ({ onMove }) => {
 
     return (
         <div 
-            className="absolute bottom-8 left-8 w-32 h-32 rounded-full bg-gray-900/50 border-2 border-gray-600 backdrop-blur-sm touch-none flex items-center justify-center z-50 md:hidden"
+            className="absolute bottom-8 left-8 w-32 h-32 rounded-full bg-gray-900/50 border-2 border-gray-600 backdrop-blur-xs touch-none items-center justify-center z-50 hidden pointer-coarse:flex"
             ref={containerRef}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}

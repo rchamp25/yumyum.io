@@ -85,7 +85,7 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
     };
 
     return (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-[60]" onClick={onClose}>
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-60" onClick={onClose}>
             <div className="bg-gray-800/90 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-gray-700 text-center w-[95%] md:max-w-4xl h-[90dvh] md:h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-2 md:mb-4 shrink-0">
                     <h2 className="text-xl md:text-2xl font-bold text-yellow-400">Trevor the Merchant</h2>
@@ -99,11 +99,11 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
                      </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-4 md:gap-6 flex-grow min-h-0">
+                <div className="flex flex-col md:flex-row gap-4 md:gap-6 grow min-h-0">
                     {/* Buy Section */}
                     <div className="flex-1 flex flex-col min-h-0">
                         <h3 className="text-lg font-semibold text-emerald-400 mb-2 text-left bg-gray-900/60 p-2 rounded-lg">Buy Equipment</h3>
-                        <div className="bg-gray-900/50 p-2 rounded-lg overflow-y-auto flex-grow">
+                        <div className="bg-gray-900/50 p-2 rounded-lg overflow-y-auto grow">
                             <div className="grid grid-cols-1 gap-2">
                                 {itemsForSale.map((item) => {
                                     const cost = getBuyPrice(item);
@@ -141,7 +141,7 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
                     {/* Sell Section */}
                     <div className="flex-1 flex flex-col min-h-0">
                         <h3 className="text-lg font-semibold text-yellow-400 mb-2 text-left bg-gray-900/60 p-2 rounded-lg">Sell Inventory</h3>
-                        <div className="bg-gray-900/50 p-2 rounded-lg overflow-y-auto flex-grow">
+                        <div className="bg-gray-900/50 p-2 rounded-lg overflow-y-auto grow">
                             <div className="grid grid-cols-5 md:grid-cols-4 gap-2">
                                 {characterData.inventory.map((item, index) => (
                                     <ItemSlotComponent 
@@ -152,7 +152,7 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
                                     />
                                 ))}
                             </div>
-                             <p className="text-gray-500 text-[10px] mt-2">Tap to sell. Shift+Click stacks on desktop.</p>
+                             <p className="text-gray-500 text-[10px] mt-2">Tap to sell one. On desktop, Shift + right-click sells a whole stack, or every unlocked item of that rarity.</p>
                         </div>
                     </div>
                 </div>
@@ -160,7 +160,7 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
 
             {/* Confirmation Modal */}
             {confirmModal.isOpen && (
-                <div className="absolute inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={(e) => e.stopPropagation()}>
+                <div className="absolute inset-0 z-70 flex items-center justify-center bg-black/80 backdrop-blur-xs" onClick={(e) => e.stopPropagation()}>
                     <div className="bg-gray-800 border-2 border-gray-600 rounded-lg p-6 max-w-xs md:max-w-md w-full text-center shadow-2xl">
                         <h3 className="text-xl font-bold text-white mb-4">Confirm Sale</h3>
                         <p className="text-gray-300 mb-2">
@@ -169,13 +169,13 @@ const VendorUI: React.FC<VendorUIProps> = ({ characterData, onSell, onBuy, onClo
                         <div className="flex justify-center space-x-4 mt-4">
                             <button 
                                 onClick={() => setConfirmModal({...confirmModal, isOpen: false})}
-                                className="px-4 py-2 bg-gray-600 text-white rounded font-bold"
+                                className="px-4 py-2 bg-gray-600 text-white rounded-sm font-bold"
                             >
                                 Cancel
                             </button>
                             <button 
                                 onClick={confirmSell}
-                                className="px-4 py-2 bg-green-600 text-white rounded font-bold"
+                                className="px-4 py-2 bg-green-600 text-white rounded-sm font-bold"
                             >
                                 Confirm
                             </button>

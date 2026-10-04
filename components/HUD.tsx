@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Player } from '../game/entities/Player';
-import { CoinIcon, BackpackIcon } from './icons';
+import { CoinIcon, BackpackIcon, ExitIcon, StatsIcon } from './icons';
 import SkillBar from './SkillBar';
 import { Enemy } from '../game/entities/Enemy';
 import { NPC } from '../game/entities/NPC';
@@ -11,13 +11,14 @@ import { getDistance } from '../game/math';
 import { CharacterClass, StatusEffect } from '../game/types';
 
 interface HUDProps {
-  player: Player | null;
+  player: Player;
   enemies: Enemy[];
   npcs: NPC[];
   waypoints: Waypoint[];
   onUseSkill: (index: number) => void;
   toggleInventory: () => void;
-  otherPlayers: any[];
+  toggleStats: () => void;
+  onLeave: () => void;
   isSaving?: boolean;
   isStatsOpen: boolean;
 }
@@ -39,7 +40,7 @@ const StatBar: React.FC<{ value: number; maxValue: number; color: string; label:
   return (
     <div className="w-full bg-black/50 rounded-full h-4 border border-white/5 relative overflow-hidden">
       <div className="h-full transition-all duration-300 ease-out" style={{ width: `${percentage}%`, backgroundColor: color }}></div>
-      <div className="absolute inset-0 flex items-center justify-center text-white font-black text-[10px] uppercase tracking-tighter shadow-sm">{label}</div>
+      <div className="absolute inset-0 flex items-center justify-center text-white font-black text-[10px] uppercase tracking-tighter shadow-xs">{label}</div>
     </div>
   );
 };
@@ -55,7 +56,7 @@ const StatsWindow: React.FC<{ player: Player }> = ({ player }) => {
     ];
 
     return (
-        <div className="w-48 bg-gray-900/80 backdrop-blur-md rounded-2xl p-4 border border-white/10 shadow-2xl mt-4 animate-fade-in pointer-events-auto">
+        <div className="w-36 md:w-48 bg-gray-900/80 backdrop-blur-md rounded-2xl p-3 md:p-4 border border-white/10 shadow-2xl mt-4 animate-fade-in pointer-events-auto">
             <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 border-b border-white/5 pb-2 text-left">Hero Stats</h3>
             <div className="space-y-2">
                 {statItems.map((stat, i) => (
@@ -65,15 +66,15 @@ const StatsWindow: React.FC<{ player: Player }> = ({ player }) => {
                     </div>
                 ))}
             </div>
-            <p className="text-[8px] text-gray-600 mt-4 text-center uppercase font-bold tracking-tighter">Press 'C' to toggle</p>
+            <p className="hidden md:block text-[8px] text-gray-600 mt-4 text-center uppercase font-bold tracking-tighter">Press 'C' to toggle</p>
         </div>
     );
 };
 
-const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[]; otherPlayers: any[] }> = ({ player, enemies, npcs, waypoints }) => {
+const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoints: Waypoint[] }> = ({ player, enemies, npcs, waypoints }) => {
     const worldSize = GAME_CONFIG.WORLD_WIDTH;
     return (
-        <div className="w-48 h-48 bg-gray-950/80 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10 overflow-hidden relative aspect-square">
+        <div className="w-32 h-32 md:w-48 md:h-48 short:w-28 short:h-28 bg-gray-950/80 backdrop-blur-md rounded-2xl shadow-2xl border border-white/10 overflow-hidden relative aspect-square">
             <div className="relative w-full h-full">
                 {/* Zones */}
                 {INTEREST_ZONES.map(zone => (
@@ -105,17 +106,18 @@ const Minimap: React.FC<{ player: Player; enemies: Enemy[]; npcs: NPC[]; waypoin
     );
 };
 
-const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, otherPlayers, isSaving, isStatsOpen }) => {
-  if (!player) return null;
+const actionButtonClass = "w-12 h-12 md:w-14 md:h-14 rounded-2xl shadow-xl border border-white/20 transition-all active:scale-90 flex items-center justify-center text-white";
+
+const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill, toggleInventory, toggleStats, onLeave, isSaving, isStatsOpen }) => {
   const xpToNext = player.getXpToNextLevel();
   const xpPercentage = xpToNext !== Infinity ? (player.xp / xpToNext) * 100 : 100;
 
   return (
-    <div className="absolute inset-0 pointer-events-none select-none p-6">
+    <div className="absolute inset-0 pointer-events-none select-none">
       {/* Player Vitality */}
-      <div className="absolute top-6 left-6 w-72 p-4 bg-gray-900/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/5">
+      <div className="absolute top-3 left-3 md:top-6 md:left-6 w-56 md:w-72 p-3 md:p-4 bg-gray-900/80 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/5">
         <div className="flex items-center mb-3 text-left">
-            <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-blue-600 rounded-xl flex items-center justify-center text-xl font-black text-white border border-white/10 mr-3 shadow-lg shrink-0">{player.level}</div>
+            <div className="w-12 h-12 bg-linear-to-br from-teal-400 to-blue-600 rounded-xl flex items-center justify-center text-xl font-black text-white border border-white/10 mr-3 shadow-lg shrink-0">{player.level}</div>
             <div className="overflow-hidden">
                 <h2 className="text-lg font-black text-white truncate leading-none mb-1">{player.name}</h2>
                 <div className="flex items-center gap-2">
@@ -129,12 +131,12 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill,
       </div>
       
       {/* Map & Gold */}
-      <div className="absolute top-6 right-6 flex flex-col items-end">
+      <div className="absolute top-3 right-3 md:top-6 md:right-6 flex flex-col items-end">
         <div className="px-5 py-2.5 bg-gray-900/80 backdrop-blur-md rounded-xl shadow-xl border border-white/10 flex items-center gap-3 mb-4">
             <CoinIcon className="w-5 h-5 text-yellow-500" />
             <span className="font-black text-lg text-yellow-400 tabular-nums">{player.gold.toLocaleString()}</span>
         </div>
-        <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} otherPlayers={otherPlayers} />
+        <Minimap player={player} enemies={enemies} npcs={npcs} waypoints={waypoints} />
         {isStatsOpen && <StatsWindow player={player} />}
       </div>
       
@@ -142,9 +144,15 @@ const HUD: React.FC<HUDProps> = ({ player, enemies, npcs, waypoints, onUseSkill,
       <SkillBar player={player} onUseSkill={onUseSkill} />
 
       {/* Action Tray */}
-       <div className="absolute bottom-6 right-6 flex flex-col gap-3 items-end pointer-events-auto">
-           <button onClick={toggleInventory} className="bg-teal-600 hover:bg-teal-500 text-white w-16 h-16 rounded-2xl shadow-xl border border-white/20 transition-all active:scale-90 flex items-center justify-center">
-               <BackpackIcon className="w-8 h-8" />
+       <div className="absolute bottom-40 md:bottom-6 right-3 md:right-6 flex flex-col md:flex-row gap-3 items-end pointer-events-auto">
+           <button onClick={onLeave} title="Save and leave the world" aria-label="Leave world" className={`${actionButtonClass} bg-gray-700/90 hover:bg-gray-600`}>
+               <ExitIcon className="w-6 h-6" />
+           </button>
+           <button onClick={toggleStats} title="Hero stats (C)" aria-label="Toggle hero stats" className={`${actionButtonClass} bg-gray-700/90 hover:bg-gray-600`}>
+               <StatsIcon className="w-6 h-6" />
+           </button>
+           <button onClick={toggleInventory} title="Inventory (I)" aria-label="Open inventory" className={`${actionButtonClass} bg-teal-600 hover:bg-teal-500`}>
+               <BackpackIcon className="w-7 h-7" />
            </button>
        </div>
     </div>

@@ -1,10 +1,12 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-import { createClient } from '@supabase/supabase-js';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// ------------------------------------------------------------------
-// IMPORTANT: REPLACE THESE VALUES WITH YOUR KEYS FROM SUPABASE DASHBOARD
-// ------------------------------------------------------------------
-const SUPABASE_URL = 'https://qurpztlnaanhbbpmxxjv.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF1cnB6dGxuYWFuaGJicG14eGp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2NTIzNTQsImV4cCI6MjA3OTIyODM1NH0.X78TX1WEN0VcowOEKSdKHFRNyPxR7S9d4lZ1lDCH154';
+export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// When the env vars are missing, index.tsx renders a setup message instead of the app,
+// so nothing touches this client.
+export const supabase: SupabaseClient = isSupabaseConfigured
+    ? createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!)
+    : (null as unknown as SupabaseClient);

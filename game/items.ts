@@ -1,6 +1,5 @@
 
 import { Item, ItemRarity, ItemSlot, Recipe } from './types';
-import { LOOT_CONFIG } from './constants';
 
 // --- MATERIALS ---
 export const MATERIALS_DB: { [key: string]: Item } = {
@@ -65,7 +64,7 @@ export const ITEMS_DB: { [key: string]: Item } = { ...WEAPONS_DB, ...ARMOR_DB, .
 export const ALL_EQUIPMENT = Object.values(ITEMS_DB);
 export const ALL_MYTHICS = ALL_EQUIPMENT.filter(i => i.rarity === ItemRarity.Mythic);
 
-// Recipe Costs (Increased 5x as requested)
+// Every mythic recipe costs the same large pile of materials
 const MYTHIC_RECIPE_COST = [
     { materialId: 'mat_leg', quantity: 300 }, 
     { materialId: 'mat_epi', quantity: 600 },
@@ -97,28 +96,3 @@ export const CRAFTING_RECIPES: Recipe[] = [
     { id: 'craft_x_myt_01', result: ACCESSORIES_DB['x_myt_01'], ingredients: MYTHIC_RECIPE_COST },
     { id: 'craft_bag_myt_01', result: BAGS_DB['bag_myt_01'], ingredients: MYTHIC_RECIPE_COST },
 ];
-
-export function getRandomItem(level: number, rarityModifier: number = 1): Item | null {
-    const roll = Math.random();
-    let chosenRarity: ItemRarity = ItemRarity.Common;
-    const levelBonus = level * LOOT_CONFIG.LEVEL_RARITY_BONUS;
-
-    if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Legendary] + levelBonus) * rarityModifier) {
-        chosenRarity = ItemRarity.Legendary;
-    } else if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Epic] + levelBonus) * rarityModifier) {
-        chosenRarity = ItemRarity.Epic;
-    } else if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Rare] + levelBonus) * rarityModifier) {
-        chosenRarity = ItemRarity.Rare;
-    } else if (roll < (LOOT_CONFIG.RARITY_CHANCES[ItemRarity.Uncommon] + levelBonus) * rarityModifier) {
-        chosenRarity = ItemRarity.Uncommon;
-    }
-    // Fallback to Common
-
-    const possibleItems = ALL_EQUIPMENT.filter(item => item.rarity === chosenRarity);
-    if (possibleItems.length > 0) {
-        const item = possibleItems[Math.floor(Math.random() * possibleItems.length)];
-        return { ...item }; // Return a copy
-    }
-
-    return null;
-}

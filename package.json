@@ -1,38 +1,38 @@
 {
-  "name": "react-io-game",
+  "name": "yumyum-io",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "A browser-based action RPG inspired by Hordes.io, built with React, TypeScript and Canvas.",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "server": "tsx server.ts",
-    "start": "tsx server.ts"
+    "typecheck": "tsc",
+    "lint": "eslint ."
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5",
-    "socket.io-client": "^4.7.5",
-    "@supabase/supabase-js": "^2.39.0",
-    "tsx": "^4.7.1",
-    "typescript": "^5.0.2",
-    "ts-node": "^10.9.2"
+    "@supabase/supabase-js": "^2.117.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.2.15",
-    "@types/react-dom": "^18.2.7",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "@vitejs/plugin-react": "^4.0.3",
-    "eslint": "^8.45.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.3",
-    "vite": "^4.4.5",
-    "@types/express": "^4.17.21",
-    "concurrently": "^8.2.2"
+    "@eslint/js": "^9.39.5",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/react": "^18.3.23",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^16.5.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "vite": "^6.4.3"
   }
 }

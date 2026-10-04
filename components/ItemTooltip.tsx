@@ -81,7 +81,7 @@ const ItemTooltip: React.FC<ItemTooltipProps> = ({ item, parentRect }) => {
     <div 
         ref={tooltipRef} 
         style={style} 
-        className="min-w-[200px] max-w-[280px] bg-gray-900/95 border border-gray-600 text-white text-sm rounded-lg p-3 text-left shadow-2xl backdrop-blur-sm z-[9999]"
+        className="min-w-[200px] max-w-[280px] bg-gray-900/95 border border-gray-600 text-white text-sm rounded-lg p-3 text-left shadow-2xl backdrop-blur-xs z-9999"
     >
       {/* Header */}
       <div className="mb-2">

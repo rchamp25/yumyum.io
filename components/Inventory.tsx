@@ -14,7 +14,7 @@ interface InventoryProps {
   onToggleLock?: (itemIndex: number) => void;
 }
 
-export const getRarityClasses = (rarity: ItemRarity) => {
+const getRarityClasses = (rarity: ItemRarity) => {
     switch (rarity) {
         case ItemRarity.Uncommon: return { border: 'border-green-600', bg: 'bg-green-900/50', hoverBorder: 'hover:border-green-500', hoverBg: 'hover:bg-green-800/50', shadow: 'shadow-green-500/30' };
         case ItemRarity.Rare: return { border: 'border-blue-600', bg: 'bg-blue-900/50', hoverBorder: 'hover:border-blue-500', hoverBg: 'hover:bg-blue-800/50', shadow: 'shadow-blue-500/30' };
@@ -25,7 +25,7 @@ export const getRarityClasses = (rarity: ItemRarity) => {
     }
 };
 
-export const EmptySlotIcon: React.FC<{ slot: ItemSlot }> = ({ slot }) => {
+const EmptySlotIcon: React.FC<{ slot: ItemSlot }> = ({ slot }) => {
     const className = "w-6 h-6 md:w-8 md:h-8 text-gray-700";
     switch (slot) {
         case ItemSlot.Weapon: return <SwordIcon className={className} />;
@@ -164,13 +164,13 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
     const tooltipContainer = typeof document !== 'undefined' ? document.getElementById('tooltip-root') : null;
 
     return (
-        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-[60]" onClick={toggleInventory}>
+        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-60" onClick={toggleInventory}>
             <div 
                 className="bg-gray-800/90 backdrop-blur-md p-4 md:p-6 rounded-xl shadow-2xl border border-gray-700 text-center w-[95%] md:max-w-2xl flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-6 max-h-[90dvh] overflow-y-auto" 
                 onClick={e => e.stopPropagation()}
             >
                 {/* Equipment */}
-                <div className="flex-shrink-0 flex flex-row md:flex-col justify-center gap-2 md:gap-3 border-b md:border-b-0 md:border-r border-gray-600 pb-4 md:pb-0 md:pr-4">
+                <div className="shrink-0 flex flex-row md:flex-col justify-center gap-2 md:gap-3 border-b md:border-b-0 md:border-r border-gray-600 pb-4 md:pb-0 md:pr-4">
                     <h2 className="hidden md:block text-2xl font-bold text-white mb-4">Gear</h2>
                     {Object.values(ItemSlot).map(slot => (
                         <ItemSlotComponent 
@@ -183,12 +183,12 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
                 </div>
 
                 {/* Inventory */}
-                <div className="flex-grow">
+                <div className="grow">
                     <div className="flex justify-between items-center mb-2 md:mb-4">
                         <h2 className="text-lg md:text-2xl font-bold text-white">Inventory</h2>
                         <button 
                             onClick={() => setLockMode(!isLockMode)}
-                            className={`px-2 py-1 md:px-3 rounded text-xs md:text-sm font-bold transition-colors flex items-center gap-1 md:gap-2 ${isLockMode ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                            className={`px-2 py-1 md:px-3 rounded-sm text-xs md:text-sm font-bold transition-colors flex items-center gap-1 md:gap-2 ${isLockMode ? 'bg-yellow-500 text-black hover:bg-yellow-400' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
                         >
                             <SmallLockIcon className="w-3 h-3 md:w-4 md:h-4" />
                             {isLockMode ? 'Save' : 'Lock'}
@@ -221,7 +221,7 @@ const Inventory: React.FC<InventoryProps> = ({ characterData, onItemEquip, onIte
             {/* Dragging Ghost Item */}
             {draggedItem && tooltipContainer && createPortal(
                 <div 
-                    className="fixed pointer-events-none z-[10000]"
+                    className="fixed pointer-events-none z-10000"
                     style={{ 
                         left: mousePos.x - 32, 
                         top: mousePos.y - 32,

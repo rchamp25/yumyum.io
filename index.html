@@ -2,41 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%230d9488' /%3E%3Cpath d='M30 30 L50 60 L70 30 M50 60 L50 90' stroke='white' stroke-width='10' stroke-linecap='round' /%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="yumyum.io is a browser-based action RPG. Pick a class, fight monsters, loot gear and take on bosses." />
+    <meta name="theme-color" content="#111827" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <title>yumyum.io</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react-dom": "https://aistudiocdn.com/react-dom@^19.2.0",
-    "http": "https://aistudiocdn.com/http@^0.0.1-security",
-    "path": "https://aistudiocdn.com/path@^0.12.7",
-    "express": "https://aistudiocdn.com/express@^5.1.0",
-    "socket.io": "https://aistudiocdn.com/socket.io@^4.8.1",
-    "socket.io-client": "https://aistudiocdn.com/socket.io-client@^4.8.1",
-    "url": "https://aistudiocdn.com/url@^0.11.4",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.39.0"
-  }
-}
-</script>
-<style>
-    /* Disable text selection and touch highlights for game feel */
-    body {
-        user-select: none;
-        -webkit-user-select: none;
-        -webkit-touch-callout: none;
-        overscroll-behavior: none;
-    }
-</style>
-</head>
+  </head>
   <body class="bg-gray-900 text-white overflow-hidden">
     <div id="root"></div>
     <div id="tooltip-root"></div>

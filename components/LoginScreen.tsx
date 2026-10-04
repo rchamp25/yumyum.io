@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 
 interface LoginScreenProps {
-  onLogin: (email: string) => void;
+  onLogin: () => void | Promise<void>;
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
@@ -11,18 +11,18 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      // Pass empty string as email is handled by Google
-      await onLogin('');
-    } catch (err: any) {
+      await onLogin();
+    } catch (err) {
       setIsLoading(false);
-      alert(`Login failed: ${err.message || 'Unknown error'}`);
+      alert(`Login failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
     }
   };
 
   return (
-    <div className="bg-gray-800/80 backdrop-blur-md p-8 rounded-xl shadow-lg border border-gray-700 text-center max-w-md w-full">
-      <h1 className="text-4xl font-bold mb-2 text-white">Welcome, Adventurer</h1>
-      <p className="text-gray-400 mb-8">Sign in to begin or continue your journey.</p>
+    <div className="bg-gray-800/80 backdrop-blur-md p-6 md:p-8 rounded-xl shadow-lg border border-gray-700 text-center max-w-md w-full">
+      <p className="text-teal-400 font-black uppercase tracking-[0.3em] text-sm mb-4">yumyum.io</p>
+      <h1 className="text-3xl md:text-4xl font-bold mb-2 text-white">Welcome, Adventurer</h1>
+      <p className="text-gray-400 mb-8">Sign in to begin or continue your journey. Your heroes are saved to your account.</p>
       
       <div className="space-y-6">
         <button

@@ -7,6 +7,7 @@ import VendorUI from './VendorUI';
 import MaterialVendorUI from './MaterialVendorUI';
 import WorldTravelUI from './WorldTravelUI';
 import BankUI from './BankUI';
+import { WORLD_IDS } from '../game/constants';
 
 interface NPCInteractionProps {
     npc: NPC;
@@ -23,14 +24,13 @@ interface NPCInteractionProps {
     onWithdraw?: (bankIndex: number) => void;
     onDepositGold?: (amount: number) => void;
     onWithdrawGold?: (amount: number) => void;
-    isBankLoading?: boolean;
     // Travel props
     onTravelToWorld: (worldId: string) => void;
 }
 
 const NPCInteraction: React.FC<NPCInteractionProps> = ({ 
     npc, characterData, recipes, onClose, onCraft, onSell, onBuy, onSellByRarity,
-    bankItems, onDeposit, onWithdraw, onDepositGold, onWithdrawGold, isBankLoading, onTravelToWorld
+    bankItems, onDeposit, onWithdraw, onDepositGold, onWithdrawGold, onTravelToWorld
 }) => {
     
     const renderContent = () => {
@@ -65,7 +65,7 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
                     <WorldTravelUI 
                         onClose={onClose}
                         onTravelToWorld={onTravelToWorld}
-                        currentWorldId={characterData.currentWorldId || 'world_1'}
+                        currentWorldId={characterData.currentWorldId || WORLD_IDS.WORLD_1}
                     />
                 );
             case NPCType.Banker:
@@ -79,14 +79,13 @@ const NPCInteraction: React.FC<NPCInteractionProps> = ({
                             onDepositGold={onDepositGold}
                             onWithdrawGold={onWithdrawGold}
                             onClose={onClose}
-                            isLoading={isBankLoading}
                         />
                     );
                 }
                 return null;
             case NPCType.QuestGiver:
                  return (
-                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-[60]" onClick={onClose}>
+                     <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-auto z-60" onClick={onClose}>
                         <div className="bg-gray-800/90 backdrop-blur-md p-6 rounded-xl shadow-lg border border-gray-700 w-[90%] md:max-w-3xl" onClick={e => e.stopPropagation()}>
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-2xl font-semibold text-blue-400">Quest Giver</h3>

@@ -6,7 +6,6 @@ import { GAME_CONFIG, LEVEL_XP_REQUIREMENTS, WORLD_IDS } from '../constants';
 import { SKILLS_DB } from '../skills';
 import { FloatingText } from './FloatingText';
 import { calculateFinalStats } from '../stats';
-import { socketService } from '../../services/socketService';
 
 export class Player extends Character {
     name: string;
@@ -25,6 +24,7 @@ export class Player extends Character {
     skills: SkillState[];
     discoveredWaypoints: string[];
     hasClaimedDevRewards: boolean;
+    isDev: boolean;
     currentWorldId: string; 
     
     lastAttackTime: number = 0;
@@ -37,10 +37,9 @@ export class Player extends Character {
     lastRegenTime: number = 0;
     isInSafeZone: boolean = false;
     
+    // Items that no longer fit after the inventory shrank (e.g. a bag was unequipped).
+    // The game drops these on the ground via flushOverflowItems().
     overflowItems: Item[] = [];
-    
-    // Difficulty Modifier
-    statMultiplier: number = 1;
 
     constructor(data: CharacterData) {
         // SANITIZATION: Recalculate base stats from level to fix any DB corruption / exploits.
@@ -68,13 +67,12 @@ export class Player extends Character {
         this.inventory = [...data.inventory];
         this.equipment = { ...data.equipment };
         
-        this.bank = data.bank ? [...data.bank] : Array(100).fill(null);
-        while(this.bank.length < 100) this.bank.push(null);
+        this.bank = data.bank ? [...data.bank] : Array(GAME_CONFIG.BANK_SIZE).fill(null);
+        while(this.bank.length < GAME_CONFIG.BANK_SIZE) this.bank.push(null);
         this.bankGold = data.bankGold || 0;
         
         this.baseStats = cleanBaseStats;
         
-        // FIX: Robust health initialization.
         const storedHealth = data.stats && data.stats.health;
         if (typeof storedHealth === 'number' && !isNaN(storedHealth)) {
             this.health = Math.min(storedHealth, finalStats.maxHealth);
@@ -84,6 +82,7 @@ export class Player extends Character {
         
         this.discoveredWaypoints = data.discoveredWaypoints || ['wp_spawn'];
         this.hasClaimedDevRewards = data.hasClaimedDevRewards || false;
+        this.isDev = data.isDev || false;
         this.currentWorldId = data.currentWorldId || WORLD_IDS.WORLD_1;
 
         this.skills = SKILLS_DB[this.characterClass].map(def => ({
@@ -94,20 +93,8 @@ export class Player extends Character {
         this.updateInventoryCapacity();
     }
 
-    applyInsaneModeNerfs() {
-        this.statMultiplier = 0.5;
-        this.recalculateStats();
-        this.health = Math.min(this.health, this.maxHealth);
-    }
-
-    getFinalStats(isOnline: boolean = false) {
-        const stats = calculateFinalStats(this.baseStats, this.equipment, this.position, isOnline, this.currentWorldId);
-        if (this.statMultiplier !== 1) {
-            stats.maxHealth *= this.statMultiplier;
-            stats.damage *= this.statMultiplier;
-            stats.healthRegen *= this.statMultiplier;
-        }
-        return stats;
+    getFinalStats() {
+        return calculateFinalStats(this.baseStats, this.equipment, this.position, this.currentWorldId);
     }
 
     getMaxInventorySize(): number {
@@ -126,8 +113,9 @@ export class Player extends Character {
         else if (maxSlots < this.inventory.length) {
             const removedItems = this.inventory.slice(maxSlots);
             this.inventory = this.inventory.slice(0, maxSlots);
+            // Move displaced items into free slots first; only the true overflow is dropped
             removedItems.forEach(item => {
-                if (item) this.overflowItems.push(item);
+                if (item && !this.pickupItem(item)) this.overflowItems.push(item);
             });
         }
     }
@@ -147,7 +135,7 @@ export class Player extends Character {
             return;
         }
 
-        const stats = this.getFinalStats(game.isOnlineMode);
+        const stats = this.getFinalStats();
         
         let currentSpeed = stats.speed;
         if (this.hasStatus('slow')) {
@@ -226,9 +214,6 @@ export class Player extends Character {
                                 game.addFloatingText(ft);
                                 hitAny = true;
                             }
-                            if (game.isOnlineMode) {
-                                socketService.damageEnemy(enemy.id as string, dmg);
-                            }
                         }
                     });
                     
@@ -242,7 +227,7 @@ export class Player extends Character {
         const now = Date.now();
         if (now - this.lastRegenTime >= 1000) {
             this.lastRegenTime = now;
-            const regenStats = this.getFinalStats(game.isOnlineMode); 
+            const regenStats = this.getFinalStats();
             
             let regenAmount = regenStats.healthRegen;
             if (this.isInSafeZone) {
@@ -562,6 +547,7 @@ export class Player extends Character {
             position: this.position,
             discoveredWaypoints: this.discoveredWaypoints,
             hasClaimedDevRewards: this.hasClaimedDevRewards,
+            isDev: this.isDev,
             currentWorldId: this.currentWorldId
         };
     }

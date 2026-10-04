@@ -2,8 +2,8 @@
 import { ItemRarity, WaypointData, EnemyType, ZoneData } from './types';
 
 export const GAME_CONFIG = {
-    WORLD_WIDTH: 18000, // Tripled from 6000
-    WORLD_HEIGHT: 18000, // Tripled from 6000
+    WORLD_WIDTH: 18000,
+    WORLD_HEIGHT: 18000,
     MAX_LEVEL: 45,
     PLAYER_HEALTH: 100,
     PLAYER_DAMAGE: 5,
@@ -12,56 +12,56 @@ export const GAME_CONFIG = {
     PLAYER_ITEM_FIND: 0, // Base Item Find %
     PLAYER_RADIUS: 20,
     DEFAULT_INVENTORY_SIZE: 50,
+    BANK_SIZE: 100,
     SAFE_ZONE_RADIUS: 250,
-    MAX_ENEMIES: 1750, // 350 * 5 (Reduced from 9x to reduce lag)
-    ENEMY_SPAWN_BUFFER: 100, // Distance from safe zone edge
+    MAX_ENEMIES: 1750,
+    ENEMY_SPAWN_BUFFER: 200, // Minimum distance between enemy packs and the safe zone edge
     ENEMY_PACK_SIZE_MIN: 3,
     ENEMY_PACK_SIZE_MAX: 5,
-    ENEMY_PACK_RADIUS: 75,
-    ENEMY_AGGRO_RANGE: 180, // Doubled from 90
+    ENEMY_PACK_RADIUS: 75, // Max offset of each pack member from the pack center
+    ENEMY_AGGRO_RANGE: 180,
     ENEMY_LEASH_RANGE: 300, 
-    BOSS_AGGRO_RANGE: 360, // Doubled from 180
+    BOSS_AGGRO_RANGE: 360,
     BOSS_LEASH_RANGE: 600, 
 };
+
+export const WORLD_CENTER = { x: GAME_CONFIG.WORLD_WIDTH / 2, y: GAME_CONFIG.WORLD_HEIGHT / 2 };
 
 export const WORLD_IDS = {
     WORLD_1: 'world_1',
     WORLD_2: 'world_2'
 };
 
-export const WORLD_CONFIGS = {
+export interface WorldConfig {
+    name: string;
+    bgColor: string;
+    gridColor: string;
+    bossItemFindBonus: number; // Flat item find added while inside a boss zone (5.0 = +500%)
+    bossItemFindCap: number;   // Maximum total item find while inside a boss zone
+}
+
+export const WORLD_CONFIGS: Record<string, WorldConfig> = {
     [WORLD_IDS.WORLD_1]: {
         name: "The Rat",
         bgColor: '#1a202c', // Gray 900
         gridColor: '#2d3748', // Gray 700
-        itemFindCap: 15.0, // 1500%
-        bossItemFindBonus: 5.0, // 500%
+        bossItemFindBonus: 5.0,
+        bossItemFindCap: 10.0,
     },
     [WORLD_IDS.WORLD_2]: {
         name: "The Grove",
         bgColor: '#052e16', // Dark Green (Emerald 950)
         gridColor: '#14532d', // Green 900
-        itemFindCap: 20.0, // 2000%
-        bossItemFindBonus: 3.0, 
-        bossItemFindValue: 8.0, 
+        bossItemFindBonus: 8.0,
+        bossItemFindCap: 20.0,
     }
 };
 
 export const BOSS_CONFIG = {
     ZONE_RADIUS: 600,
-    SPAWN_COOLDOWN: 180000, // 3 Minutes
-    MAX_ACTIVE_BOSSES: 2, // Only 2 bosses alive at once
-    BOSS_DROP_BONUS: 10, // Extra items dropped by bosses
-    BOSS_ITEM_FIND_BONUS: 5.0, // +500% Item Find (Flat addition) - DEFAULT for World 1
-};
-
-export const ONLINE_BOSS_CONFIG = {
-    HEALTH_MULTIPLIER: 15,
-    DAMAGE_MULTIPLIER: 3,
-    SIZE_MULTIPLIER: 2,
-    DROP_COUNT_MULTIPLIER: 2,
-    ITEM_FIND_BONUS: 8.0, // +800%
-    ITEM_FIND_CAP: 15.0, // 1500%
+    SPAWN_COOLDOWN: 180000, // 3 minutes between boss spawns
+    MAX_ACTIVE_BOSSES: 2,
+    BOSS_DROP_BONUS: 10, // Extra equipment rolls for bosses
 };
 
 export const BOSS_ZONES = [

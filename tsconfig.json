@@ -13,9 +13,6 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-
 
     /* Linting */
     "strict": true,
@@ -23,5 +20,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["**/*.ts", "**/*.tsx"]
+  "include": ["*.ts", "*.tsx", "components", "game", "services"]
 }

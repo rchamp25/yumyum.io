@@ -1,9 +1,10 @@
 
 import { Character } from './Character';
-import { Vector2D, GameContext, ServerEnemy, EnemyType } from '../types';
+import { Vector2D, GameContext, EnemyType } from '../types';
 import { normalizeVector, getDistance } from '../math';
 import { DroppedItem } from './DroppedItem';
-import { GAME_CONFIG, BOSS_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES, GROVE_ENEMIES, GROVE_BOSSES } from '../constants';
+import { GAME_CONFIG, BOSS_ZONES, ENEMY_TYPES, BOSS_TYPES, GROVE_ENEMIES, GROVE_BOSSES } from '../constants';
+import { isInBossZone } from '../stats';
 import { Projectile } from './Projectile';
 import { FloatingText } from './FloatingText';
 import { Player } from './Player';
@@ -20,7 +21,7 @@ export class Enemy extends Character {
     xpGiven: boolean = false; // Track if XP/Gold has been awarded
     isBoss: boolean = false;
     bossZoneId?: string;
-    typeId?: string; // Track the server's type ID
+    typeId?: string;
     
     private spawnPosition: Vector2D;
     private state: 'idle' | 'chasing' | 'attacking' | 'returning' = 'idle';
@@ -30,7 +31,6 @@ export class Enemy extends Character {
     private wanderTarget: Vector2D | null = null;
     private nextWanderTime: number = 0;
     private specialAttackCooldown: number = 0;
-    private lastPosition: Vector2D; // Track last pos for online movement detection
 
     constructor(position: Vector2D, level: number, bossZoneId?: string, id?: string, typeId?: string) {
         let type: EnemyType;
@@ -83,45 +83,19 @@ export class Enemy extends Character {
         
         this.goldValue = Math.floor(Math.random() * level + 1) * (isBoss ? 20 : 1);
         this.spawnPosition = { ...position };
-        this.lastPosition = { ...position };
         this.nextWanderTime = Date.now() + Math.random() * 2000;
 
         this.setInvulnerable(3000);
     }
 
-    sync(data: ServerEnemy) {
-        this.position = data.position;
-        this.health = data.health;
-        this.maxHealth = data.maxHealth;
-        this.level = data.level;
-        if (data.radius) this.radius = data.radius;
-        if (data.damage) this.damage = data.damage;
-        if (data.spawnPosition) this.spawnPosition = data.spawnPosition; 
-        
-        // Visual Sync based on Type ID from Server
-        if (data.typeId && data.typeId !== this.typeId) {
-            this.typeId = data.typeId;
-            
-            // Find the type definition
-            let newType = BOSS_TYPES[data.typeId] || GROVE_BOSSES[data.typeId] || ENEMY_TYPES[data.typeId] || GROVE_ENEMIES[data.typeId];
-            
-            if (newType) {
-                this.type = newType;
-                this.name = newType.name;
-                this.color = newType.color;
-                this.radius = newType.radius;
-                this.speed = newType.speed;
-                this.attackRange = newType.attackRange;
-                // Note: We don't overwrite maxHealth here as server dictates health
-            }
-        }
+    /** True while the enemy is wandering near its spawn and not engaged with the player. */
+    get isIdle(): boolean {
+        return this.state === 'idle';
     }
 
     takeDamage(amount: number, source?: { name: string, level?: number }): FloatingText | null {
-        if (!this.isBoss) {
-            const inBossZone = BOSS_ZONES.some(z => getDistance(this.position, z) < BOSS_CONFIG.ZONE_RADIUS);
-            if (inBossZone) return null;
-        }
+        // Regular enemies can't be hurt inside boss zones
+        if (!this.isBoss && isInBossZone(this.position)) return null;
 
         let finalAmount = amount;
         
@@ -163,11 +137,8 @@ export class Enemy extends Character {
              const playerInSafeZone = player.isInSafeZone;
              const outsideLeash = distToSpawn > leashRange + 200; 
              
-             let shouldDeAggro = false;
-             if (!this.isBoss) {
-                 const inBossZone = BOSS_ZONES.some(z => getDistance(player.position, z) < BOSS_CONFIG.ZONE_RADIUS);
-                 if (inBossZone) shouldDeAggro = true;
-             }
+             // Regular enemies don't follow the player into boss zones
+             const shouldDeAggro = !this.isBoss && isInBossZone(player.position);
 
              if (playerInSafeZone || outsideLeash || shouldDeAggro) {
                 this.state = 'returning';
@@ -183,12 +154,11 @@ export class Enemy extends Character {
                 this.wanderTarget = null;
             }
         } else if (this.state === 'chasing') {
-             const rangeBuffer = game.isOnlineMode ? 25 : 0;
-             if (distToPlayer <= this.attackRange + rangeBuffer) {
+             if (distToPlayer <= this.attackRange) {
                  this.state = 'attacking';
              }
         } else if (this.state === 'attacking') {
-            if (distToPlayer > this.attackRange + (game.isOnlineMode ? 25 : 0)) {
+            if (distToPlayer > this.attackRange) {
                 this.state = 'chasing';
             }
         }
@@ -197,39 +167,22 @@ export class Enemy extends Character {
 
         this.isMoving = false;
 
-        // IN ONLINE MODE:
-        // We run state logic to trigger attacks (animations/projectiles), 
-        // but we DO NOT modify this.position directly. Position updates come via sync().
-        const applyMovement = !game.isOnlineMode;
-
-        if (game.isOnlineMode) {
-            // Detect movement from server updates
-            const distMoved = getDistance(this.position, this.lastPosition);
-            if (distMoved > 0.1) {
-                this.isMoving = true;
-            }
-            this.lastPosition = { ...this.position };
-        }
-
         switch(this.state) {
             case 'idle':
-                if (applyMovement) {
-                    this.performWander(currentSpeed);
-                    this.isMoving = this.wanderTarget !== null;
-                }
+                this.performWander(currentSpeed);
+                this.isMoving = this.wanderTarget !== null;
                 break;
                 
-            case 'chasing':
-                if (applyMovement) {
-                    const chaseDir = normalizeVector({
-                        x: player.position.x - this.position.x,
-                        y: player.position.y - this.position.y
-                    });
-                    this.position.x += chaseDir.x * currentSpeed;
-                    this.position.y += chaseDir.y * currentSpeed;
-                    this.isMoving = true;
-                }
+            case 'chasing': {
+                const chaseDir = normalizeVector({
+                    x: player.position.x - this.position.x,
+                    y: player.position.y - this.position.y
+                });
+                this.position.x += chaseDir.x * currentSpeed;
+                this.position.y += chaseDir.y * currentSpeed;
+                this.isMoving = true;
                 break;
+            }
                 
             case 'attacking':
                 if (Date.now() - this.lastAttackTime > this.type.attackCooldown) {
@@ -246,23 +199,19 @@ export class Enemy extends Character {
                 
             case 'returning':
                 if (distToSpawn < 10) {
-                    if (applyMovement) {
-                        this.position = { ...this.spawnPosition };
-                        this.health = this.maxHealth;
-                        this.state = 'idle';
-                        this.wanderTarget = null;
-                        this.nextWanderTime = Date.now() + 1000;
-                    }
+                    this.position = { ...this.spawnPosition };
+                    this.health = this.maxHealth;
+                    this.state = 'idle';
+                    this.wanderTarget = null;
+                    this.nextWanderTime = Date.now() + 1000;
                 } else {
-                    if (applyMovement) {
-                        const returnDir = normalizeVector({
-                            x: this.spawnPosition.x - this.position.x,
-                            y: this.spawnPosition.y - this.position.y
-                        });
-                        this.position.x += returnDir.x * (currentSpeed * 1.5);
-                        this.position.y += returnDir.y * (currentSpeed * 1.5);
-                        this.isMoving = true;
-                    }
+                    const returnDir = normalizeVector({
+                        x: this.spawnPosition.x - this.position.x,
+                        y: this.spawnPosition.y - this.position.y
+                    });
+                    this.position.x += returnDir.x * (currentSpeed * 1.5);
+                    this.position.y += returnDir.y * (currentSpeed * 1.5);
+                    this.isMoving = true;
                 }
                 break;
         }
@@ -362,7 +311,7 @@ export class Enemy extends Character {
         const finalStats = player.getFinalStats();
         const itemFind = finalStats.itemFind || 0;
         
-        const items = generateLoot(this.level, this.position, this.isBoss, itemFind, false);
+        const items = generateLoot(this.level, this.isBoss, itemFind);
         
         return items.map(item => new DroppedItem(this.position, item));
     }

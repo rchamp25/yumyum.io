@@ -1,16 +1,19 @@
 import { CharacterData, ItemSlot, Item, ItemRarity, Vector2D } from './types';
-import { GAME_CONFIG, BOSS_ZONES, BOSS_CONFIG, ONLINE_BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS } from './constants';
+import { GAME_CONFIG, BOSS_ZONES, BOSS_CONFIG, WORLD_IDS, WORLD_CONFIGS } from './constants';
 import { getDistance } from './math';
 
+export function isInBossZone(position: Vector2D): boolean {
+    return BOSS_ZONES.some(zone => getDistance(position, zone) < BOSS_CONFIG.ZONE_RADIUS);
+}
+
 export function calculateFinalStats(
-    baseStats: CharacterData['stats'], 
-    equipment: Record<ItemSlot, Item | null>, 
-    position?: Vector2D, 
-    isOnline: boolean = false,
+    baseStats: CharacterData['stats'],
+    equipment: Record<ItemSlot, Item | null>,
+    position?: Vector2D,
     currentWorldId: string = WORLD_IDS.WORLD_1
 ): CharacterData['stats'] & { maxInventorySlots: number } {
     // Explicitly initialize all fields to ensure they are numbers
-    const final: CharacterData['stats'] & { maxInventorySlots: number } = { 
+    const final: CharacterData['stats'] & { maxInventorySlots: number } = {
         maxHealth: baseStats.maxHealth ?? GAME_CONFIG.PLAYER_HEALTH,
         health: baseStats.health ?? GAME_CONFIG.PLAYER_HEALTH,
         damage: baseStats.damage ?? GAME_CONFIG.PLAYER_DAMAGE,
@@ -20,7 +23,7 @@ export function calculateFinalStats(
         bossDamageMultiplier: baseStats.bossDamageMultiplier ?? 1,
         maxInventorySlots: 0,
     };
-    
+
     // Sum up equipment stats
     Object.values(equipment).forEach(item => {
         if (item && item.stats) {
@@ -37,48 +40,15 @@ export function calculateFinalStats(
     // SET BONUS CHECK: Mythic Accessory + Mythic Bag
     const hasMythicAccessory = equipment[ItemSlot.Accessory]?.rarity === ItemRarity.Mythic;
     const hasMythicBag = equipment[ItemSlot.Bag]?.rarity === ItemRarity.Mythic;
-    
+
     if (hasMythicAccessory && hasMythicBag) {
         final.damage = Math.floor(final.damage * 1.5);
     }
 
-    // BOSS ZONE CHECK
-    if (position) {
-        let inBossZone = false;
-        for (const zone of BOSS_ZONES) {
-             if (getDistance(position, {x: zone.x, y: zone.y}) < BOSS_CONFIG.ZONE_RADIUS) {
-                 inBossZone = true;
-                 break;
-             }
-        }
-
-        // Apply Boss Zone Item Find Bonus
-        if (inBossZone) {
-            let bonus = isOnline ? ONLINE_BOSS_CONFIG.ITEM_FIND_BONUS : BOSS_CONFIG.BOSS_ITEM_FIND_BONUS;
-            let cap = isOnline ? ONLINE_BOSS_CONFIG.ITEM_FIND_CAP : 10.0;
-
-            // World 2 Overrides
-            if (currentWorldId === WORLD_IDS.WORLD_2) {
-                // Cast to any to bypass strict property checks on the union type of configs
-                const w2Config = WORLD_CONFIGS[WORLD_IDS.WORLD_2] as any;
-                if (w2Config) {
-                    // Safely access properties with fallback to ensure they are numbers
-                    if (typeof w2Config.bossItemFindValue === 'number') {
-                        bonus = w2Config.bossItemFindValue;
-                    }
-                    if (typeof w2Config.itemFindCap === 'number') {
-                        cap = w2Config.itemFindCap;
-                    }
-                }
-            }
-
-            const currentItemFind = final.itemFind ?? 0;
-            final.itemFind = currentItemFind + bonus;
-            
-            if (final.itemFind > cap) {
-                final.itemFind = cap;
-            }
-        }
+    // Boss zones grant a flat item find bonus, capped per world
+    if (position && isInBossZone(position)) {
+        const world = WORLD_CONFIGS[currentWorldId] || WORLD_CONFIGS[WORLD_IDS.WORLD_1];
+        final.itemFind = Math.min(final.itemFind + world.bossItemFindBonus, world.bossItemFindCap);
     }
 
     return final;
